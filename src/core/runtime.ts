@@ -11,6 +11,7 @@ import { createSkillViewTool } from "../tools/skill.js";
 import { createDelegateTool } from "../tools/delegate.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
+import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 
 export interface RunResult {
   /** The model ref that actually produced the answer. */
@@ -113,11 +114,16 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           },
         });
 
+        const stripper = createTagStripper(TOOL_MARKUP_TOKENS);
         let text = "";
         for await (const delta of result.textStream) {
-          text += delta;
-          if (stream) process.stdout.write(delta);
+          const clean = stripper.push(delta);
+          text += clean;
+          if (stream && clean) process.stdout.write(clean);
         }
+        const tail = stripper.flush();
+        text += tail;
+        if (stream && tail) process.stdout.write(tail);
         if (streamError) throw streamError;
         if (stream && text) process.stdout.write("\n");
 
