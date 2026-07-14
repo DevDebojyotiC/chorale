@@ -1,0 +1,61 @@
+{
+  // The chorale's base model + fallback chain. Any agent that doesn't
+  // declare its own model inherits `base.model`. Format: "<provider>:<model>".
+  base: {
+    // Local Qwen3 4B (Q4) — supports native tool-calling + thinking. Fits ~4GB VRAM.
+    // Add a serverless fallback (e.g. "fireworks:...") once you have a key for heavy agent work.
+    model: "ollama:qwen3:4b",
+    fallbacks: [],
+  },
+
+  // Every provider is just config. `openai-compatible` is the universal catch-all:
+  // Ollama, LM Studio, vLLM, Fireworks, HF router, OpenRouter, Groq, DeepSeek, etc.
+  // `${ENV_VAR}` in apiKey is resolved from the environment / .env at load time.
+  providers: {
+    ollama: {
+      api: "openai-compatible",
+      baseUrl: "http://127.0.0.1:11434/v1",
+      apiKey: "ollama", // sentinel; Ollama ignores it
+    },
+    anthropic: {
+      api: "anthropic",
+      apiKey: "${ANTHROPIC_API_KEY}",
+    },
+    fireworks: {
+      api: "openai-compatible",
+      baseUrl: "https://api.fireworks.ai/inference/v1",
+      apiKey: "${FIREWORKS_API_KEY}",
+    },
+    hf: {
+      api: "openai-compatible",
+      baseUrl: "https://router.huggingface.co/v1",
+      apiKey: "${HF_TOKEN}",
+    },
+    // Offline smoke-test provider. Start `node scripts/mock-openai-server.mjs`,
+    // then: `chorale --model mock:test-model "hello"`. No API key needed.
+    mock: {
+      api: "openai-compatible",
+      baseUrl: "http://127.0.0.1:4599/v1",
+      apiKey: "sk-mock",
+    },
+  },
+
+  agents: {
+    dir: "agents",
+    enabled: ["orchestrator", "research", "general"],
+  },
+
+  // External tool servers (Model Context Protocol). Agents opt in per-server via
+  // `mcp: [name]` in their agent.md. Example (uncomment and set an allowed path):
+  // mcp: {
+  //   servers: {
+  //     filesystem: { command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "C:/path/to/allow"] },
+  //     // http example: myserver: { url: "https://host/mcp", headers: { Authorization: "Bearer ${MY_TOKEN}" } },
+  //   },
+  // },
+
+  defaults: {
+    maxSteps: 8,
+    maxDelegationDepth: 2, // how deep the orchestrator may delegate (prevents runaway)
+  },
+}

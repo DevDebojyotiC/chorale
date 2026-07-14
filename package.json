@@ -1,0 +1,40 @@
+{
+  "name": "chorale",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Model-agnostic multi-agent chorale — a local, open-source Claude Desktop replacement.",
+  "bin": {
+    "chorale": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "dependencies": {
+    "@ai-sdk/anthropic": "latest",
+    "@ai-sdk/openai-compatible": "latest",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "ai": "latest",
+    "better-sqlite3": "^12.11.1",
+    "dotenv": "latest",
+    "gray-matter": "latest",
+    "json5": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "latest",
+    "tsup": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}

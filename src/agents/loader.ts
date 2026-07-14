@@ -1,0 +1,60 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import matter from "gray-matter";
+
+/** A parsed `agent.md`: declarative frontmatter + markdown persona (system prompt). */
+export interface AgentSpec {
+  name: string;
+  description: string;
+  /** "<provider>:<model>" or the "${base}" sentinel. */
+  model: string;
+  fallbacks: string[];
+  tools: string[];
+  /** Allow-list of skill names this agent may load (empty = none injected). */
+  skills: string[];
+  /** Whether the orchestrator may delegate to this agent (default true). */
+  delegable: boolean;
+  /** MCP server names (from config.mcp.servers) whose tools this agent may use. */
+  mcp: string[];
+  system: string;
+}
+
+/** Parse a single-file `agent.md` into an AgentSpec. */
+export function loadAgent(filePath: string): AgentSpec {
+  const { data, content } = matter(readFileSync(filePath, "utf8"));
+  if (!data.name) throw new Error(`Agent file "${filePath}" is missing "name" in frontmatter.`);
+  if (!data.description) throw new Error(`Agent file "${filePath}" is missing "description" in frontmatter.`);
+
+  return {
+    name: String(data.name),
+    description: String(data.description),
+    model: data.model ? String(data.model) : "${base}",
+    fallbacks: Array.isArray(data.fallbacks) ? data.fallbacks.map(String) : [],
+    tools: Array.isArray(data.tools) ? data.tools.map(String) : [],
+    skills: Array.isArray(data.skills) ? data.skills.map(String) : [],
+    delegable: data.delegable !== false,
+    mcp: Array.isArray(data.mcp) ? data.mcp.map(String) : [],
+    system: content.trim(),
+  };
+}
+
+/** List all agents in a directory as {name, description} — used to tell the orchestrator who it can delegate to. */
+export function listAgents(dir: string): Array<{ name: string; description: string; delegable: boolean }> {
+  let files: string[];
+  try {
+    files = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const out: Array<{ name: string; description: string; delegable: boolean }> = [];
+  for (const f of files) {
+    if (!f.endsWith(".md")) continue;
+    try {
+      const spec = loadAgent(join(dir, f));
+      out.push({ name: spec.name, description: spec.description, delegable: spec.delegable });
+    } catch {
+      /* skip malformed agent files */
+    }
+  }
+  return out;
+}

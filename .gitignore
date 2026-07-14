@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/
+*.log
+.env
+.env.*
+!.env.example
+
+# Large evaluation clones — keep the report, not the repos
+eval/hermes-agent/
+eval/openclaw/
