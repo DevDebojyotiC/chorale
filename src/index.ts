@@ -8,12 +8,14 @@ import { loadAgent } from "./agents/loader.js";
 import { runAgent } from "./core/runtime.js";
 import { SessionStore } from "./core/session.js";
 import type { ChatMessage } from "./core/session.js";
+import type { PermissionMode } from "./tools/permissions.js";
 
 interface CliArgs {
   agent?: string;
   model?: string;
   resume?: string;
   continueLatest: boolean;
+  permissionMode?: PermissionMode;
   prompt: string;
 }
 
@@ -22,6 +24,7 @@ function parseArgs(argv: string[]): CliArgs {
   let model: string | undefined;
   let resume: string | undefined;
   let continueLatest = false;
+  let permissionMode: PermissionMode | undefined;
   const rest: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -30,9 +33,14 @@ function parseArgs(argv: string[]): CliArgs {
     else if (arg === "--model" || arg === "-m") model = argv[++i];
     else if (arg === "--resume" || arg === "-r") resume = argv[++i];
     else if (arg === "--continue" || arg === "-c") continueLatest = true;
-    else if (arg !== undefined) rest.push(arg);
+    else if (arg === "--yolo") permissionMode = "full-auto";
+    else if (arg === "--read-only" || arg === "--plan") permissionMode = "read-only";
+    else if (arg === "--mode") {
+      const m = argv[++i];
+      if (m === "read-only" || m === "auto-edit" || m === "full-auto") permissionMode = m;
+    } else if (arg !== undefined) rest.push(arg);
   }
-  return { agent, model, resume, continueLatest, prompt: rest.join(" ").trim() };
+  return { agent, model, resume, continueLatest, permissionMode, prompt: rest.join(" ").trim() };
 }
 
 function printSessions(store: SessionStore): void {
@@ -118,6 +126,7 @@ async function main(): Promise<void> {
     prompt: args.prompt,
     history,
     modelOverride: args.model,
+    permissionMode: args.permissionMode,
   });
   store.appendMessage(sessionId, "assistant", result.text, result.model);
 

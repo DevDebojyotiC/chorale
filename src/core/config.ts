@@ -43,6 +43,9 @@ const ChoraleConfigSchema = z.object({
         .default({}),
     })
     .default({ servers: {} }),
+  permissions: z
+    .object({ mode: z.enum(["read-only", "auto-edit", "full-auto"]).default("auto-edit") })
+    .default({ mode: "auto-edit" }),
   defaults: z
     .object({
       maxSteps: z.number().int().positive().default(8),

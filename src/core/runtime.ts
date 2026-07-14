@@ -6,7 +6,8 @@ import { resolveRef } from "./model-registry.js";
 import type { AgentSpec } from "../agents/loader.js";
 import type { ChatMessage } from "./session.js";
 import { listAgents } from "../agents/loader.js";
-import { selectTools } from "../tools/registry.js";
+import { buildToolSet } from "../tools/registry.js";
+import type { PermissionMode } from "../tools/permissions.js";
 import { createSkillViewTool } from "../tools/skill.js";
 import { createDelegateTool } from "../tools/delegate.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
@@ -29,6 +30,8 @@ export interface RunOptions {
   history?: ChatMessage[];
   /** Current delegation depth (0 at the top level; incremented per delegate hop). */
   depth?: number;
+  /** Permission mode override (from CLI flags); falls back to config.permissions.mode. */
+  permissionMode?: PermissionMode;
   /** Force a specific "<provider>:<model>", overriding the agent's model. */
   modelOverride?: string;
   /** Stream tokens to stdout as they arrive (default true). */
@@ -60,8 +63,11 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   // names+descriptions go in the prompt; bodies load on demand via skill_view.
   const agentSkills = selectSkills(discoverSkills(config.skills.dirs), agent.skills);
   const mcp = await connectMcpServers(config, agent.mcp);
-  const builtinToolNames = agent.tools.filter((t) => t !== "delegate");
-  const tools: ToolSet = { ...selectTools(builtinToolNames), ...mcp.tools };
+  const permissionMode: PermissionMode = opts.permissionMode ?? config.permissions.mode;
+  const tools: ToolSet = {
+    ...buildToolSet(agent.tools, { mode: permissionMode, cwd: process.cwd() }),
+    ...mcp.tools,
+  };
   if (agentSkills.length > 0) tools.skill_view = createSkillViewTool(agentSkills);
 
   // Delegation: when an agent lists the `delegate` tool, give it the tool plus a
@@ -73,6 +79,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       registry,
       depth: opts.depth ?? 0,
       maxDepth: config.defaults.maxDelegationDepth,
+      permissionMode,
       run: runAgent,
     });
     const specialists = listAgents(config.agents.dir).filter((a) => a.delegable && a.name !== agent.name);

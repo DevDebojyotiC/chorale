@@ -7,6 +7,7 @@ import type { AgentSpec } from "../agents/loader.js";
 import type { ChoraleConfig } from "../core/config.js";
 import type { Registry } from "../core/model-registry.js";
 import type { RunResult } from "../core/runtime.js";
+import type { PermissionMode } from "./permissions.js";
 
 /** The runtime's runAgent, injected to avoid an import cycle. */
 export type Runner = (opts: {
@@ -16,6 +17,7 @@ export type Runner = (opts: {
   prompt: string;
   depth: number;
   stream: boolean;
+  permissionMode: PermissionMode;
 }) => Promise<RunResult>;
 
 export interface DelegateContext {
@@ -23,6 +25,7 @@ export interface DelegateContext {
   registry: Registry;
   depth: number;
   maxDepth: number;
+  permissionMode: PermissionMode;
   run: Runner;
 }
 
@@ -32,7 +35,7 @@ export interface DelegateContext {
  * prevent runaway delegation.
  */
 export function createDelegateTool(ctx: DelegateContext) {
-  const { config, registry, depth, maxDepth, run } = ctx;
+  const { config, registry, depth, maxDepth, permissionMode, run } = ctx;
   return tool({
     description:
       "Delegate a self-contained sub-task to a specialist agent (e.g. research). The specialist cannot see this conversation, so give it a clear, standalone task. Returns the specialist's result.",
@@ -56,7 +59,7 @@ export function createDelegateTool(ctx: DelegateContext) {
 
       process.stderr.write(`\n[delegate → ${agentName}] ${task.slice(0, 90)}\n`);
       try {
-        const res = await run({ config, registry, agent: spec, prompt: task, depth: depth + 1, stream: false });
+        const res = await run({ config, registry, agent: spec, prompt: task, depth: depth + 1, stream: false, permissionMode });
         return { agent: agentName, model: res.model, result: res.text };
       } catch (e) {
         return { error: `Delegation to "${agentName}" failed: ${e instanceof Error ? e.message : String(e)}` };
