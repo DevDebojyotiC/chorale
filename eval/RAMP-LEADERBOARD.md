@@ -19,11 +19,13 @@ Levels: **L1** roman · **L2** brackets · **L3** expr-eval · **L4** LRU · **L
 | DeepSeek-V4-Pro | FW | 10/10 | 437s | 23,595 | — | perfect but ~4.5× slower |
 | DeepSeek-V4-Flash | FW | 10/10 | 457s | 25,017 | — | "Flash" is a misnomer — slow, token-heavy |
 | GLM-5.2 | FW | 10/10 | 417s | 40,927 | — | reasoning model; token-heavy |
+| MiniMax-M3 | FW | 10/10 | 571s | n/a¹ | — | same 10/10 as M2.7 but ~6× slower — bigger sibling, no better |
 | Kimi-K2.6 | FW | 10/10 | 693s | 49,082 | — | slowest, most tokens |
 | gpt-oss-20B | FW | 9/10 | 136s | 10,817 | L6 | solid small model |
 | Nemotron-3-Ultra (NVFP4) | FW | 7/10 | 312s | 11,184 | L3, L4, L9 | worst frontier — NVFP4 4-bit likely hurts |
 
 ¹ Fireworks returns no token usage for this model, so per-token cost can't be measured via the API.
+  (Qwen3.7-Plus and MiniMax-M3 both report no usage.)
 
 ## Verdict
 
@@ -31,6 +33,8 @@ Levels: **L1** roman · **L2** brackets · **L3** expr-eval · **L4** LRU · **L
   7× on speed. Keep it as the default heavy tier.
 - **Best frontier (correctness + efficiency):** **MiniMax-M2.7** — 10/10, fastest of the
   perfect scorers (96s), lean tokens. Edges out gpt-oss-120B for the escalation slot.
+  Its bigger sibling **MiniMax-M3** also scores 10/10 but at 571s (~6× slower) for no gain —
+  a clean example that within a family, the smaller model can be the better agent here.
 - **Perfect but not worth it here:** GLM-5.2, Kimi-K2.6, DeepSeek-V4-Pro/Flash all hit
   10/10 but burn 2–3× the tokens and 4–7× the wall-time of MiniMax/gpt-oss for the same result.
 - **Underwhelming:** Nemotron-3-Ultra (NVFP4) at 7/10 — the 4-bit quant appears to cost real
