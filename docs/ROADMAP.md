@@ -29,8 +29,40 @@ strategy the model executes reliably, and (b) making repair feedback specific to
 - **Tier 1/2:** per-request timeout + retry/backoff (network resilience), runtime tests via mock model, context-growth guard, cross-platform smoke process cleanup, research-path resilience.
 - **Tier 3:** leveled logging + per-session run transcript (`--verbose`/`--quiet`, `data/logs/<session>.log`), secret redaction in all logs, delegation cycle guard, per-session token/cost persistence + `chorale cost`.
 
-## Other phase-2 follow-ups (not yet done)
-- ~~Ink/TUI renderer for the CLI~~ ✅ **shipped** (`chorale tui` — streaming chat REPL; runtime gained `onToken`/`onEvent` hooks). *Note:* the React/Ink TSX (`src/tui/`) is excluded from `npm run typecheck` — the native TS7 compiler crashes on React's type tree on Windows; it is type-transpiled by `npm run build` (esbuild).
-- More agents (files/docs specialist, dedicated verifier).
-- Ship phase-2 → PR to `main`.
-- Larger, messier real-world codebase benchmarks (beyond the self-contained projects).
+## Phase plan (forward)
+
+Sequencing decision (recorded): **agents before the GUI.** The Ink TUI already provides a working
+interactive surface, so a richer GUI is a delivery layer, not a capability gate — and the GUI's design
+depends on the agent roster (a reviewer wants inline annotations, a files/docs agent wants a diff panel),
+not the reverse. So the roster and core APIs stabilize first; the GUI is built once, against a settled
+contract. (The flip case — do the GUI first — only wins if the next milestone is a public launch where
+the GUI is the marketing artifact.)
+
+### Phase 3 — self-learning + TUI ✅ (shipping)
+`selfLearn` v1, Ink TUI (`chorale tui`, with `onToken`/`onEvent` runtime hooks), pnpm → npm migration
+(0 vulnerabilities, pinned deps), and a session-ordering determinism fix (CI flake). A clean, coherent
+increment — ready to ship. *Note:* the React/Ink TSX (`src/tui/`) is excluded from `npm run typecheck`
+(the native TS7 compiler crashes on React's type tree on Windows); it is type-transpiled by `npm run build`.
+
+### Phase 4 — Core Agents 🔜 (the quintessential capability phase)
+Expand Chorale's agent roster — **one agent per task**, each shipped **with its own execution-graded
+benchmark** (an agent you can't measure, you can't trust). Proposed lineup, ordered by leverage:
+
+| Task | Agent | Why here |
+|------|-------|----------|
+| 1 | **Reviewer / Verifier** | Reviews code & output (correctness / security / style) → structured findings. Compounds the quality of every other agent, so it comes first. |
+| 2 | **Files / Docs specialist** | File & document work — summarize, generate/refresh docs, organize, edit prose. One of the four product pillars. |
+| 3 | **Planner / Architect** | Decomposes a complex request into a plan and delegates it; strengthens the orchestrator. |
+| 4 | **Test-writer** | Generates and runs tests — pulls the long-noted "test-execution verification" lever and compounds the coder. |
+| 5 | **Productivity** | Email / calendar / notes via MCP — the Claude-Desktop-replacement pillar. |
+
+Closes with a **larger, messier real-world codebase benchmark** exercising the new agents together
+(beyond today's self-contained projects). Lineup and order are a proposal — subject to change before/while building.
+
+### Phase 5 — GUI
+A richer desktop/web UI over the same UI-agnostic core (built on the `onToken`/`onEvent` hooks), once the
+Phase-4 agent roster and core APIs are stable.
+
+### Cross-cutting (any phase)
+- `selfLearn` v2: LLM reflection for *novel* failures + task-level strategy lessons; promote high-confidence lessons into the diagnose registry.
+- Consider `typescript@7` (native tsgo, crashes on React types) → `typescript@5` to restore TUI typechecking.

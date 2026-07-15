@@ -64,6 +64,13 @@ Updated at the completion of every phase, before shipping. Per-commit detail liv
 **Done**
 - **Task 1 — `selfLearn`** ✅: the coder learns fixes from its own successful diagnosed repairs (per-agent `data/lessons.sqlite`) and injects the top proven lessons proactively next run; `chorale lessons` to inspect; `CHORALE_NO_LEARN=1` for reproducible eval. See [`self-learning.md`](self-learning.md).
 - **Task 2 — Ink TUI** ✅: `chorale tui` — interactive streaming chat REPL; runtime gained `onToken`/`onEvent` renderer hooks. *(The React/Ink TSX is excluded from `npm run typecheck` — the native TS7 compiler crashes on React's type tree on Windows — but is type-transpiled by `npm run build`.)*
+- **Tooling — pnpm → npm migration** ✅: removed pnpm lockfile/`packageManager`, pinned deps, `esbuild` override → `npm audit` reports 0 vulnerabilities; CI on `npm ci`; all docs/comments updated.
+- **Fix — session ordering determinism** ✅: `latestSession`/`listSessions`/`pruneSessions` tie-broke arbitrarily on same-millisecond `updated_at`; added a monotonic `rowid` secondary sort (resolved a CI-only flake).
 
-**Planned**
-- More agents (files/docs specialist, reviewer/verifier); larger real-world codebase benchmarks; UI over the same core; `selfLearn` v2 (LLM reflection for novel failures).
+**Scope change:** "more agents" is promoted out of Phase 3 into a dedicated **Phase 4 — Core Agents** (one agent per task, each with its own benchmark). The GUI becomes **Phase 5**, after the roster stabilizes. See [`ROADMAP.md`](ROADMAP.md).
+
+## Phase 4 — Core Agents 🔜 (planned)
+The capability phase: grow the agent roster one agent per task, each shipped with an execution-graded benchmark. Proposed order (by leverage): **1** Reviewer/Verifier · **2** Files/Docs · **3** Planner/Architect · **4** Test-writer · **5** Productivity (email/calendar/notes via MCP) — closing with a larger real-world codebase benchmark. Full rationale in [`ROADMAP.md`](ROADMAP.md).
+
+## Phase 5 — GUI (planned)
+A richer desktop/web UI over the same UI-agnostic core (on the `onToken`/`onEvent` hooks), once the Phase-4 roster and APIs are stable.
