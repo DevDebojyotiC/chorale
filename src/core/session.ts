@@ -142,6 +142,23 @@ export class SessionStore {
     }
   }
 
+  /** Delete a session and its messages + usage. Returns true if it existed. */
+  deleteSession(id: string): boolean {
+    const info = this.db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
+    this.db.prepare(`DELETE FROM messages WHERE session_id = ?`).run(id);
+    this.db.prepare(`DELETE FROM usage WHERE session_id = ?`).run(id);
+    return info.changes > 0;
+  }
+
+  /** Keep the `keep` most-recent sessions, delete the rest. Returns how many were removed. */
+  pruneSessions(keep: number): number {
+    const stale = this.db
+      .prepare(`SELECT id FROM sessions ORDER BY updated_at DESC LIMIT -1 OFFSET ?`)
+      .all(Math.max(0, keep)) as Array<{ id: string }>;
+    for (const s of stale) this.deleteSession(s.id);
+    return stale.length;
+  }
+
   close(): void {
     this.db.close();
   }

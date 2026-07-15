@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import "dotenv/config";
 import readline from "node:readline";
-import { resolve, join } from "node:path";
-import { existsSync, readdirSync } from "node:fs";
+import { resolve, join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { loadConfig } from "./core/config.js";
 import { detectResources, recommendTieredProfile, writeGeneratedProfile, setActiveProfile } from "./core/init.js";
 import type { ChoraleConfig } from "./core/config.js";
@@ -16,6 +17,7 @@ import type { ChatMessage } from "./core/session.js";
 import type { PermissionMode } from "./tools/permissions.js";
 import { setLogLevel, setLogFile, log } from "./core/log.js";
 import { estimateCost } from "./core/costs.js";
+import { checkProviders } from "./core/doctor.js";
 
 interface CliArgs {
   agent?: string;
@@ -24,7 +26,44 @@ interface CliArgs {
   continueLatest: boolean;
   permissionMode?: PermissionMode;
   profile?: string;
+  json: boolean;
   prompt: string;
+}
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+function version(): string {
+  try { return (JSON.parse(readFileSync(resolve(HERE, "../package.json"), "utf8")) as { version?: string }).version ?? "0.0.0"; }
+  catch { return "0.0.0"; }
+}
+
+const HELP = `chorale — a model-agnostic multi-agent CLI
+
+Usage:
+  chorale [options] "your prompt"          run a turn (prompt may also be piped via stdin)
+
+Commands:
+  init [--auto]                 detect models + keys, generate a tailored profile
+  agents                        list available agents (model · tier · tools)
+  profiles [name]               show model-routing profiles and how they resolve
+  sessions                      list recent sessions
+  sessions rm <id>              delete a session
+  sessions prune [--keep N]     keep the N most-recent sessions (default 20)
+  cost [session]                token usage + estimated spend per model
+  doctor                        ping every configured provider for reachability
+
+Options:
+  -a, --agent <name>            which agent (default: general)
+  -m, --model <provider:model>  force a model, overriding the agent's
+  -p, --profile <name>          use a model-routing profile
+  -r, --resume <id>             resume a session   ·   -c, --continue  resume the latest
+      --mode <m> | --yolo | --read-only    permission mode (full-auto | auto-edit | read-only)
+      --json                    emit {text, model, usage, session} as JSON
+  -v, --verbose | -q, --quiet   log level   ·   -V, --version   ·   -h, --help`;
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const c of process.stdin) chunks.push(c as Buffer);
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -34,6 +73,7 @@ function parseArgs(argv: string[]): CliArgs {
   let continueLatest = false;
   let permissionMode: PermissionMode | undefined;
   let profile: string | undefined;
+  let json = false;
   const rest: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -47,12 +87,13 @@ function parseArgs(argv: string[]): CliArgs {
     else if (arg === "--read-only" || arg === "--plan") permissionMode = "read-only";
     else if (arg === "--verbose" || arg === "-v") setLogLevel("debug");
     else if (arg === "--quiet" || arg === "-q") setLogLevel("warn");
+    else if (arg === "--json") json = true;
     else if (arg === "--mode") {
       const m = argv[++i];
       if (m === "read-only" || m === "auto-edit" || m === "full-auto") permissionMode = m;
     } else if (arg !== undefined) rest.push(arg);
   }
-  return { agent, model, resume, continueLatest, permissionMode, profile, prompt: rest.join(" ").trim() };
+  return { agent, model, resume, continueLatest, permissionMode, profile, json, prompt: rest.join(" ").trim() };
 }
 
 /** Load every agent spec in the agents dir (best-effort). */
@@ -124,6 +165,38 @@ function printCost(store: SessionStore, sessionId?: string): void {
   process.stderr.write("  Estimates use built-in rates (src/core/costs.ts) — confirm against your provider's billing.\n");
 }
 
+/** `chorale agents` — list available agents with their resolved model, tier, and tools. */
+function printAgents(config: ChoraleConfig): void {
+  const specs = loadAllAgents(config.agents.dir);
+  if (specs.length === 0) {
+    process.stderr.write(`No agents found in ${config.agents.dir}.\n`);
+    return;
+  }
+  process.stderr.write("Agents:\n\n");
+  for (const s of specs.sort((a, b) => a.name.localeCompare(b.name))) {
+    const model = resolveModelPlan(s, config, undefined, undefined).model;
+    process.stderr.write(`  ${s.name.padEnd(14)}${s.tier ? `[${s.tier}]`.padEnd(16) : " ".repeat(16)}→ ${model}\n`);
+    process.stderr.write(`  ${" ".repeat(14)}${s.description}\n`);
+    if (s.tools.length) process.stderr.write(`  ${" ".repeat(14)}tools: ${s.tools.join(", ")}\n`);
+    process.stderr.write("\n");
+  }
+}
+
+/** `chorale doctor` — ping every configured provider and report reachability. */
+async function runDoctor(config: ChoraleConfig): Promise<void> {
+  process.stderr.write("Provider health check…\n\n");
+  const rows = await checkProviders(config);
+  if (rows.length === 0) {
+    process.stderr.write("No providers configured.\n");
+    return;
+  }
+  for (const r of rows) {
+    process.stderr.write(`  ${r.ok ? "✓" : "✗"} ${r.name.padEnd(12)} ${r.api.padEnd(18)} ${r.detail}${r.ms ? ` (${r.ms}ms)` : ""}\n`);
+  }
+  const down = rows.filter((r) => !r.ok).length;
+  process.stderr.write(`\n${rows.length - down}/${rows.length} reachable.${down ? " Check the key/URL for the ✗ providers." : ""}\n`);
+}
+
 function printSessions(store: SessionStore): void {
   const rows = store.listSessions(20);
   if (rows.length === 0) {
@@ -188,14 +261,41 @@ async function runInit(auto: boolean): Promise<void> {
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
 
+  if (argv.includes("-h") || argv.includes("--help") || (argv.length === 0 && process.stdin.isTTY)) {
+    process.stdout.write(HELP + "\n");
+    return;
+  }
+  if (argv.includes("-V") || argv.includes("--version")) {
+    process.stdout.write(`chorale ${version()}\n`);
+    return;
+  }
+
   if (argv[0] === "init") {
     await runInit(argv.includes("--auto") || argv.includes("--yes"));
     return;
   }
 
+  if (argv[0] === "agents") {
+    printAgents(loadConfig());
+    return;
+  }
+
+  if (argv[0] === "doctor") {
+    await runDoctor(loadConfig());
+    return;
+  }
+
   if (argv[0] === "sessions") {
     const store = new SessionStore();
-    printSessions(store);
+    if (argv[1] === "rm" && argv[2]) {
+      process.stderr.write(store.deleteSession(argv[2]) ? `Removed session ${argv[2]}.\n` : `Session ${argv[2]} not found.\n`);
+    } else if (argv[1] === "prune") {
+      const ki = argv.indexOf("--keep");
+      const keep = ki >= 0 ? Number(argv[ki + 1]) || 20 : 20;
+      process.stderr.write(`Pruned ${store.pruneSessions(keep)} session(s), kept the ${keep} most recent.\n`);
+    } else {
+      printSessions(store);
+    }
     store.close();
     return;
   }
@@ -213,11 +313,10 @@ async function main(): Promise<void> {
   }
 
   const args = parseArgs(argv);
-  if (!args.prompt) {
-    process.stderr.write(
-      'Usage: chorale [--agent <name>] [--model <provider:model>] [--profile <name>] [--resume <id> | -c] [-v|--quiet] "your prompt"\n' +
-        "       chorale init   ·   chorale sessions   ·   chorale profiles [name]   ·   chorale cost [session]\n",
-    );
+  let prompt = args.prompt;
+  if (!prompt && !process.stdin.isTTY) prompt = (await readStdin()).trim(); // piped prompt
+  if (!prompt) {
+    process.stdout.write(HELP + "\n");
     process.exit(1);
   }
 
@@ -268,21 +367,25 @@ async function main(): Promise<void> {
   const priorNote = history.length > 0 ? ` (${history.length} prior msgs)` : "";
   log.info(`[chorale] agent=${agent.name} model=${activeModel}${profileNote} session=${sessionId}${priorNote}\n\n`);
 
-  store.appendMessage(sessionId, "user", args.prompt);
+  store.appendMessage(sessionId, "user", prompt);
   const result = await runAgent({
     config,
     registry,
     agent,
-    prompt: args.prompt,
+    prompt,
     history,
     modelOverride: args.model,
     permissionMode: args.permissionMode,
     profile: args.profile,
+    stream: args.json ? false : undefined,
   });
   store.appendMessage(sessionId, "assistant", result.text, result.model);
 
   const { usage } = result;
   if (usage) store.recordUsage(sessionId, result.model, usage.inputTokens ?? 0, usage.outputTokens ?? 0);
+  if (args.json) {
+    process.stdout.write(JSON.stringify({ text: result.text, model: result.model, usage: usage ?? null, session: sessionId }) + "\n");
+  }
   const tokens =
     usage && (usage.inputTokens != null || usage.outputTokens != null)
       ? ` · in=${usage.inputTokens ?? "?"} out=${usage.outputTokens ?? "?"} tokens`
