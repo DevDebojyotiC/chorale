@@ -12,3 +12,6 @@ eval/openclaw/
 
 # Demo apps built by the coder agent
 demo-todo/
+
+# crash dumps
+*.stackdump

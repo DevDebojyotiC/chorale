@@ -263,7 +263,7 @@ Prefer primary sources. State uncertainty explicitly.
 - Core (`src/core`, `agents`, `skills`, `tools`, `mcp`) is UI-agnostic and emits normalized events. A future local web server (SSE/WS) + React client, or Tauri shell, reuses it with **no core rewrite**.
 
 ## 17. Tech Stack
-- Node 22 · TypeScript ESM · pnpm.
+- Node 22 · TypeScript ESM · npm.
 - `ai` (Vercel AI SDK) + provider packages (`@ai-sdk/openai`/`openai-compatible`, `@ai-sdk/anthropic`, …).
 - `zod` (schemas), `gray-matter` (frontmatter), `better-sqlite3` (FTS5 sessions/memory), a CLI/render lib (TBD: plain vs `ink`), `dotenv`.
 - `tsx` (dev), `tsup`/`tsc` (build), `vitest` (tests).

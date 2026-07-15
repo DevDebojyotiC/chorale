@@ -283,10 +283,10 @@
 <div class="section">
 <h2><span class="n">10</span> Reproducibility</h2>
 <pre><code># Single model, open-ended ramp (streams a live log; stops on failure/slowness)
-pnpm exec tsx eval/coder-ramp.ts "hf:google/gemma-4-31B-it"
+npx tsx eval/coder-ramp.ts "hf:google/gemma-4-31B-it"
 
 # Head-to-head bake-off across N models, L1..MAX, full pass grid + tokens
-pnpm exec tsx eval/coder-bakeoff.ts 10 \
+npx tsx eval/coder-bakeoff.ts 10 \
   "hf:google/gemma-4-31B-it" \
   "fireworks:accounts/fireworks/models/gpt-oss-120b" \
   "fireworks:accounts/fireworks/models/minimax-m2p7"</code></pre>

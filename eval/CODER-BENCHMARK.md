@@ -1,7 +1,7 @@
 # Chorale-Coder — Cross-Model Benchmark
 
 Reproducible benchmark of the `coder` agent (with the verify-repair harness) across models.
-Run it yourself: `pnpm exec tsx eval/coder-bench.ts` (needs `HF_TOKEN` / `FIREWORKS_API_KEY`).
+Run it yourself: `npx tsx eval/coder-bench.ts` (needs `HF_TOKEN` / `FIREWORKS_API_KEY`).
 
 ## Task
 > "Create a folder `demo-todo` with a single self-contained `index.html`: a to-do list app to add and
@@ -50,7 +50,7 @@ loop **on**. Every run is scored on three axes:
 ## Difficulty ladder (2026-07-15)
 
 Five escalating, auto-graded challenges (hidden test suites), local qwen added. Reproduce:
-`pnpm exec tsx eval/coder-ladder.ts`. Levels: L1 Roman · L2 Brackets · L3 Expression-evaluator ·
+`npx tsx eval/coder-ladder.ts`. Levels: L1 Roman · L2 Brackets · L3 Expression-evaluator ·
 L4 LRU-cache · L5 JSON-parser (no JSON.parse).
 
 | Model | L1 | L2 | L3 | L4 | L5 | ceiling |

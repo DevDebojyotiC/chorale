@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Phase 3 (in progress, on branch `phase-3`)
+
+### Added
+- **Self-learning (`selfLearn`)** — the coder records fixes from its own successful diagnosed repairs (`data/lessons.sqlite`, per agent) and injects the top proven lessons proactively on future runs. `chorale lessons [agent]` to inspect; `CHORALE_NO_LEARN=1` disables it for reproducible benchmarks. Every `diagnose` rule now carries a stable category key.
+- **Ink TUI (`chorale tui`)** — interactive streaming chat REPL; `runAgent` gained `onToken`/`onEvent` renderer hooks. *(The React/Ink TSX is excluded from `npm run typecheck` due to a native-TS7 compiler crash on React types; it is type-transpiled by `npm run build`.)*
+
 ## [0.2.0] — Phase 2
 
 A production **coder**, evidence-backed model routing, and a full hardening pass. Per-commit detail: [`docs/COMMIT-LOG.md`](docs/COMMIT-LOG.md); feature history: [`docs/PHASES.md`](docs/PHASES.md).

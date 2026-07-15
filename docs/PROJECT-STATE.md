@@ -2,7 +2,7 @@
 
 A snapshot of what exists and works right now. Refreshed at the completion of every phase, before shipping.
 
-> **Version:** 0.2.0 · **Phase:** 2 complete · **Tests:** 93 passing · **Last updated:** end of Phase 2.
+> **Version:** 0.2.0 (Phase 2 shipped) · **Phase:** 3 in progress · **Tests:** 99 passing · **Last updated:** Phase 3 (self-learning + Ink TUI landed).
 
 ## Status at a glance
 - **Runtime:** model-agnostic, production coder pipeline (salvage + verify + self-heal + diagnose-and-compensate), fallback chain with per-request timeout + retry/backoff.
@@ -27,14 +27,15 @@ Full evidence: [`model-evaluation-report.md`](model-evaluation-report.md), [`eng
 - `chorale doctor`: ollama / fireworks / hf reachable; `chorale cost`: per-model spend; transcripts written & redacted.
 
 ## Known limitations / not done
-- **`selfLearn`** toggle is recognized but **inert — parked for Phase 3**.
+- **`selfLearn`** v1 is **live** (Phase 3, Task 1): learns fixes from successful repairs, injects them proactively; `chorale lessons` to inspect. v2 (LLM reflection for novel failures) is future work.
 - Benchmarks are self-contained projects (up to a full-stack app), **not thousand-line codebases**; N is small on the hardest tiers.
-- No UI/TUI yet (CLI-first by design); no files/docs or reviewer agent yet.
+- **TUI shipped** (`chorale tui` — Ink streaming chat REPL); the React/Ink TSX is excluded from `npm run typecheck` (native TS7 crashes on React types) but is type-transpiled by `npm run build`. No files/docs or reviewer agent yet.
 - Research falls back to brittle DuckDuckGo scraping without a Tavily key (degrades gracefully, but Tavily recommended).
 
 ## Quality gates
-- `pnpm typecheck` (tsc, strict) · `pnpm test` (vitest, 93) · CI on push (`.github/workflows/ci.yml`).
+- `npm run typecheck` (tsc, strict; `src/tui` excluded — native TS7 crashes on React types) · `npm test` (vitest, 99) · CI on push (`.github/workflows/ci.yml`).
 - Graders self-validated against known-good/bad reference solutions before any benchmark run.
+- **Security:** no secrets/absolute paths/`.env`/`data/` in tracked files; SQL is parameterized; shell has a catastrophic-command denylist; logs are secret-redacted. `npm audit` reports **0 vulnerabilities** (an `esbuild` override forces the patched version) and runs in CI. `selfHeal` runs model-written code — see [`SECURITY.md`](../SECURITY.md).
 
 ## Next (Phase 3)
-Self-learning (`selfLearn`: reflect → lessons store → self-derived exemplars), Ink/TUI renderer, more agents, larger real-world benchmarks, UI over the same core. See [`ROADMAP.md`](ROADMAP.md).
+Done: **self-learning** (`selfLearn`) + **Ink TUI** (`chorale tui`). Remaining: more agents (files/docs, reviewer/verifier), larger real-world benchmarks, `selfLearn` v2, UI over the same core. See [`ROADMAP.md`](ROADMAP.md).

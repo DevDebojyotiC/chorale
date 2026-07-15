@@ -8,7 +8,7 @@
  *   2. syntax   — does the file pass syntax verification?
  *   3. works    — does the app FUNCTION? (headless jsdom: add a task, check DOM + localStorage)
  *
- * Usage:  pnpm exec tsx eval/coder-bench.ts
+ * Usage:  npx tsx eval/coder-bench.ts
  * Needs HF_TOKEN / FIREWORKS_API_KEY in .env for the serverless models.
  */
 import "dotenv/config";

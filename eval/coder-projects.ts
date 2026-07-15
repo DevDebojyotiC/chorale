@@ -7,9 +7,10 @@
  *   4. cli     — a stateful todo CLI persisting to JSON across processes
  * The coder runs with its full toolset (incl. bash, so it can run tests and iterate).
  *
- * Usage: pnpm exec tsx eval/coder-projects.ts ["model1" "model2" ...]
+ * Usage: npx tsx eval/coder-projects.ts ["model1" "model2" ...]
  */
 import "dotenv/config";
+process.env.CHORALE_NO_LEARN = "1"; // reproducible benchmarks: no self-learning
 import { mkdtempSync, rmSync, cpSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";

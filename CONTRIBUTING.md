@@ -5,8 +5,7 @@ This guide covers setup, the dev loop, and how to add agents, skills, providers,
 
 ## Prerequisites
 
-- **Node.js ≥ 22**
-- **pnpm ≥ 9** (`corepack enable`, or install pnpm directly)
+- **Node.js ≥ 22** (npm is bundled with it)
 - Optional: a local model via [Ollama](https://ollama.com), or an API key for a serverless provider (HF, Fireworks, Anthropic, …)
 
 ## Setup
@@ -14,7 +13,7 @@ This guide covers setup, the dev loop, and how to add agents, skills, providers,
 ```bash
 git clone <repo-url>
 cd chorale
-pnpm install
+npm install
 cp .env.example .env    # add keys for the providers you use (optional for local models)
 ```
 
@@ -22,10 +21,10 @@ cp .env.example .env    # add keys for the providers you use (optional for local
 
 | Command | What it does |
 |---|---|
-| `pnpm dev "<prompt>"` | Run the CLI via `tsx` (no build) |
-| `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | Run the vitest suite (offline, deterministic — no live LLM calls) |
-| `pnpm build` | Bundle to `dist/` with `tsup` |
+| `npm run dev -- "<prompt>"` | Run the CLI via `tsx` (no build) |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Run the vitest suite (offline, deterministic — no live LLM calls) |
+| `npm run build` | Bundle to `dist/` with `tsup` |
 
 `typecheck`, `test`, and `build` must all pass before a PR is merged — CI enforces this on Linux and Windows.
 

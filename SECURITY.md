@@ -23,8 +23,11 @@ We aim to acknowledge reports within a few days and will keep you updated on the
 Chorale can execute shell commands and connect to your accounts/data via MCP servers, so safety is enforced in **code**, not just prompts:
 
 - No sending messages, purchases, deletions, or permission/settings changes without explicit user confirmation.
-- MCP filesystem servers are sandboxed to explicitly allowed directories.
-- Delegation is depth-limited to prevent runaway agent spawning.
+- A catastrophic-command denylist blocks the shell tool from running destructive commands (e.g. `rm -rf /`) even in full-auto mode.
+- MCP filesystem servers, and all built-in file tools, are sandboxed to the workspace directory (`resolveInside`).
+- Delegation is depth-limited **and cycle-guarded** to prevent runaway or looping agent spawning.
+- Logs and the per-session run transcript are **secret-redacted** (env keys, Bearer tokens, provider key prefixes).
+- **Runtime self-healing (`selfHeal`) executes code the model writes** — it boots a written server on a test port and smoke-imports written modules to verify they run. This runs in the workspace with the coder's normal execution privileges (the coder already has the `bash` tool), so only enable it for agents/workspaces you trust; a written module's top-level side effects will execute. Disable per agent with `selfHeal: false`.
 
 See [`DESIGN.md`](DESIGN.md) §13 (Permissions, Hooks & Safety) for the full model.
 

@@ -5,7 +5,7 @@
  * every model writes `solution.mjs`; a HIDDEN test suite grades correctness (logic,
  * not just syntax). Stops after 5 levels or early if a level breaks the whole field.
  *
- * Usage: pnpm exec tsx eval/coder-ladder.ts   (needs HF_TOKEN / FIREWORKS_API_KEY)
+ * Usage: npx tsx eval/coder-ladder.ts   (needs HF_TOKEN / FIREWORKS_API_KEY)
  */
 import "dotenv/config";
 import { mkdtempSync, rmSync, readdirSync, existsSync } from "node:fs";

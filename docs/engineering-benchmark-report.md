@@ -112,13 +112,13 @@ The crossover is the whole point. A single-model policy is wrong in one directio
 
 ```bash
 # Validate every grader against reference good/bad solutions
-pnpm exec tsx eval/projects-selftest.ts
+npx tsx eval/projects-selftest.ts
 
 # Tier 1 (four everyday tasks)
-pnpm exec tsx eval/coder-projects.ts --only=kvstore,debug,asyncpool,cli
+npx tsx eval/coder-projects.ts --only=kvstore,debug,asyncpool,cli
 
 # Tier 2 (framework, store, full-stack) — run several times for reliability
-pnpm exec tsx eval/coder-projects.ts --only=framework,store,fullstack
+npx tsx eval/coder-projects.ts --only=framework,store,fullstack
 ```
 
 Harness: [`eval/coder-projects.ts`](../eval/coder-projects.ts) · Grader self-test: [`eval/projects-selftest.ts`](../eval/projects-selftest.ts) · Reference solutions: [`eval/projects/_ref/`](../eval/projects/_ref) · Tier-1 detail: [`eval/PROJECTS-RESULTS.md`](../eval/PROJECTS-RESULTS.md)

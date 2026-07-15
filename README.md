@@ -16,12 +16,18 @@ skills. MCP-native. CLI-first, UI later.
 ## Quickstart
 
 ```bash
-pnpm install
+npm install
 cp .env.example .env                 # keys for the providers you use (optional for local-only)
-pnpm exec tsx src/index.ts init      # detect your models + keys, generate a tailored profile
+npm run build && npm link               # expose the `chorale` command on your PATH
+#   ↳ no link? just use `npm run dev -- "<prompt>"` (runs via tsx, no build) for everything below.
+chorale init                         # detect your models + keys, generate a tailored profile
 chorale doctor                       # confirm your providers are reachable
 chorale "Explain what a chorale of agents is."
+chorale tui                          # or drop into the interactive terminal UI
 ```
+
+> The linked `chorale` runs the built `dist/`, so re-run `npm run build` after code changes
+> (or use `npm run dev …` during development). Undo the link with `npm unlink -g chorale`.
 
 Point the base model at whatever you run — `config/chorale.config.json5`:
 
@@ -33,9 +39,10 @@ base: { model: "ollama:qwen2.5-coder:3b" }   // or "anthropic:claude-opus-4-8", 
 
 ```bash
 chorale "prompt"                       # run a turn (prompt may also be piped: echo "fix X" | chorale)
+chorale tui                            # interactive streaming chat REPL (Ink terminal UI)
 chorale --agent coder "build a todo CLI that persists to JSON"
 chorale -m hf:google/gemma-4-31B-it --json "..."   # force a model; structured output
-chorale agents | profiles [name] | sessions [rm <id> | prune] | cost [session] | doctor
+chorale agents | profiles [name] | sessions [rm <id> | prune] | cost [session] | lessons [agent] | doctor
 ```
 
 `--help` for the full reference. Flags: `-a/--agent`, `-m/--model`, `-p/--profile`, `-r/--resume`,
@@ -91,8 +98,8 @@ chorale --model mock:test-model "prove the pipeline works"
 
 | Command | What it does |
 |---|---|
-| `pnpm dev "<prompt>"` | Run the CLI via tsx (no build) |
-| `pnpm build` · `pnpm typecheck` · `pnpm test` | Bundle · `tsc --noEmit` · vitest (93 tests) |
+| `npm run dev -- "<prompt>"` | Run the CLI via tsx (no build) |
+| `npm run build` · `npm run typecheck` · `npm test` | Bundle · `tsc --noEmit` · vitest (99 tests) |
 
 ## Docs
 [`ARCHITECTURE`](docs/ARCHITECTURE.md) · [`PROJECT-STATE`](docs/PROJECT-STATE.md) · [`PHASES`](docs/PHASES.md) ·

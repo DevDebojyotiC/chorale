@@ -17,6 +17,8 @@ import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 import { verifyFiles, verifyFeedback } from "./verify.js";
 import { smokeTest, smokeFeedback } from "./smoke.js";
+import { matchDiagnoses } from "./diagnose.js";
+import { getLessonStore } from "./lessons.js";
 import { log } from "./log.js";
 import { parseTextToolCalls, extractCodeBlocks, inferFilename, ensureExports, type ParsedToolCall } from "./tool-call-salvage.js";
 
@@ -133,10 +135,20 @@ export interface RunOptions {
   profile?: string;
   /** Stream tokens to stdout as they arrive (default true). */
   stream?: boolean;
+  /** If set, stream text is routed here instead of stdout (for a TUI/renderer). */
+  onToken?: (text: string) => void;
+  /** If set, receives structured activity events (tool calls, verify/heal, fallback). */
+  onEvent?: (e: RunEvent) => void;
   /** Max model steps per attempt (overrides config.defaults.maxSteps for multi-file work). */
   maxSteps?: number;
   /** Agent names already on the delegation path (for cycle detection). */
   delegationPath?: string[];
+}
+
+/** A structured activity event for a renderer (the TUI subscribes to these). */
+export interface RunEvent {
+  type: "tool" | "salvage" | "verify" | "heal" | "fallback" | "lesson";
+  text: string;
 }
 
 /**
@@ -201,8 +213,24 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     }
   }
 
+  // Self-learning: inject the agent's proven lessons (from past repairs) so it
+  // avoids known mistakes proactively. Disabled with CHORALE_NO_LEARN=1 (eval).
+  const learn = agent.selfLearn && process.env.CHORALE_NO_LEARN !== "1";
+  let lessonsBlock = "";
+  if (learn) {
+    try {
+      const lessons = getLessonStore().top(agent.name, 6);
+      if (lessons.length > 0) {
+        lessonsBlock = "\n\n## Lessons learned from past runs (apply these proactively)\n" + lessons.map((l) => `- ${l.lesson}`).join("\n");
+        log.debug(`\n[chorale] applying ${lessons.length} learned lesson(s)\n`);
+      }
+    } catch {
+      /* lesson store unavailable — skip */
+    }
+  }
+
   const today = new Date().toISOString().slice(0, 10);
-  const system = `Current date: ${today}.\n\n${delegateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}${fewShotBlock}`;
+  const system = `Current date: ${today}.\n\n${delegateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}${fewShotBlock}${lessonsBlock}`;
   const messages: ChatMessage[] = [...(opts.history ?? []), { role: "user", content: prompt }];
 
   // Whether the latest attempt tried to write files — used to detect no-op turns
@@ -268,6 +296,8 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
               const input = JSON.stringify(call.input);
               const preview = input.length > 140 ? `${input.slice(0, 140)}…` : input;
               log.debug(`\n[tool] ${call.toolName} ${preview}\n`);
+              const p = (call.input as { path?: string })?.path;
+              opts.onEvent?.({ type: "tool", text: typeof p === "string" ? `${call.toolName} ${p}` : call.toolName });
             }
           },
           onError: ({ error }) => {
@@ -275,18 +305,24 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           },
         });
 
+        const emitText = (s: string): void => {
+          if (!s) return;
+          if (opts.onToken) opts.onToken(s);
+          else if (stream) process.stdout.write(s);
+          emittedAny = true;
+        };
         const stripper = createTagStripper(TOOL_MARKUP_TOKENS);
         let text = "";
         for await (const delta of result.textStream) {
           const clean = stripper.push(delta);
           text += clean;
-          if (stream && clean) { process.stdout.write(clean); emittedAny = true; }
+          emitText(clean);
         }
         const tail = stripper.flush();
         text += tail;
-        if (stream && tail) { process.stdout.write(tail); emittedAny = true; }
+        emitText(tail);
         if (streamError) throw streamError;
-        if (stream && text) process.stdout.write("\n");
+        if (stream && !opts.onToken && text) process.stdout.write("\n");
 
         const usage = await Promise.resolve(result.totalUsage).catch(() => undefined);
         if (usage) {
@@ -309,6 +345,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         log.info(`\n[chorale] model "${ref}" failed: ${msg}\n`);
         if (ref !== chain[chain.length - 1]) {
           log.info(`[chorale] falling back to next model…\n`);
+          opts.onEvent?.({ type: "fallback", text: `${ref} failed — falling back` });
         }
         break; // give up on this model, advance to the next in the chain
       }
@@ -329,6 +366,9 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     // Escalate sampling each repair round: forces a different completion so the
     // model can escape a wrong answer it would otherwise reproduce verbatim.
     const repairTemp = (round: number) => Math.min(0.9, 0.5 + 0.2 * round);
+    // Self-learning: the diagnoses shown last round, pending a win/loss verdict this round.
+    let pending: { key: string; lesson: string }[] = [];
+    const learnStore = learn ? getLessonStore() : null;
     for (let round = 0; round < maxRounds; round++) {
       const isLast = round === maxRounds - 1;
 
@@ -386,6 +426,8 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         if (smoke.length > 0) { issues = smoke; feedback = smokeFeedback(smoke); kind = "runtime (self-heal)"; }
       }
       if (issues.length === 0) {
+        // A diagnosed repair succeeded → the fix worked; learn it.
+        if (learnStore && pending.length) { for (const p of pending) learnStore.record(agent.name, p.key, p.lesson, true); pending = []; }
         log.info(
           round > 0
             ? `\n[chorale] ✓ verified + ran clean after ${round} fix round(s)\n`
@@ -394,13 +436,17 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         break;
       }
       if (isLast) {
+        if (learnStore && pending.length) { for (const p of pending) learnStore.record(agent.name, p.key, p.lesson, false); pending = []; }
         log.info(`\n[chorale] ⚠ ${issues.length} ${kind} issue(s) remain after ${maxRounds} rounds\n`);
         break;
       }
       log.info(`\n[chorale] ⚠ ${kind} found ${issues.length} issue(s) — asking the model to fix…\n`);
+      opts.onEvent?.({ type: kind.startsWith("runtime") ? "heal" : "verify", text: `${issues.length} issue(s) — repairing` });
       for (const i of issues.slice(0, 6)) log.info(`    ${i.file}: ${i.message}\n`);
       messages.push({ role: "assistant", content: result.text || "(wrote files)" });
       messages.push({ role: "user", content: feedback });
+      // Remember which diagnoses we're betting on, to score next round.
+      if (learnStore) pending = matchDiagnoses(issues.map((i) => i.message)).map((d) => ({ key: d.key, lesson: d.hint }));
       result = await attempt(repairTemp(round));
     }
 

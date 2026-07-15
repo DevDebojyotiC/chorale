@@ -1,7 +1,7 @@
 /**
  * Validates the real-engineering graders against KNOWN-GOOD and KNOWN-BAD
  * reference solutions, so a grader bug can't silently penalize the models.
- * Run: pnpm exec tsx eval/projects-selftest.ts
+ * Run: npx tsx eval/projects-selftest.ts
  */
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, cpSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";

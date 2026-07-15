@@ -46,4 +46,12 @@ annotated tag (`phase-2-task-N-*`) with `DevDebojyotiC` as sole author. Updated 
 | 29 | `4ffaa26` | `…task-29-tier3-polish` | Leveled logging + run transcript, secret redaction, delegation-cycle guard, per-session cost + `chorale cost`. |
 | 30 | `50cef38` | `…task-30-cli-qol` | CLI ergonomics (`--help/--version`, `agents`, stdin, `--json`), `chorale doctor`, `sessions rm/prune`; v0.2.0. |
 
-*(Doc-suite commit adds this file plus PHASES.md, ARCHITECTURE.md, PROJECT-STATE.md and the README refresh.)*
+*(Task 31 — the doc suite — added this file plus PHASES.md, ARCHITECTURE.md, PROJECT-STATE.md and the README refresh. Task 32 scrubbed the "personal" framing from the two reports.)*
+
+## Phase 3 — in progress (branch `phase-3`)
+
+| # | Tag | Summary |
+|--:|-----|---------|
+| 1 | `phase-3-task-1-self-learning` | Self-learning: record fixes from successful diagnosed repairs (`lessons.ts` / `data/lessons.sqlite`) and inject proven lessons proactively; `chorale lessons`; `CHORALE_NO_LEARN` for eval. Diagnose rules get category keys. |
+| 2 | `phase-3-task-2-ink-tui` | Ink TUI `chorale tui` (streaming chat REPL); runtime `onToken`/`onEvent` hooks; lazy-loaded; TSX excluded from TS7 typecheck (esbuild-built). |
+| — | *(no tag)* | Docs: README quickstart shows how to expose the `chorale` command (`npm run build && npm link`). |

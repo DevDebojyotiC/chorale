@@ -8,6 +8,8 @@
  * a future self-learning pass (Phase 3) can append rules learned from real failures.
  */
 export interface Diagnosis {
+  /** Stable category id — used to key learned lessons and dedupe. */
+  key: string;
   /** Matches the combined error message(s). */
   test: RegExp;
   /** Actionable guidance appended to the repair feedback. */
@@ -16,6 +18,7 @@ export interface Diagnosis {
 
 export const DIAGNOSES: Diagnosis[] = [
   {
+    key: "template-literal",
     // The proven one: big HTML embedded in a JS template literal → nested backtick closes the string early.
     test: /[`]|template literal|unterminated template|unterminated string/i,
     hint:
@@ -23,26 +26,31 @@ export const DIAGNOSES: Diagnosis[] = [
       "Do NOT try to escape it. RESTRUCTURE: write the HTML to a SEPARATE file (e.g. index.html) and serve it with readFileSync(new URL('./index.html', import.meta.url), 'utf8'). This removes every nested-backtick trap.",
   },
   {
+    key: "esm-cjs",
     test: /Cannot use import statement outside a module|Unexpected token ['"]?export|require is not defined|exports is not defined|module is not defined|__dirname is not defined|__filename is not defined/i,
     hint:
       "An ESM/CJS mismatch — this is an ES module (.mjs). Use import/export, not require or module.exports. For built-ins use `import { x } from \"node:fs\"`; for paths use `new URL('./f', import.meta.url)` instead of __dirname.",
   },
   {
+    key: "module-path",
     test: /Cannot find module|ERR_MODULE_NOT_FOUND|Failed to resolve|Could not resolve/i,
     hint:
       "A module path is wrong. Use correct relative paths WITH the file extension (e.g. \"./util.mjs\"), prefix Node built-ins with \"node:\", and only import files you actually created.",
   },
   {
+    key: "port",
     test: /EADDRINUSE|address already in use|listen EACCES/i,
     hint:
       "The port is unavailable — almost always because it is hardcoded. Read it from process.env.PORT (with a default only as a fallback) so each run can bind a free port.",
   },
   {
+    key: "bad-export",
     test: /is not a function/i,
     hint:
       "You called something that isn't a function — often a wrong import/export name. Make sure the exported names exactly match what you import and call.",
   },
   {
+    key: "undefined-name",
     // "is not defined" for a normal identifier — but NOT require/exports/module/__dirname
     // (those are the ESM/CJS mismatch handled by the specific rule above).
     test: /(?<!(?:require|exports|module|__dirname|__filename) )\bis not defined\b|ReferenceError/i,
@@ -50,26 +58,34 @@ export const DIAGNOSES: Diagnosis[] = [
       "A name is used but never declared or imported. Declare it, or add the missing import.",
   },
   {
+    key: "async-syntax",
     test: /await is only valid|Unexpected reserved word|Top-level await/i,
     hint:
       "Invalid use of await/reserved word — wrap the code in an async function, or use .then().",
   },
   {
+    key: "literal-newline",
     test: /literal \\n|\\\\n|\\n(?!ewline)/,
     hint:
       "You may have written literal \\n sequences instead of real line breaks. Emit real newlines in source.",
   },
   {
+    key: "delimiters",
     test: /Expected .* but (found|got)|Unexpected (end of|token)|missing \)|Unterminated/i,
     hint:
       "A bracket, paren, brace, quote, or comma is missing or extra. Re-read the reported line(s) and balance them.",
   },
 ];
 
+/** The diagnosis rules whose pattern matches the error text. */
+export function matchDiagnoses(messages: string[]): Diagnosis[] {
+  const blob = messages.join("\n");
+  return DIAGNOSES.filter((d) => d.test.test(blob));
+}
+
 /** Return targeted, deduped guidance for whichever diagnoses match the error text. */
 export function diagnose(messages: string[]): string {
-  const blob = messages.join("\n");
-  const hints = [...new Set(DIAGNOSES.filter((d) => d.test.test(blob)).map((d) => d.hint))];
+  const hints = [...new Set(matchDiagnoses(messages).map((d) => d.hint))];
   if (hints.length === 0) return "";
   return "\n\nLikely cause(s) and the fix:\n" + hints.map((h) => `• ${h}`).join("\n");
 }

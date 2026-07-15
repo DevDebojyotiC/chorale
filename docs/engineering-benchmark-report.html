@@ -187,13 +187,13 @@
 <div class="section">
 <h2><span class="n">8</span> Reproducibility</h2>
 <pre><code># Validate every grader against reference good/bad solutions
-pnpm exec tsx eval/projects-selftest.ts
+npx tsx eval/projects-selftest.ts
 
 # Tier 1 (four everyday tasks)
-pnpm exec tsx eval/coder-projects.ts --only=kvstore,debug,asyncpool,cli
+npx tsx eval/coder-projects.ts --only=kvstore,debug,asyncpool,cli
 
 # Tier 2 (framework, store, full-stack) — run several times for reliability
-pnpm exec tsx eval/coder-projects.ts --only=framework,store,fullstack</code></pre>
+npx tsx eval/coder-projects.ts --only=framework,store,fullstack</code></pre>
 <p class="note">Harness: <code>eval/coder-projects.ts</code> · Grader self-test: <code>eval/projects-selftest.ts</code> · Reference solutions: <code>eval/projects/_ref/</code></p>
 </div>
 
