@@ -2,7 +2,7 @@
 
 How Chorale is put together. Updated at the completion of every phase.
 
-> **Last updated:** end of Phase 2 (v0.2.0). Current-state snapshot: [`PROJECT-STATE.md`](PROJECT-STATE.md).
+> **Last updated:** Phase 3 in progress (post-v0.2.0). Current-state snapshot: [`PROJECT-STATE.md`](PROJECT-STATE.md).
 
 ## Overview
 
@@ -31,8 +31,10 @@ CLI (src/index.ts)
 | **Model routing** | `core/model-registry.ts`, `core/model-policy.ts` | Build the AI-SDK provider registry; resolve `agent → model` via profile precedence + compose the fallback chain. |
 | **Orchestration** | `core/runtime.ts` | `runAgent`: the fallback/retry loop, salvage, verify-repair, self-heal, cumulative usage, few-shot injection, delegation wiring. |
 | **Robustness** | `core/tool-call-salvage.ts`, `core/verify.ts`, `core/smoke.ts`, `core/diagnose.ts`, `core/stream-filter.ts` | Parse text tool-calls; esbuild syntax verify; runtime smoke-test; error→fix diagnosis; strip tool markup. |
+| **Learning** | `core/lessons.ts` (+ `core/diagnose.ts` keys) | Per-agent self-learning store: record fixes that worked, inject proven lessons proactively. |
 | **Setup/ops** | `core/init.ts`, `core/doctor.ts`, `core/costs.ts`, `core/log.ts`, `core/redact.ts` | Init wizard; provider health check; cost rates; leveled logging + transcript; secret redaction. |
 | **State** | `core/session.ts` | SQLite sessions, messages, usage; `chorale cost` aggregation; housekeeping. |
+| **TUI** | `tui/app.tsx` (Ink + React) | Interactive streaming chat REPL (`chorale tui`); subscribes to the runtime's `onToken`/`onEvent`. Lazy-loaded; excluded from `pnpm typecheck` (native TS7 crashes on React types), built by esbuild. |
 | **Agents** | `agents/loader.ts` | Parse `agent.md` frontmatter (model, fallbacks, tools, skills, mcp, verify, fewShot, selfHeal, selfLearn, tier). |
 | **Tools** | `tools/registry.ts`, `tools/fs.ts`, `tools/shell.ts`, `tools/web.ts`, `tools/skill.ts`, `tools/delegate.ts`, `tools/permissions.ts` | Built-in tool set; permission gating + catastrophic-command denylist; delegation with depth + cycle guards. |
 | **Skills / MCP** | `skills/loader.ts`, `mcp/client.ts` | Discover/select Claude-compatible skills; connect MCP servers. |
@@ -40,11 +42,12 @@ CLI (src/index.ts)
 ## The `runAgent` loop (the crown jewel)
 
 1. **Resolve** the model chain (`resolveModelPlan`) and assemble tools (built-ins + MCP + `skill_view` + `delegate`), the system prompt (persona + skills + few-shot examples), and messages.
-2. **`attempt()`** streams from the first model in the chain. Each request has an **`AbortSignal` timeout**; fast transient errors (429/5xx/conn-reset) **retry with backoff** on the same model; timeouts and hard errors **fall back** to the next model. Output is stripped of tool markup; usage accumulates across every attempt.
+2. **`attempt()`** streams from the first model in the chain. Each request has an **`AbortSignal` timeout**; fast transient errors (429/5xx/conn-reset) **retry with backoff** on the same model; timeouts and hard errors **fall back** to the next model. Output is stripped of tool markup and routed to `opts.onToken` when set (else stdout); tool/verify/fallback activity is emitted to `opts.onEvent` (the TUI subscribes to both); usage accumulates across every attempt.
 3. **Completion loop** (bounded by `maxVerifyRounds`), each round with escalating temperature:
    - **Salvage** — if the model made no native tool call, parse and execute tool calls it wrote as text.
    - **Verify** (if `agent.verify`) — esbuild syntax-check written files; on failure feed back `verifyFeedback` + a **targeted diagnosis** (`diagnose`).
    - **Self-heal** (if `agent.selfHeal`, syntax clean) — actually *run* the code (boot servers on an injected PORT, smoke-import modules); feed runtime failures back.
+   - **Self-learn** (if `agent.selfLearn`) — when a diagnosed repair succeeds, record the fix as a lesson; the agent's top proven lessons were injected into the system prompt up front.
    - No-op retry if writes were attempted but nothing landed.
 4. **Context guard** caps message history so long repair chains can't overflow the window.
 

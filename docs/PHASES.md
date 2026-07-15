@@ -3,7 +3,7 @@
 The big and small features, decisions, fixes, and findings per phase — the durable project history.
 Updated at the completion of every phase, before shipping. Per-commit detail lives in [`COMMIT-LOG.md`](COMMIT-LOG.md).
 
-> **Last updated:** end of Phase 2 (v0.2.0).
+> **Last updated:** Phase 3 in progress (post-v0.2.0).
 
 ---
 
@@ -43,7 +43,7 @@ Updated at the completion of every phase, before shipping. Per-commit detail liv
 - **Real-engineering benchmark** (multi-file, tool-driven): the difficulty **crossover** — value wins on routine work (Gemma perfect), reliability wins on hard/full-stack work (gpt-oss 100% across trials; Gemma's full-stack was flaky).
 
 ### Learning, self-healing & compensation (bring the best out of any model)
-- Per-agent **tick-box toggles** (default-on for coder): `fewShot` (inject `coder.examples.md` worked patterns), `selfHeal` (runtime smoke-test: boot written servers on an injected PORT, smoke-import modules, repair failures), `selfLearn` (**parked for Phase 3**).
+- Per-agent **tick-box toggles** (default-on for coder): `fewShot` (inject `coder.examples.md` worked patterns), `selfHeal` (runtime smoke-test: boot written servers on an injected PORT, smoke-import modules, repair failures), `selfLearn` (shipped in Phase 3 — see below).
 - **Diagnosed & fixed Gemma's full-stack weakness (70% → 100%)**: root cause = large HTML in a JS template literal → nested backtick. Fixed *from our end* by (a) steering to file-based HTML, (b) **targeted repair diagnostics**, (c) a bigger repair budget — none model-specific.
 - **Generalized diagnose-and-compensate**: an extensible registry (`diagnose.ts`) that turns any recognized syntax/runtime error into a "cause + fix" hint, model-agnostic.
 
@@ -59,6 +59,11 @@ Updated at the completion of every phase, before shipping. Per-commit detail liv
 
 **Test count:** 93 · **Provider health:** ollama/fireworks/hf reachable.
 
-## Phase 3 — Planned (not started)
-- **`selfLearn`**: reflect on failures → lessons store → retrieve self-derived exemplars (feeds `fewShot` and the diagnose registry).
-- Ink/TUI renderer; more agents (files/docs specialist, reviewer/verifier); larger real-world codebase benchmarks; UI over the same core.
+## Phase 3 — In progress
+
+**Done**
+- **Task 1 — `selfLearn`** ✅: the coder learns fixes from its own successful diagnosed repairs (per-agent `data/lessons.sqlite`) and injects the top proven lessons proactively next run; `chorale lessons` to inspect; `CHORALE_NO_LEARN=1` for reproducible eval. See [`self-learning.md`](self-learning.md).
+- **Task 2 — Ink TUI** ✅: `chorale tui` — interactive streaming chat REPL; runtime gained `onToken`/`onEvent` renderer hooks. *(The React/Ink TSX is excluded from `pnpm typecheck` — the native TS7 compiler crashes on React's type tree on Windows — but is type-transpiled by `pnpm build`.)*
+
+**Planned**
+- More agents (files/docs specialist, reviewer/verifier); larger real-world codebase benchmarks; UI over the same core; `selfLearn` v2 (LLM reflection for novel failures).

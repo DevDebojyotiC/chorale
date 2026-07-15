@@ -2,7 +2,7 @@
 
 A snapshot of what exists and works right now. Refreshed at the completion of every phase, before shipping.
 
-> **Version:** 0.2.0 · **Phase:** 2 complete · **Tests:** 93 passing · **Last updated:** end of Phase 2.
+> **Version:** 0.2.0 (Phase 2 shipped) · **Phase:** 3 in progress · **Tests:** 99 passing · **Last updated:** Phase 3 (self-learning + Ink TUI landed).
 
 ## Status at a glance
 - **Runtime:** model-agnostic, production coder pipeline (salvage + verify + self-heal + diagnose-and-compensate), fallback chain with per-request timeout + retry/backoff.
@@ -33,8 +33,9 @@ Full evidence: [`model-evaluation-report.md`](model-evaluation-report.md), [`eng
 - Research falls back to brittle DuckDuckGo scraping without a Tavily key (degrades gracefully, but Tavily recommended).
 
 ## Quality gates
-- `pnpm typecheck` (tsc, strict) · `pnpm test` (vitest, 93) · CI on push (`.github/workflows/ci.yml`).
+- `pnpm typecheck` (tsc, strict; `src/tui` excluded — native TS7 crashes on React types) · `pnpm test` (vitest, 99) · CI on push (`.github/workflows/ci.yml`).
 - Graders self-validated against known-good/bad reference solutions before any benchmark run.
+- **Security:** no secrets/absolute paths/`.env`/`data/` in tracked files; SQL is parameterized; shell has a catastrophic-command denylist; logs are secret-redacted. Direct-dependency advisory scan is clean; a full `pnpm audit` needs pnpm ≥10 (the 9.15.4 endpoint is retired) — run it in CI. `selfHeal` runs model-written code — see [`SECURITY.md`](../SECURITY.md).
 
 ## Next (Phase 3)
-Self-learning (`selfLearn`: reflect → lessons store → self-derived exemplars), Ink/TUI renderer, more agents, larger real-world benchmarks, UI over the same core. See [`ROADMAP.md`](ROADMAP.md).
+Done: **self-learning** (`selfLearn`) + **Ink TUI** (`chorale tui`). Remaining: more agents (files/docs, reviewer/verifier), larger real-world benchmarks, `selfLearn` v2, UI over the same core. See [`ROADMAP.md`](ROADMAP.md).
