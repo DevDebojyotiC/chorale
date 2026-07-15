@@ -144,7 +144,7 @@ The data supports a two-model heavy-tier architecture, now wired into Chorale:
 ## 8. Limitations & Honest Caveats
 
 1. **N=1 per level.** Single runs. The 10/10 results are trustworthy given frontier determinism, but the 9-vs-10 line could move by one level on a re-run.
-2. **Puzzles, not projects.** Single-file algorithmic tasks. They do *not* measure multi-file refactoring, debugging, long-horizon planning, or heavy tool use — the arenas where the biggest frontier models most likely justify their cost. A model that looks "overpriced" here may pull ahead on real engineering. The right next step is a multi-file, real-project benchmark.
+2. **Puzzles, not projects.** The L1→L10 tasks are single-file algorithmic puzzles. They do *not* measure multi-file work, debugging, or heavy tool use. **→ This limitation has since been tested directly — see §11, the Real-Engineering Addendum — and the frontier models did *not* pull ahead of Gemma.**
 3. **Cost is normalized, not billed.** Figures are recomputed from measured tokens × list rates (cached input + output). Real bills vary with actual cache-hit rates. GLM-5.2 / Kimi-K2.6 dashboard totals were excluded as contaminated by prior-session use; Gemma runs on HF (≈$0 per the billing delta).
 4. **Two models report no token usage** (Qwen3.7-Plus, MiniMax-M3) via the Fireworks API; their cost is the billed ramp-only accrued figure.
 
@@ -162,6 +162,27 @@ pnpm exec tsx eval/coder-bakeoff.ts 10 \
 ```
 
 Harness: [`eval/coder-bakeoff.ts`](../eval/coder-bakeoff.ts) · Challenges & grader: [`eval/challenges.ts`](../eval/challenges.ts) · Condensed board: [`eval/RAMP-LEADERBOARD.md`](../eval/RAMP-LEADERBOARD.md)
+
+---
+
+## 11. Addendum — Real-Engineering Validation
+
+The ramp above measures single-file puzzles. To test the caveat head-on, the three finalists were run through a **multi-file, multi-step engineering** benchmark: build a library, debug a broken codebase, get async concurrency right, and ship a stateful CLI — with the coder using its full toolset (including `bash`, so it runs tests and iterates like a developer). Each project is graded with **partial credit** by executing the result; every grader was validated against reference good/bad solutions first.
+
+| Project | Skill | Checks |
+|---------|-------|:------:|
+| KV store (TTL + LRU, multi-file) | Build a library | 8 |
+| Fix a broken `lib/` until tests pass | Debug a codebase | 7 |
+| Bounded-concurrency promise pool | Async correctness | 5 |
+| Todo CLI with JSON persistence | Integration / I/O | 6 |
+
+| Model | KV | Debug | Async | CLI | **Overall** | Time | Cost |
+|-------|:--:|:-----:|:-----:|:---:|:-----------:|-----:|-----:|
+| **Gemma-4-31B** | 8/8 | 7/7 | 5/5 | 6/6 | **26/26 · 100%** | **32s** | **≈$0.00** |
+| gpt-oss-120B | 8/8 | 7/7 | 4/5 | 6/6 | 25/26 · 96% | 68s | $0.0071 |
+| MiniMax-M2.7 | 8/8 | 7/7 | 5/5 | 6/6 | **26/26 · 100%** | 73s | $0.0246 |
+
+**Findings.** The value king holds up: **Gemma-4-31B scored a perfect 26/26** on real multi-file engineering — a library build, a cross-file debug, tricky async semantics, and a stateful CLI — while being **~2× faster** than either frontier model and effectively free. **MiniMax-M2.7 also went 100%**, but at ~3.5× the cost and ~2.3× the time. **gpt-oss-120B slipped to 96%** — its promise pool failed to reject when a task threw (a real error-handling gap); everything else was perfect. On this evidence the "frontier models justify their cost on real work" hypothesis does **not** hold at this task scale — Gemma matches or beats them. Full detail: [`eval/PROJECTS-RESULTS.md`](../eval/PROJECTS-RESULTS.md). *(Caveat: still N=1, and these are small self-contained projects, not thousand-line codebases.)*
 
 ---
 

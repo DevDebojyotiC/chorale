@@ -293,6 +293,23 @@ pnpm exec tsx eval/coder-bakeoff.ts 10 \
 <p class="note">Harness: <code>eval/coder-bakeoff.ts</code> · Challenges &amp; grader: <code>eval/challenges.ts</code> · Condensed board: <code>eval/RAMP-LEADERBOARD.md</code></p>
 </div>
 
+<div class="section">
+<h2><span class="n">11</span> Addendum — Real-Engineering Validation</h2>
+<p>The ramp measures single-file puzzles. To test that caveat head-on, the three finalists were run through a <strong>multi-file, multi-step engineering</strong> benchmark — build a library, debug a broken codebase, get async concurrency right, ship a stateful CLI — with the coder using its full toolset (including <code>bash</code>, so it runs tests and iterates like a developer). Each project is graded with <strong>partial credit</strong> by executing the result; every grader was validated against reference good/bad solutions first.</p>
+<table>
+  <thead><tr><th>Model</th><th class="c">KV store</th><th class="c">Debug</th><th class="c">Async pool</th><th class="c">Todo CLI</th><th class="c">Overall</th><th class="num">Time</th><th class="num">Cost</th></tr></thead>
+  <tbody>
+    <tr class="row-best"><td><strong>Gemma-4-31B</strong></td><td class="c pass">8/8</td><td class="c pass">7/7</td><td class="c pass">5/5</td><td class="c pass">6/6</td><td class="c"><strong>26/26 · 100%</strong></td><td class="num"><strong>32s</strong></td><td class="num"><strong>≈$0.00</strong></td></tr>
+    <tr><td>gpt-oss-120B</td><td class="c pass">8/8</td><td class="c pass">7/7</td><td class="c fail">4/5</td><td class="c pass">6/6</td><td class="c">25/26 · 96%</td><td class="num">68s</td><td class="num">$0.0071</td></tr>
+    <tr><td>MiniMax-M2.7</td><td class="c pass">8/8</td><td class="c pass">7/7</td><td class="c pass">5/5</td><td class="c pass">6/6</td><td class="c"><strong>26/26 · 100%</strong></td><td class="num">73s</td><td class="num">$0.0246</td></tr>
+  </tbody>
+</table>
+<p>The four projects test distinct real skills — <strong>build</strong> (a KV-store library with TTL + LRU across two files), <strong>debug</strong> (localize and fix three planted bugs in a broken <code>lib/</code> until its suite passes), <strong>async correctness</strong> (a bounded-concurrency promise pool: order, cap, parallelism, error propagation, in-flight settling), and <strong>integration</strong> (a todo CLI persisting to JSON across processes).</p>
+<div class="verdict">
+  <p style="margin:0;"><strong>The value king holds up.</strong> Gemma-4-31B scored a perfect <strong>26/26</strong> on real multi-file engineering while being ~2× faster than either frontier model and effectively free. MiniMax-M2.7 also went 100%, but at ~3.5× the cost and ~2.3× the time. gpt-oss-120B slipped to 96% — its promise pool failed to reject when a task threw (a real error-handling gap); everything else was perfect. On this evidence the "frontier models justify their cost on real work" hypothesis does <strong>not</strong> hold at this task scale: Gemma matches or beats them. <em>(Caveat: N=1, and these are small self-contained projects, not thousand-line codebases.)</em></p>
+</div>
+</div>
+
 <div class="foot">Chorale is a personal, open-source, model-agnostic multi-agent system. This report reflects measurements taken through its production coder pipeline; numbers will shift as models, prices, and the pipeline evolve. Generated from <code>docs/model-evaluation-report.md</code>.</div>
 
 </body>

@@ -97,6 +97,8 @@ export interface RunOptions {
   profile?: string;
   /** Stream tokens to stdout as they arrive (default true). */
   stream?: boolean;
+  /** Max model steps per attempt (overrides config.defaults.maxSteps for multi-file work). */
+  maxSteps?: number;
 }
 
 /**
@@ -184,7 +186,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           messages,
           tools,
           ...(temperature !== undefined ? { temperature } : {}),
-          stopWhen: stepCountIs(config.defaults.maxSteps),
+          stopWhen: stepCountIs(opts.maxSteps ?? config.defaults.maxSteps),
           // Recover a doubly-JSON-encoded argument string before it's rejected.
           // (Empty/irrecoverable args are handled by the no-op retry below.)
           repairToolCall: async ({ toolCall, error }) => {
