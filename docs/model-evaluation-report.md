@@ -186,4 +186,4 @@ The ramp above measures single-file puzzles. To test the caveat head-on, the thr
 
 ---
 
-*Chorale is a personal, open-source, model-agnostic multi-agent system. This report reflects measurements taken through its production coder pipeline; numbers will shift as models, prices, and the pipeline evolve.*
+*Chorale is an open-source, model-agnostic multi-agent system. This report reflects measurements taken through its production coder pipeline; numbers will shift as models, prices, and the pipeline evolve.*

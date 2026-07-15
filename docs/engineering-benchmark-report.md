@@ -185,4 +185,4 @@ Gemma went from ~70% to a clean **100% across 20 runs**, most **one-shot** — s
 
 ---
 
-*Chorale is a personal, open-source, model-agnostic multi-agent system. Measurements were taken through its production coder pipeline; numbers will shift as models, prices, and the pipeline evolve.*
+*Chorale is an open-source, model-agnostic multi-agent system. Measurements were taken through its production coder pipeline; numbers will shift as models, prices, and the pipeline evolve.*
