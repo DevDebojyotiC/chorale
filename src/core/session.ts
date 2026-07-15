@@ -112,14 +112,17 @@ export class SessionStore {
   }
 
   latestSession(): SessionRow | undefined {
+    // rowid is a monotonic tiebreaker: when several sessions share the same
+    // millisecond `updated_at`, the most-recently-inserted one wins (SQLite's
+    // ordering is otherwise arbitrary on ties).
     return this.db
-      .prepare(`SELECT id, created_at, updated_at, agent, title FROM sessions ORDER BY updated_at DESC LIMIT 1`)
+      .prepare(`SELECT id, created_at, updated_at, agent, title FROM sessions ORDER BY updated_at DESC, rowid DESC LIMIT 1`)
       .get() as SessionRow | undefined;
   }
 
   listSessions(limit = 20): SessionRow[] {
     return this.db
-      .prepare(`SELECT id, created_at, updated_at, agent, title FROM sessions ORDER BY updated_at DESC LIMIT ?`)
+      .prepare(`SELECT id, created_at, updated_at, agent, title FROM sessions ORDER BY updated_at DESC, rowid DESC LIMIT ?`)
       .all(limit) as SessionRow[];
   }
 
@@ -153,7 +156,7 @@ export class SessionStore {
   /** Keep the `keep` most-recent sessions, delete the rest. Returns how many were removed. */
   pruneSessions(keep: number): number {
     const stale = this.db
-      .prepare(`SELECT id FROM sessions ORDER BY updated_at DESC LIMIT -1 OFFSET ?`)
+      .prepare(`SELECT id FROM sessions ORDER BY updated_at DESC, rowid DESC LIMIT -1 OFFSET ?`)
       .all(Math.max(0, keep)) as Array<{ id: string }>;
     for (const s of stale) this.deleteSession(s.id);
     return stale.length;
