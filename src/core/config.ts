@@ -10,6 +10,8 @@ const ProviderConfigSchema = z.object({
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
+  /** Extra fields merged into every request body — e.g. { think: false } to disable Ollama thinking. */
+  extraBody: z.record(z.string(), z.unknown()).optional(),
 });
 
 const ChoraleConfigSchema = z.object({

@@ -39,9 +39,14 @@ async function salvageTextTools(text: string, tools: ToolSet, known: Set<string>
     const tool = tools[call.name] as { execute?: (a: unknown, o: unknown) => Promise<unknown> } | undefined;
     if (!tool?.execute) continue;
     let args = call.args;
-    if (WRITE_TOOL_NAMES.has(call.name) && typeof args.path !== "string") {
-      const fn = inferFilename(prompt);
-      if (fn) args = { ...args, path: fn };
+    if (WRITE_TOOL_NAMES.has(call.name)) {
+      if (typeof args.path !== "string") {
+        const fn = inferFilename(prompt);
+        if (fn) args = { ...args, path: fn };
+      } else {
+        // Strip a leading slash so an "absolute" path stays inside the workspace.
+        args = { ...args, path: args.path.replace(/^[/\\]+/, "") };
+      }
     }
     try {
       const out = await tool.execute(args, {});

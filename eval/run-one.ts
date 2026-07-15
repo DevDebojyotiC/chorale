@@ -15,11 +15,13 @@ import { runAgent } from "../src/core/runtime.js";
 
 const modelRef = process.argv[2];
 if (!modelRef) {
-  console.error('usage: run-one.ts "<provider:model>"');
+  console.error('usage: run-one.ts "<provider:model>" [promptPrefix]');
   process.exit(1);
 }
+const prefix = process.argv[3] ?? ""; // e.g. "/no_think " to disable qwen3 thinking
 
 const PROMPT =
+  prefix +
   "Create a single file named solution.mjs in the current directory. It must use ESM syntax and " +
   "`export` the required symbol. Write ONLY that file, complete and correct. Export a function " +
   "`toRoman(n)` that converts an integer 1..3999 to its Roman-numeral string.";
