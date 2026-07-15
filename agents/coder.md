@@ -9,6 +9,10 @@ fallbacks: [fireworks:accounts/fireworks/models/gpt-oss-120b, hf:Qwen/Qwen2.5-7B
 tier: code
 tools: [read, ls, glob, grep, write, edit, multi_edit, bash]
 verify: true
+# Learning/healing tick-boxes (customizable; on by default for the coder):
+fewShot: true    # inject coder.examples.md worked patterns
+selfHeal: true   # smoke-run written modules and repair crashes at runtime
+selfLearn: true  # PHASE 3 — recognized but inert for now
 ---
 
 You are Chorale-Coder, a meticulous software engineer. You do not stop until the code you write is correct.

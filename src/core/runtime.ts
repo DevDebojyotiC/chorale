@@ -1,5 +1,7 @@
 import { streamText, stepCountIs, NoSuchToolError } from "ai";
 import type { LanguageModelUsage, ToolSet } from "ai";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ChoraleConfig } from "./config.js";
 import type { Registry, ModelRef } from "./model-registry.js";
 import { resolveModelPlan } from "./model-policy.js";
@@ -14,6 +16,7 @@ import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/l
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 import { verifyFiles, verifyFeedback } from "./verify.js";
+import { smokeTest, smokeFeedback } from "./smoke.js";
 import { parseTextToolCalls, extractCodeBlocks, inferFilename, ensureExports, type ParsedToolCall } from "./tool-call-salvage.js";
 
 /** File-mutating tools — used to detect no-op turns from weak models. */
@@ -150,8 +153,20 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     }
   }
 
+  // Few-shot: inject the agent's worked examples (<name>.examples.md) when enabled.
+  // Showing correct patterns tends to beat stating rules for weaker models.
+  let fewShotBlock = "";
+  if (agent.fewShot) {
+    try {
+      const exFile = resolve(config.agents.dir, `${agent.name}.examples.md`);
+      if (existsSync(exFile)) fewShotBlock = `\n\n${readFileSync(exFile, "utf8").trim()}`;
+    } catch {
+      /* no examples file — skip */
+    }
+  }
+
   const today = new Date().toISOString().slice(0, 10);
-  const system = `Current date: ${today}.\n\n${delegateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}`;
+  const system = `Current date: ${today}.\n\n${delegateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}${fewShotBlock}`;
   const messages: ChatMessage[] = [...(opts.history ?? []), { role: "user", content: prompt }];
 
   // Whether the latest attempt tried to write files — used to detect no-op turns
@@ -307,23 +322,32 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
 
       if (touched.size === 0) break; // nothing was written (e.g. a plain question)
 
-      const issues = await verifyFiles([...touched], cwd);
+      // (a) Syntax verification (fast). (b) Self-healing runtime smoke test — only
+      // when syntax is clean, since there's no point running code that won't parse.
+      const syntax = await verifyFiles([...touched], cwd);
+      let issues: { file: string; message: string }[] = syntax;
+      let feedback = syntax.length ? verifyFeedback(syntax) : "";
+      let kind = "verification";
+      if (syntax.length === 0 && agent.selfHeal) {
+        const smoke = await smokeTest([...touched], cwd);
+        if (smoke.length > 0) { issues = smoke; feedback = smokeFeedback(smoke); kind = "runtime (self-heal)"; }
+      }
       if (issues.length === 0) {
         process.stderr.write(
           round > 0
-            ? `\n[chorale] ✓ verification passed after ${round} fix round(s)\n`
-            : `\n[chorale] ✓ code verified clean\n`,
+            ? `\n[chorale] ✓ verified + ran clean after ${round} fix round(s)\n`
+            : `\n[chorale] ✓ code verified + ran clean\n`,
         );
         break;
       }
       if (isLast) {
-        process.stderr.write(`\n[chorale] ⚠ ${issues.length} issue(s) remain after ${maxRounds} verify rounds\n`);
+        process.stderr.write(`\n[chorale] ⚠ ${issues.length} ${kind} issue(s) remain after ${maxRounds} rounds\n`);
         break;
       }
-      process.stderr.write(`\n[chorale] ⚠ verification found ${issues.length} issue(s) — asking the model to fix…\n`);
+      process.stderr.write(`\n[chorale] ⚠ ${kind} found ${issues.length} issue(s) — asking the model to fix…\n`);
       for (const i of issues.slice(0, 6)) process.stderr.write(`    ${i.file}: ${i.message}\n`);
       messages.push({ role: "assistant", content: result.text || "(wrote files)" });
-      messages.push({ role: "user", content: verifyFeedback(issues) });
+      messages.push({ role: "user", content: feedback });
       result = await attempt(repairTemp(round));
     }
 

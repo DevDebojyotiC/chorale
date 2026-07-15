@@ -210,6 +210,26 @@ pnpm exec tsx eval/coder-projects.ts --only=framework,store,fullstack</code></pr
 <p><strong>A one-run difference over ten is within noise — not evidence of a real fix.</strong> Even with a rule that explicitly says "read <code>process.env.PORT</code>, never hardcode," and the task prompt already stating the same, Gemma still hardcoded the port in ~20% of runs — an instruction-<em>following</em> lapse that prompting nudges at best. The rule was kept (sound general guidance), but neither salvage nor meta-prompting makes Gemma reliable for unattended full-stack work. The dependable fix is the architecture already in place: <strong>escalate to gpt-oss-120B for complex/critical builds.</strong> This experiment confirms that decision rather than replacing it.</p>
 </div>
 
+<div class="section">
+<h2><span class="n">10</span> Few-Shot &amp; Self-Healing — Two More Levers, Measured</h2>
+<p>Two further mechanisms were built as <strong>customizable, default-on tick-boxes</strong> on the coder (<code>fewShot</code>, <code>selfHeal</code>; a third, <code>selfLearn</code>, is declared but parked for Phase 3).</p>
+<p><strong>Few-shot</strong> injects worked operational patterns (a server reading <code>process.env.PORT</code>, a CLI parsing argv, correct REST status codes) — <em>show</em> the pattern instead of <em>stating</em> the rule. Gemma full-stack, 10× each:</p>
+<table>
+  <thead><tr><th>Condition</th><th class="c">Full-pass</th><th class="c">Mean</th></tr></thead>
+  <tbody>
+    <tr><td>Baseline (no rule)</td><td class="c">7/10</td><td class="c">70%</td></tr>
+    <tr><td>+ operational rule</td><td class="c">8/10</td><td class="c">80%</td></tr>
+    <tr><td>+ few-shot examples</td><td class="c">8/10</td><td class="c">80%</td></tr>
+  </tbody>
+</table>
+<p><strong>No measurable gain over the rule</strong> — showing did not beat telling for this lapse.</p>
+<p><strong>Self-healing</strong> goes beyond syntax verification: it <strong>runs</strong> what the model wrote — smoke-boots a written server on an injected <code>PORT</code> and probes that port, and smoke-imports modules to catch "compiles but throws on load" — feeding runtime failures back into the repair loop. It is <strong>deterministically validated</strong>: it flags a hardcoded-port server and a crash-on-load module, and passes correct ones.</p>
+<p>The live runs delivered a <strong>diagnostic surprise</strong>: across 20 Gemma full-stack runs, self-heal logged <strong>zero catches</strong>. Inspecting the failures showed why — Gemma's full-stack failures are overwhelmingly <strong>template-literal syntax errors</strong> (<code>Syntax error "`"</code>) in the large inline HTML string, which crash the server before it can run. Those are caught by <em>syntax</em> verification (self-heal runs only on syntactically-clean code), and Gemma frequently cannot repair them within the round budget. The "server did not start" failures were mostly malformed HTML templates, <strong>not</strong> hardcoded ports.</p>
+<div class="verdict">
+  <p style="margin:0;"><strong>Honest conclusion.</strong> Both mechanisms are sound, general infrastructure — self-heal in particular is a <em>proven ground-truth safety net</em> for the "logically right, operationally wrong" class, and it benefits <strong>every</strong> model. But neither makes Gemma reliable for complex full-stack work: its dominant failure is a <strong>capability limit</strong> (emitting and self-repairing large embedded HTML) that context-engineering nudges only within noise. The dependable fix for complex builds remains <strong>escalation to gpt-oss-120B</strong>. Self-learning (reflect on failures, reuse lessons and self-derived exemplars) is the next lever — parked for Phase 3.</p>
+</div>
+</div>
+
 <div class="foot">Chorale is a personal, open-source, model-agnostic multi-agent system. Measurements were taken through its production coder pipeline; numbers will shift as models, prices, and the pipeline evolve. Generated from docs/engineering-benchmark-report.md.</div>
 
 </body>

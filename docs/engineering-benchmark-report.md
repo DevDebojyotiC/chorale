@@ -140,4 +140,26 @@ A general **operational-correctness rule** was added to `agents/coder.md` (honor
 
 ---
 
+## 12. Few-Shot &amp; Self-Healing — Two More Levers, Measured
+
+Following the prompting experiment, two further mechanisms were built as **customizable, default-on tick-boxes** on the coder (`fewShot`, `selfHeal`; a third, `selfLearn`, is declared but parked for Phase 3 — see [`docs/ROADMAP.md`](ROADMAP.md)).
+
+**Few-shot** (`fewShot`) injects worked operational patterns (`agents/coder.examples.md`: a server reading `process.env.PORT`, a CLI parsing argv, correct REST status codes) — *show* the pattern instead of *stating* the rule. Gemma full-stack, 10× each:
+
+| Condition | Full-pass | Mean |
+|-----------|:---------:|:----:|
+| Baseline (no rule) | 7/10 | 70% |
+| + operational rule | 8/10 | 80% |
+| + few-shot examples | 8/10 | 80% |
+
+**No measurable gain over the rule** — showing did not beat telling for this lapse.
+
+**Self-healing** (`selfHeal`) goes beyond syntax verification: it **runs** what the model wrote — smoke-boots a written server on an injected `PORT` and probes that port, and smoke-imports modules to catch "compiles but throws on load" — feeding any runtime failure back into the repair loop. It is **deterministically validated** ([`eval/smoke-selftest.ts`](../eval/smoke-selftest.ts)): it flags a hardcoded-port server and a crash-on-load module, and passes correct ones.
+
+But the live runs delivered a **diagnostic surprise**: across 20 Gemma full-stack runs, self-heal logged **zero catches**. Inspecting the failures showed *why* — Gemma's full-stack failures are overwhelmingly **template-literal syntax errors** (`Syntax error "\`"`) in the large inline HTML string, which crash the server before it can run. Those are caught by *syntax* verification (self-heal only runs on syntactically-clean code), and Gemma frequently cannot repair them within the round budget. The "server did not start" failures were mostly malformed HTML templates, **not** hardcoded ports. With all mechanisms on, one 10-run sample reached 10/10; isolating self-heal (few-shot off) gave 8/10.
+
+**Honest conclusion.** Both mechanisms are sound, general infrastructure — self-heal in particular is a *proven ground-truth safety net* for the "logically right, operationally wrong" class, and it benefits **every** model, not just Gemma. But neither makes Gemma reliable for complex full-stack work: its dominant failure is a **capability limit** (emitting and self-repairing large embedded HTML), which context-engineering nudges only within noise. The dependable fix for complex builds remains **escalation to gpt-oss-120B**. Self-learning (reflect on failures, reuse lessons and self-derived exemplars) is the next lever — parked for Phase 3.
+
+---
+
 *Chorale is a personal, open-source, model-agnostic multi-agent system. Measurements were taken through its production coder pipeline; numbers will shift as models, prices, and the pipeline evolve.*
