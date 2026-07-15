@@ -36,7 +36,7 @@
       default: "ollama:qwen2.5-coder:3b",
       tiers: {
         code: "fireworks:accounts/fireworks/models/glm-5p2",
-        research: "hf:Qwen/Qwen2.5-7B-Instruct",
+        research: "hf:google/gemma-4-31B-it",
         orchestrator: "fireworks:accounts/fireworks/models/kimi-k2p6",
       },
       fallbacks: ["ollama:qwen2.5-coder:3b"],

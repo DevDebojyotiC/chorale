@@ -2,8 +2,8 @@
 name: orchestrator
 description: Routes and decomposes requests, delegating to specialist agents and synthesizing their results.
 # The orchestrator needs reliable reasoning + tool-calling, so it defaults to serverless.
-model: hf:Qwen/Qwen2.5-7B-Instruct
-fallbacks: [ollama:qwen3:4b]
+model: hf:google/gemma-4-31B-it
+fallbacks: [hf:Qwen/Qwen2.5-7B-Instruct, ollama:qwen3:4b]
 delegable: false
 tier: orchestrator
 tools: [delegate]

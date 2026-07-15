@@ -3,8 +3,8 @@ name: research
 description: Multi-source web research that finds sources and answers with citations.
 # Research needs capability + speed, so it defaults to a small serverless model.
 # Switch to "${base}" to force the free local model (slower on low-VRAM hardware).
-model: hf:Qwen/Qwen2.5-7B-Instruct
-fallbacks: [ollama:qwen3:4b]
+model: hf:google/gemma-4-31B-it
+fallbacks: [hf:Qwen/Qwen2.5-7B-Instruct, ollama:qwen3:4b]
 tier: research
 tools: [web_research, web_fetch]
 ---

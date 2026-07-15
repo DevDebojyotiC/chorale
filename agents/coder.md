@@ -1,10 +1,10 @@
 ---
 name: coder
 description: Writes, edits, debugs, and runs code in the current project directory.
-# Qwen2.5-7B is confirmed available on the current HF providers. Point this at a
-# code-specialized or larger model if your HF/Fireworks plan serves one.
-model: hf:Qwen/Qwen2.5-7B-Instruct
-fallbacks: [ollama:qwen3:4b]
+# gemma-4-31B beat Qwen2.5-7B 6/6 vs 3/6 on the coder ramp (L1–L6) at ≈$0 and
+# one-shots without repair rounds. Qwen-7B stays as the HF fallback.
+model: hf:google/gemma-4-31B-it
+fallbacks: [hf:Qwen/Qwen2.5-7B-Instruct, ollama:qwen3:4b]
 tier: code
 tools: [read, ls, glob, grep, write, edit, multi_edit, bash]
 verify: true

@@ -114,13 +114,15 @@ export interface TieredRecommendation {
 export function recommendTieredProfile(r: Resources): TieredRecommendation {
   const local = r.ollamaModels;
   const hasLocal = r.ollamaUp && local.length > 0;
-  const serverHeavy = r.keys.fireworks
-    ? "fireworks:accounts/fireworks/models/glm-5p2"
-    : r.keys.hf
-      ? "hf:Qwen/Qwen2.5-7B-Instruct"
-      : r.keys.anthropic
-        ? "anthropic:claude-sonnet-5"
-        : undefined;
+  // Preference order for heavy tiers, best-value first. hf:gemma-4-31B is the
+  // default: it beat Qwen2.5-7B 6/6 vs 3/6 on the coder ramp at ≈$0 and one-shots
+  // (no repair thrash). glm-5p2 / Claude sit behind it as heavier escalation.
+  const serverChain = [
+    r.keys.hf ? "hf:google/gemma-4-31B-it" : undefined,
+    r.keys.fireworks ? "fireworks:accounts/fireworks/models/glm-5p2" : undefined,
+    r.keys.anthropic ? "anthropic:claude-sonnet-5" : undefined,
+  ].filter((x): x is string => Boolean(x));
+  const serverHeavy = serverChain[0];
   const hybrid = hasLocal && Boolean(serverHeavy);
   const ref = (m: string | undefined) => (m ? `ollama:${m}` : undefined);
 
@@ -143,7 +145,8 @@ export function recommendTieredProfile(r: Resources): TieredRecommendation {
   put("utility", util ?? general);
 
   const def = coder ?? general ?? serverHeavy ?? "ollama:qwen2.5-coder:3b";
-  const fallbacks = [...new Set([coder ?? general].filter((x): x is string => Boolean(x)))];
+  // Heavy chain escalates through the remaining server models, then falls back to local.
+  const fallbacks = [...new Set([...serverChain.slice(1), coder ?? general].filter((x): x is string => Boolean(x)))];
 
   const pulls: string[] = [];
   if (hasLocal) {
