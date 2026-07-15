@@ -33,9 +33,10 @@ base: { model: "ollama:qwen2.5-coder:3b" }   // or "anthropic:claude-opus-4-8", 
 
 ```bash
 chorale "prompt"                       # run a turn (prompt may also be piped: echo "fix X" | chorale)
+chorale tui                            # interactive streaming chat REPL (Ink terminal UI)
 chorale --agent coder "build a todo CLI that persists to JSON"
 chorale -m hf:google/gemma-4-31B-it --json "..."   # force a model; structured output
-chorale agents | profiles [name] | sessions [rm <id> | prune] | cost [session] | doctor
+chorale agents | profiles [name] | sessions [rm <id> | prune] | cost [session] | lessons [agent] | doctor
 ```
 
 `--help` for the full reference. Flags: `-a/--agent`, `-m/--model`, `-p/--profile`, `-r/--resume`,

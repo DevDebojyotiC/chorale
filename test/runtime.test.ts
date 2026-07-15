@@ -100,6 +100,17 @@ describe("runAgent — fallback chain (mock model)", () => {
     expect(res.text).toContain("hello world");
   });
 
+  it("routes stream text to onToken (for a TUI/renderer) instead of stdout", async () => {
+    const registry = { languageModel: () => textModel("streamed via callback") } as unknown as Registry;
+    let captured = "";
+    const res = await runAgent({
+      config: baseConfig(), registry, agent: agent({ model: "mock:good", fallbacks: [] }), prompt: "hi",
+      onToken: (t) => { captured += t; },
+    });
+    expect(captured).toContain("streamed via callback");
+    expect(res.text).toContain("streamed via callback");
+  });
+
   it("throws a clear error when every model in the chain fails", async () => {
     const registry = { languageModel: () => errorModel("provider down") } as unknown as Registry;
     await expect(

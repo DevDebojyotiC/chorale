@@ -29,7 +29,7 @@ Full evidence: [`model-evaluation-report.md`](model-evaluation-report.md), [`eng
 ## Known limitations / not done
 - **`selfLearn`** v1 is **live** (Phase 3, Task 1): learns fixes from successful repairs, injects them proactively; `chorale lessons` to inspect. v2 (LLM reflection for novel failures) is future work.
 - Benchmarks are self-contained projects (up to a full-stack app), **not thousand-line codebases**; N is small on the hardest tiers.
-- No UI/TUI yet (CLI-first by design); no files/docs or reviewer agent yet.
+- **TUI shipped** (`chorale tui` — Ink streaming chat REPL); the React/Ink TSX is excluded from `pnpm typecheck` (native TS7 crashes on React types) but is type-transpiled by `pnpm build`. No files/docs or reviewer agent yet.
 - Research falls back to brittle DuckDuckGo scraping without a Tavily key (degrades gracefully, but Tavily recommended).
 
 ## Quality gates

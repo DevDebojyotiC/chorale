@@ -44,6 +44,7 @@ Usage:
   chorale [options] "your prompt"          run a turn (prompt may also be piped via stdin)
 
 Commands:
+  tui [--agent <name>]          interactive terminal UI (streaming chat REPL)
   init [--auto]                 detect models + keys, generate a tailored profile
   agents                        list available agents (model · tier · tools)
   profiles [name]               show model-routing profiles and how they resolve
@@ -305,6 +306,14 @@ async function main(): Promise<void> {
 
   if (argv[0] === "doctor") {
     await runDoctor(loadConfig());
+    return;
+  }
+
+  if (argv[0] === "tui") {
+    const ai = argv.findIndex((a) => a === "--agent" || a === "-a");
+    // Loose type: the TSX module is excluded from the (native TS7) typecheck; it's validated by the esbuild build.
+    const mod = (await import("./tui/app.js")) as { startTui: (o: { agent?: string }) => void };
+    mod.startTui({ agent: ai >= 0 ? argv[ai + 1] : undefined });
     return;
   }
 

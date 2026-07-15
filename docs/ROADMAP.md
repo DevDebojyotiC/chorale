@@ -30,7 +30,7 @@ strategy the model executes reliably, and (b) making repair feedback specific to
 - **Tier 3:** leveled logging + per-session run transcript (`--verbose`/`--quiet`, `data/logs/<session>.log`), secret redaction in all logs, delegation cycle guard, per-session token/cost persistence + `chorale cost`.
 
 ## Other phase-2 follow-ups (not yet done)
-- Ink/TUI renderer for the CLI.
+- ~~Ink/TUI renderer for the CLI~~ ✅ **shipped** (`chorale tui` — streaming chat REPL; runtime gained `onToken`/`onEvent` hooks). *Note:* the React/Ink TSX (`src/tui/`) is excluded from `pnpm typecheck` — the native TS7 compiler crashes on React's type tree on Windows; it is type-transpiled by `pnpm build` (esbuild).
 - More agents (files/docs specialist, dedicated verifier).
 - Ship phase-2 → PR to `main`.
 - Larger, messier real-world codebase benchmarks (beyond the self-contained projects).
