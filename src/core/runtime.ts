@@ -14,9 +14,46 @@ import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/l
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 import { verifyFiles, verifyFeedback } from "./verify.js";
+import { parseTextToolCalls, extractCodeBlocks, inferFilename, type ParsedToolCall } from "./tool-call-salvage.js";
 
 /** File-mutating tools — used to detect no-op turns from weak models. */
 const WRITE_TOOL_NAMES = new Set(["write", "edit", "multi_edit"]);
+
+/**
+ * Execute tool calls that a model wrote as plain text (JSON, tags, or a lone code
+ * block). Returns short summaries for feedback. Missing write paths are inferred
+ * from the prompt (small models often drop the path).
+ */
+async function salvageTextTools(text: string, tools: ToolSet, known: Set<string>, prompt: string): Promise<string[]> {
+  const calls: ParsedToolCall[] = parseTextToolCalls(text, known);
+  if (calls.length === 0 && "write" in tools) {
+    const blocks = extractCodeBlocks(text);
+    const fn = inferFilename(prompt);
+    if (blocks.length === 1 && fn && (blocks[0]?.code.length ?? 0) > 0) {
+      calls.push({ name: "write", args: { path: fn, content: blocks[0]!.code } });
+    }
+  }
+
+  const summaries: string[] = [];
+  for (const call of calls) {
+    const tool = tools[call.name] as { execute?: (a: unknown, o: unknown) => Promise<unknown> } | undefined;
+    if (!tool?.execute) continue;
+    let args = call.args;
+    if (WRITE_TOOL_NAMES.has(call.name) && typeof args.path !== "string") {
+      const fn = inferFilename(prompt);
+      if (fn) args = { ...args, path: fn };
+    }
+    try {
+      const out = await tool.execute(args, {});
+      const p = typeof args.path === "string" ? args.path : "";
+      process.stderr.write(`\n[tool·salvaged] ${call.name} ${p}\n`);
+      summaries.push(`${call.name}(${p}) → ${JSON.stringify(out).slice(0, 120)}`);
+    } catch (e) {
+      summaries.push(`${call.name} → error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return summaries;
+}
 
 export interface RunResult {
   /** The model ref that actually produced the answer. */
@@ -105,10 +142,14 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   // Whether the latest attempt tried to write files — used to detect no-op turns
   // where a weak model emits write calls with empty/invalid arguments.
   let sawWriteAttempt = false;
+  // Whether the latest attempt made ANY native tool call — if not, we try to
+  // salvage tool calls the model wrote as plain text.
+  let sawNativeToolCall = false;
 
   // One pass through the model fallback chain, streaming a single answer.
   const attempt = async (): Promise<RunResult> => {
     sawWriteAttempt = false;
+    sawNativeToolCall = false;
     let lastError: unknown;
     for (const ref of chain) {
       try {
@@ -138,6 +179,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
             return null;
           },
           onStepFinish: ({ toolCalls }) => {
+            if (toolCalls.length > 0) sawNativeToolCall = true;
             for (const call of toolCalls) {
               if (WRITE_TOOL_NAMES.has(call.toolName)) sawWriteAttempt = true;
               const input = JSON.stringify(call.input);
@@ -181,55 +223,75 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   try {
     let result = await attempt();
 
-    // Verify-repair loop: for agents with `verify: true`, syntax-check every file
-    // written this run and feed failures back to the model to self-correct, until
-    // the code is valid or we exhaust the round budget. This is what lets even a
-    // small model reliably ship working code.
-    if (agent.verify) {
-      const maxRounds = config.defaults.maxVerifyRounds;
-      for (let round = 0; round < maxRounds; round++) {
-        const isLast = round === maxRounds - 1;
+    // Completion loop: (1) salvage tool calls a non-native model wrote as text and
+    // execute them; (2) for coder-style agents, verify written files and repair,
+    // retrying no-ops. This is what makes even local, non-tool-calling models work.
+    const toolNames = new Set(Object.keys(tools));
+    const maxRounds = config.defaults.maxVerifyRounds;
+    for (let round = 0; round < maxRounds; round++) {
+      const isLast = round === maxRounds - 1;
 
-        // No-op turn: the model attempted writes but nothing landed (empty/invalid args).
-        if (sawWriteAttempt && touched.size === 0) {
-          if (isLast) {
-            process.stderr.write(`\n[chorale] ⚠ writes were attempted but none succeeded after ${maxRounds} tries\n`);
-            break;
-          }
-          process.stderr.write(`\n[chorale] ⚠ no files were written (tool arguments were empty/invalid) — retrying with an explicit nudge…\n`);
-          messages.push({ role: "assistant", content: result.text || "(no files written)" });
+      // (1) Salvage: the model wrote tool calls as text instead of calling natively.
+      if (!sawNativeToolCall && toolNames.size > 0) {
+        const salvaged = await salvageTextTools(result.text, tools, toolNames, prompt);
+        if (salvaged.length > 0) {
+          process.stderr.write(`\n[chorale] salvaged ${salvaged.length} tool call(s) written as text\n`);
+          if (isLast) break;
+          messages.push({ role: "assistant", content: result.text });
           messages.push({
             role: "user",
             content:
-              "Your previous write/edit tool call(s) did not take effect — the arguments were missing. " +
-              "Call the write tool AGAIN now with explicit `path` and `content` arguments to actually create the file. " +
-              "Do not describe the file; write it.",
+              "I executed the tool call(s) you wrote as text:\n" +
+              salvaged.map((s) => `- ${s}`).join("\n") +
+              "\nIf the task is complete, briefly confirm; otherwise continue.",
           });
           result = await attempt();
           continue;
         }
-
-        if (touched.size === 0) break; // genuinely nothing to write (e.g. a question)
-
-        const issues = await verifyFiles([...touched], cwd);
-        if (issues.length === 0) {
-          process.stderr.write(
-            round > 0
-              ? `\n[chorale] ✓ verification passed after ${round} fix round(s)\n`
-              : `\n[chorale] ✓ code verified clean\n`,
-          );
-          break;
-        }
-        if (isLast) {
-          process.stderr.write(`\n[chorale] ⚠ ${issues.length} issue(s) remain after ${maxRounds} verify rounds\n`);
-          break;
-        }
-        process.stderr.write(`\n[chorale] ⚠ verification found ${issues.length} issue(s) — asking the model to fix…\n`);
-        for (const i of issues.slice(0, 6)) process.stderr.write(`    ${i.file}: ${i.message}\n`);
-        messages.push({ role: "assistant", content: result.text || "(wrote files)" });
-        messages.push({ role: "user", content: verifyFeedback(issues) });
-        result = await attempt();
       }
+
+      // (2) Verify-repair — only for agents that opt in (e.g. coder).
+      if (!agent.verify) break;
+
+      // No-op turn: writes attempted but nothing landed (empty/invalid args).
+      if (sawWriteAttempt && touched.size === 0) {
+        if (isLast) {
+          process.stderr.write(`\n[chorale] ⚠ writes were attempted but none succeeded after ${maxRounds} tries\n`);
+          break;
+        }
+        process.stderr.write(`\n[chorale] ⚠ no files were written (tool arguments were empty/invalid) — retrying…\n`);
+        messages.push({ role: "assistant", content: result.text || "(no files written)" });
+        messages.push({
+          role: "user",
+          content:
+            "Your previous write/edit tool call(s) did not take effect — the arguments were missing. " +
+            "Call the write tool AGAIN now with explicit `path` and `content` arguments to actually create the file. " +
+            "Do not describe the file; write it.",
+        });
+        result = await attempt();
+        continue;
+      }
+
+      if (touched.size === 0) break; // nothing was written (e.g. a plain question)
+
+      const issues = await verifyFiles([...touched], cwd);
+      if (issues.length === 0) {
+        process.stderr.write(
+          round > 0
+            ? `\n[chorale] ✓ verification passed after ${round} fix round(s)\n`
+            : `\n[chorale] ✓ code verified clean\n`,
+        );
+        break;
+      }
+      if (isLast) {
+        process.stderr.write(`\n[chorale] ⚠ ${issues.length} issue(s) remain after ${maxRounds} verify rounds\n`);
+        break;
+      }
+      process.stderr.write(`\n[chorale] ⚠ verification found ${issues.length} issue(s) — asking the model to fix…\n`);
+      for (const i of issues.slice(0, 6)) process.stderr.write(`    ${i.file}: ${i.message}\n`);
+      messages.push({ role: "assistant", content: result.text || "(wrote files)" });
+      messages.push({ role: "user", content: verifyFeedback(issues) });
+      result = await attempt();
     }
 
     return result;
