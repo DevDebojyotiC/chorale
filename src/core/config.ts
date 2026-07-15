@@ -10,6 +10,21 @@ const ProviderConfigSchema = z.object({
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
+  /** Extra fields merged into every request body — e.g. { think: false } to disable Ollama thinking. */
+  extraBody: z.record(z.string(), z.unknown()).optional(),
+});
+
+/** A model profile: a named agent→model routing policy. See docs/model-profiles.md. */
+const ProfileSchema = z.object({
+  description: z.string().optional(),
+  /** Catch-all model for any agent not otherwise mapped. */
+  default: z.string().optional(),
+  /** Map agent tier (role) → model. */
+  tiers: z.record(z.string(), z.string()).optional(),
+  /** Per-agent model override (highest within the profile). */
+  agents: z.record(z.string(), z.string()).optional(),
+  /** Profile-wide fallback chain, appended after agent + base fallbacks. */
+  fallbacks: z.array(z.string()).optional(),
 });
 
 const ChoraleConfigSchema = z.object({
@@ -17,6 +32,10 @@ const ChoraleConfigSchema = z.object({
     model: z.string(),
     fallbacks: z.array(z.string()).default([]),
   }),
+  /** Name of the active profile in `profiles` (unset = per-agent.md routing). */
+  activeProfile: z.string().optional(),
+  /** Named model-routing profiles. */
+  profiles: z.record(z.string(), ProfileSchema).optional(),
   providers: z.record(z.string(), ProviderConfigSchema),
   agents: z.object({
     dir: z.string().default("agents"),
@@ -43,15 +62,24 @@ const ChoraleConfigSchema = z.object({
         .default({}),
     })
     .default({ servers: {} }),
+  permissions: z
+    .object({ mode: z.enum(["read-only", "auto-edit", "full-auto"]).default("auto-edit") })
+    .default({ mode: "auto-edit" }),
   defaults: z
     .object({
       maxSteps: z.number().int().positive().default(8),
       maxDelegationDepth: z.number().int().min(1).max(5).default(2),
+      maxVerifyRounds: z.number().int().min(1).max(8).default(5),
+      /** Per model-request timeout (ms). A hung provider aborts and falls back instead of hanging forever. */
+      requestTimeoutMs: z.number().int().positive().default(180_000),
+      /** Retries of the SAME model on fast transient errors (429 / 5xx / connection resets) before falling back. */
+      maxRetries: z.number().int().min(0).max(5).default(2),
     })
-    .default({ maxSteps: 8, maxDelegationDepth: 2 }),
+    .default({ maxSteps: 8, maxDelegationDepth: 2, maxVerifyRounds: 5, requestTimeoutMs: 180_000, maxRetries: 2 }),
 });
 
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
+export type Profile = z.infer<typeof ProfileSchema>;
 export type ChoraleConfig = z.infer<typeof ChoraleConfigSchema>;
 
 const ENV_RE = /\$\{([A-Z0-9_]+)\}/g;

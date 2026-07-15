@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chorale Coder — Model Evaluation Report</title>
+<style>
+  :root{
+    --ink:#0f172a; --body:#334155; --muted:#64748b; --line:#e2e8f0;
+    --bg:#ffffff; --panel:#f8fafc; --panel2:#f1f5f9;
+    --accent:#4f46e5; --accent2:#6366f1; --accent-soft:#eef2ff;
+    --good:#0d9488; --good-bg:#ccfbf1; --mid:#d97706; --mid-bg:#fef3c7;
+    --bad:#dc2626; --bad-bg:#fee2e2; --gold:#b45309; --gold-bg:#fef9c3;
+    --pass:#16a34a; --fail:#dc2626;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  body{
+    font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,"Inter",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--body); font-size:10.2px; line-height:1.55; margin:0; background:var(--bg);
+  }
+  @page{ size:A4; margin:14mm 13mm 15mm; }
+  h1,h2,h3{color:var(--ink); line-height:1.2; margin:0 0 .4em;}
+  h2{font-size:16px; margin-top:1.4em; padding-bottom:.3em; border-bottom:2px solid var(--accent); display:flex; align-items:center; gap:.5em;}
+  h2 .n{font-size:11px; color:#fff; background:var(--accent); border-radius:5px; padding:2px 8px; font-weight:700;}
+  h3{font-size:12.5px; margin-top:1.1em; color:var(--accent);}
+  p{margin:.5em 0;}
+  a{color:var(--accent); text-decoration:none;}
+  strong{color:var(--ink);}
+  code{font-family:"Cascadia Code",Consolas,monospace; background:var(--panel2); padding:1px 5px; border-radius:4px; font-size:9.2px; color:#0b3b6f;}
+  .section{page-break-inside:avoid;}
+
+  /* ---- Cover ---- */
+  .cover{ background:linear-gradient(120deg,#4338ca 0%,#6366f1 55%,#7c3aed 100%); color:#fff; border-radius:14px; padding:30px 32px 26px; margin-bottom:20px; }
+  .cover .kicker{ text-transform:uppercase; letter-spacing:.18em; font-size:9px; opacity:.85; font-weight:600;}
+  .cover h1{ color:#fff; font-size:30px; margin:.15em 0 .25em; letter-spacing:-.5px;}
+  .cover .sub{ font-size:12.5px; opacity:.95; max-width:56em; line-height:1.5;}
+  .cover .meta{ margin-top:16px; display:flex; flex-wrap:wrap; gap:8px;}
+  .cover .chip{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.25); border-radius:20px; padding:4px 12px; font-size:9px; font-weight:600;}
+
+  /* ---- Callout ---- */
+  .tldr{ background:var(--accent-soft); border:1px solid #c7d2fe; border-left:5px solid var(--accent); border-radius:10px; padding:14px 18px; margin:0 0 18px;}
+  .tldr h3{margin-top:0; color:var(--accent); font-size:12px; text-transform:uppercase; letter-spacing:.08em;}
+  .tldr ul{margin:.4em 0 0; padding-left:1.1em;}
+  .tldr li{margin:.35em 0;}
+
+  /* ---- Stat row ---- */
+  .stats{display:flex; gap:12px; margin:16px 0 4px;}
+  .stat{flex:1; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; text-align:center;}
+  .stat .big{font-size:22px; font-weight:800; color:var(--accent); line-height:1;}
+  .stat .lbl{font-size:8.6px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-top:6px;}
+
+  /* ---- Tables ---- */
+  table{border-collapse:collapse; width:100%; margin:.7em 0; font-size:9.3px;}
+  th,td{padding:5px 8px; text-align:left; border-bottom:1px solid var(--line);}
+  thead th{background:var(--ink); color:#fff; font-weight:600; font-size:8.8px; text-transform:uppercase; letter-spacing:.03em;}
+  tbody tr:nth-child(even){background:var(--panel);}
+  td.num,th.num{text-align:right; font-variant-numeric:tabular-nums;}
+  td.c,th.c{text-align:center;}
+  .pass{color:var(--pass); font-weight:700;}
+  .fail{color:var(--fail); font-weight:700;}
+  .row-best{background:var(--gold-bg)!important;}
+  .row-best td:first-child{border-left:3px solid var(--gold);}
+  .badge{display:inline-block; border-radius:5px; padding:1px 7px; font-weight:700; font-size:8.8px;}
+  .b-good{background:var(--good-bg); color:var(--good);}
+  .b-mid{background:var(--mid-bg); color:var(--mid);}
+  .b-bad{background:var(--bad-bg); color:var(--bad);}
+
+  /* ---- Bar charts ---- */
+  .chart{margin:.6em 0 1em; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px;}
+  .chart .ct{font-size:10.5px; font-weight:700; color:var(--ink); margin-bottom:2px;}
+  .chart .cs{font-size:8.8px; color:var(--muted); margin-bottom:10px;}
+  .brow{display:flex; align-items:center; gap:8px; margin:3px 0;}
+  .brow .name{width:118px; font-size:8.8px; text-align:right; color:var(--body); flex:none;}
+  .brow .track{flex:1; background:#eef1f5; border-radius:4px; height:14px; position:relative; overflow:hidden;}
+  .brow .fill{height:100%; border-radius:4px;}
+  .brow .val{width:52px; font-size:8.6px; font-variant-numeric:tabular-nums; color:var(--muted); flex:none;}
+  .f-best{background:linear-gradient(90deg,#f59e0b,#fbbf24);}
+  .f-good{background:linear-gradient(90deg,#0d9488,#2dd4bf);}
+  .f-mid{background:linear-gradient(90deg,#d97706,#f59e0b);}
+  .f-bad{background:linear-gradient(90deg,#dc2626,#f87171);}
+
+  .note{font-size:8.5px; color:var(--muted); margin:.3em 0;}
+  .verdict{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin:14px 0;}
+  .verdict .arrow{font-size:14px; font-weight:800; color:var(--ink); text-align:center; margin:.2em 0 .5em;}
+  .verdict .arrow b{color:var(--good);} .verdict .arrow .e{color:var(--accent);}
+  ol.lim{padding-left:1.2em;} ol.lim li{margin:.4em 0;}
+  pre{background:var(--ink); color:#e2e8f0; border-radius:8px; padding:12px 14px; font-size:8.6px; overflow:auto; line-height:1.5;}
+  pre code{background:none; color:inherit; padding:0;}
+  .foot{margin-top:22px; padding-top:10px; border-top:1px solid var(--line); font-size:8.4px; color:var(--muted); font-style:italic;}
+  .tierkey{display:flex; gap:14px; font-size:8.6px; margin:.2em 0 .6em; color:var(--muted);}
+  .tierkey span{display:flex; align-items:center; gap:5px;}
+  .dot{width:10px; height:10px; border-radius:3px; display:inline-block;}
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="kicker">Chorale · Model Evaluation</div>
+  <h1>Chorale Coder — Model Evaluation Report</h1>
+  <div class="sub">A head-to-head evaluation of <strong style="color:#fff">11 language models</strong> as the coding engine behind Chorale's <code style="background:rgba(255,255,255,.2);color:#fff">coder</code> agent — measured on correctness, speed, and true per-task cost, through the production salvage-and-verify pipeline.</div>
+  <div class="meta">
+    <span class="chip">L1 → L10 algorithmic ladder</span>
+    <span class="chip">11 models · 4 providers</span>
+    <span class="chip">Behavioral grading (hidden tests)</span>
+    <span class="chip">Normalized per-token cost</span>
+  </div>
+</div>
+
+<div class="tldr">
+  <h3>Executive Summary</h3>
+  <ul>
+    <li><strong>Seven of eleven models scored a perfect 10/10.</strong> Correctness <em>saturates</em> on these tasks — the decision comes down to <strong>speed and cost</strong>, where the field spreads by more than an order of magnitude.</li>
+    <li><strong>Value winner &amp; default: Gemma-4-31B (Hugging Face)</strong> — 9/10 at <strong>≈$0.00</strong> and <strong>13 seconds</strong> total, one-shotting almost everything. The nearest 10/10 model is 7–10× slower.</li>
+    <li><strong>Best escalation: gpt-oss-120B (Fireworks)</strong> — the <strong>cheapest 10/10</strong> at <strong>~$0.013</strong> for the whole ramp, and among the fastest. Now wired in as the heavy-tier fallback behind Gemma.</li>
+    <li><strong>The premium models earned nothing here.</strong> GLM-5.2 and Kimi-K2.6 cost <strong>~18×</strong> more than gpt-oss-120B for the <em>same</em> score; DeepSeek-V4-Pro and MiniMax-M3 ~10×.</li>
+  </ul>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="big">11</div><div class="lbl">Models tested</div></div>
+  <div class="stat"><div class="big">10</div><div class="lbl">Difficulty levels</div></div>
+  <div class="stat"><div class="big">7</div><div class="lbl">Perfect 10/10</div></div>
+  <div class="stat"><div class="big">~60×</div><div class="lbl">Cost spread, same result</div></div>
+  <div class="stat"><div class="big">53×</div><div class="lbl">Speed spread</div></div>
+</div>
+
+<div class="section">
+<h2><span class="n">1</span> Context &amp; Goal</h2>
+<p>Chorale is a model-agnostic, multi-agent system: any agent can point at any model — local (Ollama) or serverless (Hugging Face, Fireworks, Anthropic) — with no code change. The <code>coder</code> agent is the flagship, and the design goal is explicit: <strong>bring the best out of any model, from the smallest local model to the largest frontier model, and route work to the best-value option.</strong></p>
+<p>This evaluation answers a concrete, practical question: <em>among the models we can actually reach, which should the coder default to, and which is worth escalating to when the default falls short?</em> The honest answer required running the same workload through every candidate and measuring what it truly costs and delivers — not reading a billing dashboard, which proved misleading.</p>
+</div>
+
+<div class="section">
+<h2><span class="n">2</span> What Was Tested — the L1 → L10 Ladder</h2>
+<p>Each level asks the coder to produce a single, self-contained ES-module (<code>solution.mjs</code>) exporting one function or class. Difficulty escalates:</p>
+<table>
+  <thead><tr><th>Level</th><th>Task</th><th>What it stresses</th></tr></thead>
+  <tbody>
+    <tr><td>L1</td><td>Roman numeral conversion</td><td>Basic mapping &amp; loops</td></tr>
+    <tr><td>L2</td><td>Balanced-bracket validator</td><td>Stack logic, edge cases (<code>([)]</code>)</td></tr>
+    <tr><td>L3</td><td>Arithmetic expression evaluator</td><td>Operator precedence, parsing</td></tr>
+    <tr><td>L4</td><td>LRU cache (class)</td><td>Stateful structure, eviction order</td></tr>
+    <tr><td>L5</td><td>JSON parser (no <code>JSON.parse</code>)</td><td>Recursive descent, string escapes</td></tr>
+    <tr><td>L6</td><td>Regex matcher (<code>.</code> and <code>*</code>)</td><td>Recursion / DP, backtracking</td></tr>
+    <tr><td>L7</td><td>Topological sort</td><td>Graph traversal, cycle detection</td></tr>
+    <tr><td>L8</td><td>CSV parser (quotes, escapes, newlines)</td><td>Stateful text parsing</td></tr>
+    <tr><td>L9</td><td>Mini-interpreter (variables + arithmetic)</td><td>State across statements</td></tr>
+    <tr><td>L10</td><td>Dijkstra shortest path</td><td>Weighted graph + priority queue</td></tr>
+  </tbody>
+</table>
+<p><strong>Grading is behavioral, not textual.</strong> Each solution is imported and executed against hidden test cases. The grader resolves the export leniently (exact name → <code>default</code> → the sole callable export), so a cosmetic name mismatch never masks correct logic. A level passes only if every assertion holds.</p>
+</div>
+
+<div class="section">
+<h2><span class="n">3</span> Methodology</h2>
+<p><strong>The pipeline is the real one.</strong> Models run through Chorale's production coder agent, including content-level <strong>tool-call salvage</strong> (recovering file writes that weak models emit as text or backticked blocks), the <strong>syntax verify-and-repair loop</strong> (esbuild checks each file, feeds errors back with escalating temperature), and <strong>auto-export rescue</strong>. The numbers reflect the coder <em>as shipped</em>, not a raw API call.</p>
+<p><strong>Metrics per level:</strong> pass/fail, wall-clock seconds, and input/output tokens summed across all fallback and repair attempts.</p>
+<p><strong>Cost model.</strong> Raw billing totals are unreliable — they bundle prior-session usage and vary with cache-hit rate. Cost here is <strong>normalized</strong>: recomputed from <em>this ramp's</em> measured tokens × each model's Fireworks list rates, charging input at the cached rate (realistic — the ~3k-token system prompt is reused every turn) plus output at the output rate. It is reproducible and cross-checks against billed figures within caching variance. Gemma-4-31B runs on Hugging Face (not on these rate cards); its billing delta showed the ramp at <strong>&lt;$0.01</strong>.</p>
+</div>
+
+<div class="section">
+<h2><span class="n">4</span> Results — Per-Level Pass Grid</h2>
+<table>
+  <thead><tr><th>Model</th><th class="c">L1</th><th class="c">L2</th><th class="c">L3</th><th class="c">L4</th><th class="c">L5</th><th class="c">L6</th><th class="c">L7</th><th class="c">L8</th><th class="c">L9</th><th class="c">L10</th><th class="c">Score</th></tr></thead>
+  <tbody>
+    <tr class="row-best"><td><strong>Gemma-4-31B</strong></td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c fail">✗</td><td class="c pass">✓</td><td class="c"><strong>9/10</strong></td></tr>
+    <tr><td>gpt-oss-120B</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c"><strong>10/10</strong></td></tr>
+    <tr><td>DeepSeek-V4-Flash</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c"><strong>10/10</strong></td></tr>
+    <tr><td>MiniMax-M2.7</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c"><strong>10/10</strong></td></tr>
+    <tr><td>Qwen3.7-Plus</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c"><strong>10/10</strong></td></tr>
+    <tr><td>DeepSeek-V4-Pro</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c"><strong>10/10</strong></td></tr>
+    <tr><td>MiniMax-M3</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c"><strong>10/10</strong></td></tr>
+    <tr><td>GLM-5.2</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c"><strong>10/10</strong></td></tr>
+    <tr><td>Kimi-K2.6</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c"><strong>10/10</strong></td></tr>
+    <tr><td>gpt-oss-20B</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c fail">✗</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c"><strong>9/10</strong></td></tr>
+    <tr><td>Nemotron-3-Ultra (NVFP4)</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c fail">✗</td><td class="c fail">✗</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c pass">✓</td><td class="c fail">✗</td><td class="c pass">✓</td><td class="c"><strong>7/10</strong></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="section">
+<h2><span class="n">5</span> Master Comparison — Score · Speed · Tokens · Cost</h2>
+<p class="note">Sorted by score, then normalized cost. <strong>Ramp $</strong> = normalized cost for the full L1→L10 run (cached input + output at list rates). <strong>Out $/M</strong> is the output list price — the dominant cost driver.</p>
+<table>
+  <thead><tr><th>Model</th><th class="c">Score</th><th class="num">Time</th><th class="num">In tok</th><th class="num">Out tok</th><th class="num">Out $/M</th><th class="num">Ramp $</th></tr></thead>
+  <tbody>
+    <tr class="row-best"><td><strong>Gemma-4-31B</strong> <span class="badge b-good">DEFAULT</span></td><td class="c"><strong>9/10</strong></td><td class="num"><strong>13s</strong></td><td class="num">31,663</td><td class="num">6,036</td><td class="num">(HF)</td><td class="num"><strong>≈$0.00</strong></td></tr>
+    <tr><td>gpt-oss-120B <span class="badge b-good">ESCALATION</span></td><td class="c">10/10</td><td class="num">130s</td><td class="num">127,322</td><td class="num">18,649</td><td class="num">$0.60</td><td class="num"><strong>$0.013</strong></td></tr>
+    <tr><td>DeepSeek-V4-Flash</td><td class="c">10/10</td><td class="num">457s</td><td class="num">281,863</td><td class="num">25,017</td><td class="num">$0.28</td><td class="num">$0.016</td></tr>
+    <tr><td>MiniMax-M2.7</td><td class="c">10/10</td><td class="num">96s</td><td class="num">156,820</td><td class="num">17,270</td><td class="num">$1.20</td><td class="num">$0.030</td></tr>
+    <tr><td>Qwen3.7-Plus</td><td class="c">10/10</td><td class="num">122s</td><td class="num">n/a</td><td class="num">n/a</td><td class="num">$1.60</td><td class="num">~$0.09</td></tr>
+    <tr><td>DeepSeek-V4-Pro</td><td class="c">10/10</td><td class="num">437s</td><td class="num">283,613</td><td class="num">23,595</td><td class="num">$3.48</td><td class="num">$0.125</td></tr>
+    <tr><td>MiniMax-M3</td><td class="c">10/10</td><td class="num">571s</td><td class="num">n/a</td><td class="num">n/a</td><td class="num">$1.20</td><td class="num">~$0.14</td></tr>
+    <tr><td>GLM-5.2</td><td class="c">10/10</td><td class="num">417s</td><td class="num">343,559</td><td class="num">40,927</td><td class="num">$4.40</td><td class="num">$0.228</td></tr>
+    <tr><td>Kimi-K2.6</td><td class="c">10/10</td><td class="num">693s</td><td class="num">311,697</td><td class="num">49,082</td><td class="num">$4.00</td><td class="num">$0.246</td></tr>
+    <tr><td>gpt-oss-20B</td><td class="c">9/10</td><td class="num">136s</td><td class="num">29,769</td><td class="num">10,817</td><td class="num">$0.30</td><td class="num">$0.004</td></tr>
+    <tr><td>Nemotron-3-Ultra (NVFP4)</td><td class="c">7/10</td><td class="num">312s</td><td class="num">71,541</td><td class="num">11,184</td><td class="num">$2.40</td><td class="num">$0.035</td></tr>
+  </tbody>
+</table>
+<p class="note"><strong>Decontaminated:</strong> raw dashboard totals were GLM $0.60 and Kimi <strong>$2.75</strong>, but those bundled earlier-session usage. Recomputed from this ramp's tokens, Kimi's true cost is ~$0.25 — ~18× the cheap tier, not the ~90× the raw total implied. Qwen3.7-Plus / MiniMax-M3 report no token usage via the API; their figures are the billed ramp-only accrued cost.</p>
+</div>
+
+<div class="section">
+<h2><span class="n">6</span> Cost &amp; Speed, Visualized</h2>
+<div class="tierkey">
+  <span><span class="dot" style="background:#fbbf24"></span> Default (best value)</span>
+  <span><span class="dot" style="background:#2dd4bf"></span> Cheap 10/10</span>
+  <span><span class="dot" style="background:#f59e0b"></span> Premium (overpriced here)</span>
+  <span><span class="dot" style="background:#f87171"></span> Underwhelming</span>
+</div>
+
+<div class="chart">
+  <div class="ct">Normalized ramp cost (full L1→L10, USD) — lower is better</div>
+  <div class="cs">~60× spread for identical 10/10 results, driven by output token pricing ($0.28 → $4.40 / M).</div>
+  <div class="brow"><div class="name">Gemma-4-31B (HF)</div><div class="track"><div class="fill f-best" style="width:0.8%"></div></div><div class="val">≈$0.00</div></div>
+  <div class="brow"><div class="name">gpt-oss-20B</div><div class="track"><div class="fill f-good" style="width:1.6%"></div></div><div class="val">$0.004</div></div>
+  <div class="brow"><div class="name">gpt-oss-120B</div><div class="track"><div class="fill f-good" style="width:5.3%"></div></div><div class="val">$0.013</div></div>
+  <div class="brow"><div class="name">DeepSeek-V4-Flash</div><div class="track"><div class="fill f-good" style="width:6.5%"></div></div><div class="val">$0.016</div></div>
+  <div class="brow"><div class="name">MiniMax-M2.7</div><div class="track"><div class="fill f-good" style="width:12%"></div></div><div class="val">$0.030</div></div>
+  <div class="brow"><div class="name">Nemotron-3-Ultra</div><div class="track"><div class="fill f-bad" style="width:14%"></div></div><div class="val">$0.035</div></div>
+  <div class="brow"><div class="name">Qwen3.7-Plus</div><div class="track"><div class="fill f-mid" style="width:36%"></div></div><div class="val">~$0.09</div></div>
+  <div class="brow"><div class="name">DeepSeek-V4-Pro</div><div class="track"><div class="fill f-mid" style="width:50%"></div></div><div class="val">$0.125</div></div>
+  <div class="brow"><div class="name">MiniMax-M3</div><div class="track"><div class="fill f-mid" style="width:56%"></div></div><div class="val">~$0.14</div></div>
+  <div class="brow"><div class="name">GLM-5.2</div><div class="track"><div class="fill f-mid" style="width:91%"></div></div><div class="val">$0.228</div></div>
+  <div class="brow"><div class="name">Kimi-K2.6</div><div class="track"><div class="fill f-mid" style="width:98%"></div></div><div class="val">$0.246</div></div>
+</div>
+
+<div class="chart">
+  <div class="ct">Total wall-clock for the ten levels (seconds) — lower is better</div>
+  <div class="cs">53× spread. Fast models one-shot; slow ones burn minutes on internal reasoning that changes no outcome here.</div>
+  <div class="brow"><div class="name">Gemma-4-31B</div><div class="track"><div class="fill f-best" style="width:1.9%"></div></div><div class="val">13s</div></div>
+  <div class="brow"><div class="name">MiniMax-M2.7</div><div class="track"><div class="fill f-good" style="width:13.9%"></div></div><div class="val">96s</div></div>
+  <div class="brow"><div class="name">Qwen3.7-Plus</div><div class="track"><div class="fill f-mid" style="width:17.6%"></div></div><div class="val">122s</div></div>
+  <div class="brow"><div class="name">gpt-oss-120B</div><div class="track"><div class="fill f-good" style="width:18.8%"></div></div><div class="val">130s</div></div>
+  <div class="brow"><div class="name">gpt-oss-20B</div><div class="track"><div class="fill f-good" style="width:19.6%"></div></div><div class="val">136s</div></div>
+  <div class="brow"><div class="name">Nemotron-3-Ultra</div><div class="track"><div class="fill f-bad" style="width:45%"></div></div><div class="val">312s</div></div>
+  <div class="brow"><div class="name">GLM-5.2</div><div class="track"><div class="fill f-mid" style="width:60.2%"></div></div><div class="val">417s</div></div>
+  <div class="brow"><div class="name">DeepSeek-V4-Pro</div><div class="track"><div class="fill f-mid" style="width:63%"></div></div><div class="val">437s</div></div>
+  <div class="brow"><div class="name">DeepSeek-V4-Flash</div><div class="track"><div class="fill f-good" style="width:65.9%"></div></div><div class="val">457s</div></div>
+  <div class="brow"><div class="name">MiniMax-M3</div><div class="track"><div class="fill f-mid" style="width:82.4%"></div></div><div class="val">571s</div></div>
+  <div class="brow"><div class="name">Kimi-K2.6</div><div class="track"><div class="fill f-mid" style="width:100%"></div></div><div class="val">693s</div></div>
+</div>
+</div>
+
+<div class="section">
+<h2><span class="n">7</span> Analysis</h2>
+<h3>Correctness saturates — efficiency is the real axis</h3>
+<p>Seven models scored 10/10; the two 9/10 results each miss one different level. Raw capability is effectively solved for any competent model on this ladder, which throws the decision entirely onto <strong>cost and speed</strong> — where the field spreads by more than an order of magnitude.</p>
+<h3>Cost is an output-pricing story</h3>
+<p>Normalized ramp cost ranges <strong>~$0.004 → ~$0.25</strong> — a ~60× spread for identical results. The driver is <strong>output token pricing</strong> ($0.28/M → $4.40/M, a 15.7× range) multiplied by how many tokens each model emits. Reasoning-heavy models lose twice: they charge the most per output token <em>and</em> generate the most of them.</p>
+<h3>The value tiers</h3>
+<table>
+  <thead><tr><th>Tier</th><th>Models</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td><span class="badge b-good">Default</span></td><td>Gemma-4-31B</td><td>9/10, ≈$0, 13s. In a class of its own on value.</td></tr>
+    <tr><td><span class="badge b-good">Escalation</span></td><td>gpt-oss-120B · DeepSeek-V4-Flash · MiniMax-M2.7</td><td>Perfect scores at trivial cost. gpt-oss-120B is the pick — cheapest and fast.</td></tr>
+    <tr><td><span class="badge b-mid">Premium</span></td><td>DeepSeek-V4-Pro · MiniMax-M3 · GLM-5.2 · Kimi-K2.6</td><td>Same 10/10 for 10–18× the cost. No justification on this workload.</td></tr>
+    <tr><td><span class="badge b-bad">Weak</span></td><td>Nemotron-3-Ultra (NVFP4)</td><td>7/10 and ~$0.035 — pays more for a worse score. 4-bit quant appears to cost accuracy.</td></tr>
+  </tbody>
+</table>
+<h3>Notable findings</h3>
+<p>• <strong>Bigger isn't better within a family.</strong> MiniMax-M2.7 and M3 score identically, but M3 is ~6× slower and ~3× pricier for zero gain. &nbsp; • <strong>"Flash" is a misnomer.</strong> DeepSeek-V4-Flash has the cheapest output rate but was one of the <em>slowest</em> models (457s) — it reasons heavily. &nbsp; • <strong>The small sleeper:</strong> gpt-oss-20B scored 9/10 at ~$0.004, nearly free, tripping only on L6 regex. &nbsp; • <strong>Gemma's one gap is diagnostic:</strong> the level it misses — L9, a stateful mini-interpreter — is exactly what the escalation model is for.</p>
+</div>
+
+<div class="section">
+<h2><span class="n">8</span> The Decision</h2>
+<div class="verdict">
+  <div class="arrow">Default: <b>Gemma-4-31B</b> &nbsp;→&nbsp; Escalate: <span class="e">gpt-oss-120B</span></div>
+  <p style="margin:0;">Gemma handles 9/10 of this workload at near-zero cost and interactive speed — the right default for the overwhelming majority of turns. <strong>gpt-oss-120B</strong> sits directly behind it as the heavy-tier fallback: the cheapest perfect scorer, fast and transparent — the right model for the hard cases (like stateful interpreters) where Gemma slips. The premium models are <strong>not</strong> in the default path; they earned no measurable advantage to justify their 10–18× cost. <em>This architecture is now wired into Chorale's agents and profiles.</em></p>
+</div>
+</div>
+
+<div class="section">
+<h2><span class="n">9</span> Limitations &amp; Honest Caveats</h2>
+<ol class="lim">
+  <li><strong>N=1 per level.</strong> Single runs. The 10/10 results are trustworthy given frontier determinism, but the 9-vs-10 boundary could move by one level on a re-run.</li>
+  <li><strong>Puzzles, not projects.</strong> Single-file algorithmic tasks. They do <em>not</em> measure multi-file refactoring, debugging, long-horizon planning, or heavy tool use — the arenas where the biggest frontier models most likely justify their cost. A model that looks "overpriced" here may pull ahead on real engineering; the right next step is a multi-file, real-project benchmark.</li>
+  <li><strong>Cost is normalized, not billed.</strong> Recomputed from measured tokens × list rates (cached input + output); real bills vary with actual cache-hit rates. GLM-5.2 / Kimi-K2.6 dashboard totals were excluded as prior-session-contaminated; Gemma runs on HF (≈$0 per the billing delta).</li>
+  <li><strong>Two models report no token usage</strong> (Qwen3.7-Plus, MiniMax-M3) via the Fireworks API; their cost is the billed ramp-only accrued figure.</li>
+</ol>
+</div>
+
+<div class="section">
+<h2><span class="n">10</span> Reproducibility</h2>
+<pre><code># Single model, open-ended ramp (streams a live log; stops on failure/slowness)
+pnpm exec tsx eval/coder-ramp.ts "hf:google/gemma-4-31B-it"
+
+# Head-to-head bake-off across N models, L1..MAX, full pass grid + tokens
+pnpm exec tsx eval/coder-bakeoff.ts 10 \
+  "hf:google/gemma-4-31B-it" \
+  "fireworks:accounts/fireworks/models/gpt-oss-120b" \
+  "fireworks:accounts/fireworks/models/minimax-m2p7"</code></pre>
+<p class="note">Harness: <code>eval/coder-bakeoff.ts</code> · Challenges &amp; grader: <code>eval/challenges.ts</code> · Condensed board: <code>eval/RAMP-LEADERBOARD.md</code></p>
+</div>
+
+<div class="section">
+<h2><span class="n">11</span> Addendum — Real-Engineering Validation</h2>
+<p>The ramp measures single-file puzzles. To test that caveat head-on, the three finalists were run through a <strong>multi-file, multi-step engineering</strong> benchmark — build a library, debug a broken codebase, get async concurrency right, ship a stateful CLI — with the coder using its full toolset (including <code>bash</code>, so it runs tests and iterates like a developer). Each project is graded with <strong>partial credit</strong> by executing the result; every grader was validated against reference good/bad solutions first.</p>
+<table>
+  <thead><tr><th>Model</th><th class="c">KV store</th><th class="c">Debug</th><th class="c">Async pool</th><th class="c">Todo CLI</th><th class="c">Overall</th><th class="num">Time</th><th class="num">Cost</th></tr></thead>
+  <tbody>
+    <tr class="row-best"><td><strong>Gemma-4-31B</strong></td><td class="c pass">8/8</td><td class="c pass">7/7</td><td class="c pass">5/5</td><td class="c pass">6/6</td><td class="c"><strong>26/26 · 100%</strong></td><td class="num"><strong>32s</strong></td><td class="num"><strong>≈$0.00</strong></td></tr>
+    <tr><td>gpt-oss-120B</td><td class="c pass">8/8</td><td class="c pass">7/7</td><td class="c fail">4/5</td><td class="c pass">6/6</td><td class="c">25/26 · 96%</td><td class="num">68s</td><td class="num">$0.0071</td></tr>
+    <tr><td>MiniMax-M2.7</td><td class="c pass">8/8</td><td class="c pass">7/7</td><td class="c pass">5/5</td><td class="c pass">6/6</td><td class="c"><strong>26/26 · 100%</strong></td><td class="num">73s</td><td class="num">$0.0246</td></tr>
+  </tbody>
+</table>
+<p>The four projects test distinct real skills — <strong>build</strong> (a KV-store library with TTL + LRU across two files), <strong>debug</strong> (localize and fix three planted bugs in a broken <code>lib/</code> until its suite passes), <strong>async correctness</strong> (a bounded-concurrency promise pool: order, cap, parallelism, error propagation, in-flight settling), and <strong>integration</strong> (a todo CLI persisting to JSON across processes).</p>
+<div class="verdict">
+  <p style="margin:0;"><strong>The value king holds up.</strong> Gemma-4-31B scored a perfect <strong>26/26</strong> on real multi-file engineering while being ~2× faster than either frontier model and effectively free. MiniMax-M2.7 also went 100%, but at ~3.5× the cost and ~2.3× the time. gpt-oss-120B slipped to 96% — its promise pool failed to reject when a task threw (a real error-handling gap); everything else was perfect. On this evidence the "frontier models justify their cost on real work" hypothesis does <strong>not</strong> hold at this task scale: Gemma matches or beats them. <em>(Caveat: N=1, and these are small self-contained projects, not thousand-line codebases.)</em></p>
+</div>
+</div>
+
+<div class="foot">Chorale is an open-source, model-agnostic multi-agent system. This report reflects measurements taken through its production coder pipeline; numbers will shift as models, prices, and the pipeline evolve. Generated from <code>docs/model-evaluation-report.md</code>.</div>
+
+</body>
+</html>

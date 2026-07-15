@@ -16,6 +16,16 @@ export interface AgentSpec {
   delegable: boolean;
   /** MCP server names (from config.mcp.servers) whose tools this agent may use. */
   mcp: string[];
+  /** Enable the automatic verify-repair loop on files this agent writes (default false). */
+  verify: boolean;
+  /** Inject `<name>.examples.md` worked examples into the prompt (tick-box, default on). */
+  fewShot: boolean;
+  /** Runtime self-healing: smoke-run written modules and repair crashes (needs verify; tick-box, default on). */
+  selfHeal: boolean;
+  /** Self-learning from past runs — PARKED FOR PHASE 3; toggle recognized but inert for now. */
+  selfLearn: boolean;
+  /** Agent role, used by model profiles to route by tier (e.g. code, research, chat). */
+  tier: string | undefined;
   system: string;
 }
 
@@ -34,6 +44,11 @@ export function loadAgent(filePath: string): AgentSpec {
     skills: Array.isArray(data.skills) ? data.skills.map(String) : [],
     delegable: data.delegable !== false,
     mcp: Array.isArray(data.mcp) ? data.mcp.map(String) : [],
+    verify: data.verify === true,
+    fewShot: data.fewShot !== false,
+    selfHeal: data.selfHeal !== false,
+    selfLearn: data.selfLearn !== false,
+    tier: data.tier ? String(data.tier) : undefined,
     system: content.trim(),
   };
 }
