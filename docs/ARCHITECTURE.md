@@ -34,7 +34,7 @@ CLI (src/index.ts)
 | **Learning** | `core/lessons.ts` (+ `core/diagnose.ts` keys) | Per-agent self-learning store: record fixes that worked, inject proven lessons proactively. |
 | **Setup/ops** | `core/init.ts`, `core/doctor.ts`, `core/costs.ts`, `core/log.ts`, `core/redact.ts` | Init wizard; provider health check; cost rates; leveled logging + transcript; secret redaction. |
 | **State** | `core/session.ts` | SQLite sessions, messages, usage; `chorale cost` aggregation; housekeeping. |
-| **TUI** | `tui/app.tsx` (Ink + React) | Interactive streaming chat REPL (`chorale tui`); subscribes to the runtime's `onToken`/`onEvent`. Lazy-loaded; excluded from `pnpm typecheck` (native TS7 crashes on React types), built by esbuild. |
+| **TUI** | `tui/app.tsx` (Ink + React) | Interactive streaming chat REPL (`chorale tui`); subscribes to the runtime's `onToken`/`onEvent`. Lazy-loaded; excluded from `npm run typecheck` (native TS7 crashes on React types), built by esbuild. |
 | **Agents** | `agents/loader.ts` | Parse `agent.md` frontmatter (model, fallbacks, tools, skills, mcp, verify, fewShot, selfHeal, selfLearn, tier). |
 | **Tools** | `tools/registry.ts`, `tools/fs.ts`, `tools/shell.ts`, `tools/web.ts`, `tools/skill.ts`, `tools/delegate.ts`, `tools/permissions.ts` | Built-in tool set; permission gating + catastrophic-command denylist; delegation with depth + cycle guards. |
 | **Skills / MCP** | `skills/loader.ts`, `mcp/client.ts` | Discover/select Claude-compatible skills; connect MCP servers. |

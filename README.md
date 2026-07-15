@@ -16,18 +16,18 @@ skills. MCP-native. CLI-first, UI later.
 ## Quickstart
 
 ```bash
-pnpm install
+npm install
 cp .env.example .env                 # keys for the providers you use (optional for local-only)
-pnpm build && npm link               # expose the `chorale` command on your PATH
-#   ↳ no link? just use `pnpm dev "<prompt>"` (runs via tsx, no build) for everything below.
+npm run build && npm link               # expose the `chorale` command on your PATH
+#   ↳ no link? just use `npm run dev -- "<prompt>"` (runs via tsx, no build) for everything below.
 chorale init                         # detect your models + keys, generate a tailored profile
 chorale doctor                       # confirm your providers are reachable
 chorale "Explain what a chorale of agents is."
 chorale tui                          # or drop into the interactive terminal UI
 ```
 
-> The linked `chorale` runs the built `dist/`, so re-run `pnpm build` after code changes
-> (or use `pnpm dev …` during development). Undo the link with `npm unlink -g chorale`.
+> The linked `chorale` runs the built `dist/`, so re-run `npm run build` after code changes
+> (or use `npm run dev …` during development). Undo the link with `npm unlink -g chorale`.
 
 Point the base model at whatever you run — `config/chorale.config.json5`:
 
@@ -98,8 +98,8 @@ chorale --model mock:test-model "prove the pipeline works"
 
 | Command | What it does |
 |---|---|
-| `pnpm dev "<prompt>"` | Run the CLI via tsx (no build) |
-| `pnpm build` · `pnpm typecheck` · `pnpm test` | Bundle · `tsc --noEmit` · vitest (93 tests) |
+| `npm run dev -- "<prompt>"` | Run the CLI via tsx (no build) |
+| `npm run build` · `npm run typecheck` · `npm test` | Bundle · `tsc --noEmit` · vitest (99 tests) |
 
 ## Docs
 [`ARCHITECTURE`](docs/ARCHITECTURE.md) · [`PROJECT-STATE`](docs/PROJECT-STATE.md) · [`PHASES`](docs/PHASES.md) ·

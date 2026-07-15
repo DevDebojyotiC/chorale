@@ -18,6 +18,6 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "//": "src/tui (React/Ink TSX) is excluded from `pnpm typecheck` — the native TS7 compiler crashes on React's type tree. The TUI is type-transpiled by the esbuild build (pnpm build) instead.",
+  "//": "src/tui (React/Ink TSX) is excluded from `npm run typecheck` — the native TS7 compiler crashes on React's type tree. The TUI is type-transpiled by the esbuild build (npm run build) instead.",
   "exclude": ["node_modules", "dist", "eval", "src/tui"]
 }

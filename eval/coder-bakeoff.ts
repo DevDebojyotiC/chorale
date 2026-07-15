@@ -3,7 +3,7 @@
  * (all levels, no early stop) and reports a pass grid + tokens + wall-time, so the
  * comparison is real numbers — not lifetime billing-dashboard artifacts.
  *
- * Usage: pnpm exec tsx eval/coder-bakeoff.ts [maxLevel] ["model1" "model2" ...]
+ * Usage: npx tsx eval/coder-bakeoff.ts [maxLevel] ["model1" "model2" ...]
  */
 import "dotenv/config";
 process.env.CHORALE_NO_LEARN = "1"; // reproducible benchmarks: no self-learning

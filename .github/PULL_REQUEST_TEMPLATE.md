@@ -17,8 +17,8 @@
 
 ## Checklist
 
-- [ ] `pnpm typecheck` passes
-- [ ] `pnpm test` passes
-- [ ] `pnpm build` passes
+- [ ] `npm run typecheck` passes
+- [ ] `npm test` passes
+- [ ] `npm run build` passes
 - [ ] Tests added/updated for behavior changes (offline & deterministic)
 - [ ] No secrets committed; docs updated if needed

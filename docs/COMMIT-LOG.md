@@ -54,4 +54,4 @@ annotated tag (`phase-2-task-N-*`) with `DevDebojyotiC` as sole author. Updated 
 |--:|-----|---------|
 | 1 | `phase-3-task-1-self-learning` | Self-learning: record fixes from successful diagnosed repairs (`lessons.ts` / `data/lessons.sqlite`) and inject proven lessons proactively; `chorale lessons`; `CHORALE_NO_LEARN` for eval. Diagnose rules get category keys. |
 | 2 | `phase-3-task-2-ink-tui` | Ink TUI `chorale tui` (streaming chat REPL); runtime `onToken`/`onEvent` hooks; lazy-loaded; TSX excluded from TS7 typecheck (esbuild-built). |
-| — | *(no tag)* | Docs: README quickstart shows how to expose the `chorale` command (`pnpm build && npm link`). |
+| — | *(no tag)* | Docs: README quickstart shows how to expose the `chorale` command (`npm run build && npm link`). |

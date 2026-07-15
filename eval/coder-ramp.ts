@@ -3,7 +3,7 @@
  * fails, errors, times out, or exceeds the live-coding speed threshold. Streams
  * the full model log so progress is visible.
  *
- * Usage: pnpm exec tsx eval/coder-ramp.ts ["<provider:model>"]   (default: ollama:qwen2.5-coder:3b)
+ * Usage: npx tsx eval/coder-ramp.ts ["<provider:model>"]   (default: ollama:qwen2.5-coder:3b)
  */
 import "dotenv/config";
 process.env.CHORALE_NO_LEARN = "1"; // reproducible benchmarks: no self-learning

@@ -1,6 +1,6 @@
 /**
  * Deterministic validation that the runtime self-heal check catches the failures
- * it claims to — independent of any model. Run: pnpm exec tsx eval/smoke-selftest.ts
+ * it claims to — independent of any model. Run: npx tsx eval/smoke-selftest.ts
  */
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

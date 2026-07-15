@@ -1,7 +1,7 @@
 /**
  * Run a single ladder challenge on one model with FULL streaming so the whole
  * model log (output + tool calls + verify steps) is visible live.
- * Usage: pnpm exec tsx eval/run-one.ts "<provider:model>" [level]
+ * Usage: npx tsx eval/run-one.ts "<provider:model>" [level]
  */
 import "dotenv/config";
 import { mkdtempSync, rmSync, existsSync, readdirSync } from "node:fs";

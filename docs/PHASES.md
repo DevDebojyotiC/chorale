@@ -63,7 +63,7 @@ Updated at the completion of every phase, before shipping. Per-commit detail liv
 
 **Done**
 - **Task 1 — `selfLearn`** ✅: the coder learns fixes from its own successful diagnosed repairs (per-agent `data/lessons.sqlite`) and injects the top proven lessons proactively next run; `chorale lessons` to inspect; `CHORALE_NO_LEARN=1` for reproducible eval. See [`self-learning.md`](self-learning.md).
-- **Task 2 — Ink TUI** ✅: `chorale tui` — interactive streaming chat REPL; runtime gained `onToken`/`onEvent` renderer hooks. *(The React/Ink TSX is excluded from `pnpm typecheck` — the native TS7 compiler crashes on React's type tree on Windows — but is type-transpiled by `pnpm build`.)*
+- **Task 2 — Ink TUI** ✅: `chorale tui` — interactive streaming chat REPL; runtime gained `onToken`/`onEvent` renderer hooks. *(The React/Ink TSX is excluded from `npm run typecheck` — the native TS7 compiler crashes on React's type tree on Windows — but is type-transpiled by `npm run build`.)*
 
 **Planned**
 - More agents (files/docs specialist, reviewer/verifier); larger real-world codebase benchmarks; UI over the same core; `selfLearn` v2 (LLM reflection for novel failures).

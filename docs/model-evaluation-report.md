@@ -152,10 +152,10 @@ The data supports a two-model heavy-tier architecture, now wired into Chorale:
 
 ```bash
 # Single model, open-ended ramp (streams a live log, stops on failure/slowness)
-pnpm exec tsx eval/coder-ramp.ts "hf:google/gemma-4-31B-it"
+npx tsx eval/coder-ramp.ts "hf:google/gemma-4-31B-it"
 
 # Head-to-head bake-off across N models, L1..MAX, full pass grid + tokens
-pnpm exec tsx eval/coder-bakeoff.ts 10 \
+npx tsx eval/coder-bakeoff.ts 10 \
   "hf:google/gemma-4-31B-it" \
   "fireworks:accounts/fireworks/models/gpt-oss-120b" \
   "fireworks:accounts/fireworks/models/minimax-m2p7"

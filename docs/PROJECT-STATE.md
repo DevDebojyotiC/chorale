@@ -29,13 +29,13 @@ Full evidence: [`model-evaluation-report.md`](model-evaluation-report.md), [`eng
 ## Known limitations / not done
 - **`selfLearn`** v1 is **live** (Phase 3, Task 1): learns fixes from successful repairs, injects them proactively; `chorale lessons` to inspect. v2 (LLM reflection for novel failures) is future work.
 - Benchmarks are self-contained projects (up to a full-stack app), **not thousand-line codebases**; N is small on the hardest tiers.
-- **TUI shipped** (`chorale tui` — Ink streaming chat REPL); the React/Ink TSX is excluded from `pnpm typecheck` (native TS7 crashes on React types) but is type-transpiled by `pnpm build`. No files/docs or reviewer agent yet.
+- **TUI shipped** (`chorale tui` — Ink streaming chat REPL); the React/Ink TSX is excluded from `npm run typecheck` (native TS7 crashes on React types) but is type-transpiled by `npm run build`. No files/docs or reviewer agent yet.
 - Research falls back to brittle DuckDuckGo scraping without a Tavily key (degrades gracefully, but Tavily recommended).
 
 ## Quality gates
-- `pnpm typecheck` (tsc, strict; `src/tui` excluded — native TS7 crashes on React types) · `pnpm test` (vitest, 99) · CI on push (`.github/workflows/ci.yml`).
+- `npm run typecheck` (tsc, strict; `src/tui` excluded — native TS7 crashes on React types) · `npm test` (vitest, 99) · CI on push (`.github/workflows/ci.yml`).
 - Graders self-validated against known-good/bad reference solutions before any benchmark run.
-- **Security:** no secrets/absolute paths/`.env`/`data/` in tracked files; SQL is parameterized; shell has a catastrophic-command denylist; logs are secret-redacted. Direct-dependency advisory scan is clean; a full `pnpm audit` needs pnpm ≥10 (the 9.15.4 endpoint is retired) — run it in CI. `selfHeal` runs model-written code — see [`SECURITY.md`](../SECURITY.md).
+- **Security:** no secrets/absolute paths/`.env`/`data/` in tracked files; SQL is parameterized; shell has a catastrophic-command denylist; logs are secret-redacted. `npm audit` reports **0 vulnerabilities** (an `esbuild` override forces the patched version) and runs in CI. `selfHeal` runs model-written code — see [`SECURITY.md`](../SECURITY.md).
 
 ## Next (Phase 3)
 Done: **self-learning** (`selfLearn`) + **Ink TUI** (`chorale tui`). Remaining: more agents (files/docs, reviewer/verifier), larger real-world benchmarks, `selfLearn` v2, UI over the same core. See [`ROADMAP.md`](ROADMAP.md).

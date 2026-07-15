@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Self-learning (`selfLearn`)** — the coder records fixes from its own successful diagnosed repairs (`data/lessons.sqlite`, per agent) and injects the top proven lessons proactively on future runs. `chorale lessons [agent]` to inspect; `CHORALE_NO_LEARN=1` disables it for reproducible benchmarks. Every `diagnose` rule now carries a stable category key.
-- **Ink TUI (`chorale tui`)** — interactive streaming chat REPL; `runAgent` gained `onToken`/`onEvent` renderer hooks. *(The React/Ink TSX is excluded from `pnpm typecheck` due to a native-TS7 compiler crash on React types; it is type-transpiled by `pnpm build`.)*
+- **Ink TUI (`chorale tui`)** — interactive streaming chat REPL; `runAgent` gained `onToken`/`onEvent` renderer hooks. *(The React/Ink TSX is excluded from `npm run typecheck` due to a native-TS7 compiler crash on React types; it is type-transpiled by `npm run build`.)*
 
 ## [0.2.0] — Phase 2
 
