@@ -28,6 +28,10 @@ end — **70% → 100% over 20 runs** — by three general measures, not by esca
 Principle: a precisely diagnosed model weakness can be engineered around by (a) steering to a
 strategy the model executes reliably, and (b) making repair feedback specific to the failure.
 
+## Hardening — done (Phase 2)
+- **Tier 1/2:** per-request timeout + retry/backoff (network resilience), runtime tests via mock model, context-growth guard, cross-platform smoke process cleanup, research-path resilience.
+- **Tier 3:** leveled logging + per-session run transcript (`--verbose`/`--quiet`, `data/logs/<session>.log`), secret redaction in all logs, delegation cycle guard, per-session token/cost persistence + `chorale cost`.
+
 ## Other phase-2 follow-ups (not yet done)
 - Ink/TUI renderer for the CLI.
 - More agents (files/docs specialist, dedicated verifier).

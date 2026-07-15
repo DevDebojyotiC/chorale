@@ -28,6 +28,19 @@ describe("Phase 1 — session store (persist/resume)", () => {
     expect(msgs[1]?.role).toBe("assistant");
   });
 
+  it("records and aggregates token usage per model", () => {
+    const id = store.createSession("coder");
+    store.recordUsage(id, "fireworks:accounts/fireworks/models/gpt-oss-120b", 1000, 500);
+    store.recordUsage(id, "fireworks:accounts/fireworks/models/gpt-oss-120b", 2000, 400);
+    store.recordUsage(id, "ollama:qwen2.5-coder:3b", 300, 100);
+    const rows = store.usageByModel(id);
+    expect(rows).toHaveLength(2);
+    const oss = rows.find((r) => r.model.includes("gpt-oss-120b"));
+    expect(oss?.requests).toBe(2);
+    expect(oss?.input_tokens).toBe(3000);
+    expect(oss?.output_tokens).toBe(900);
+  });
+
   it("titles the session from the first user message", () => {
     const id = store.createSession("general");
     store.appendMessage(id, "user", "Explain closures please");

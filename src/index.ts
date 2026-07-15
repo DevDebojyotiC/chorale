@@ -14,6 +14,8 @@ import { runAgent } from "./core/runtime.js";
 import { SessionStore } from "./core/session.js";
 import type { ChatMessage } from "./core/session.js";
 import type { PermissionMode } from "./tools/permissions.js";
+import { setLogLevel, setLogFile, log } from "./core/log.js";
+import { estimateCost } from "./core/costs.js";
 
 interface CliArgs {
   agent?: string;
@@ -43,6 +45,8 @@ function parseArgs(argv: string[]): CliArgs {
     else if (arg === "--profile" || arg === "-p") profile = argv[++i];
     else if (arg === "--yolo") permissionMode = "full-auto";
     else if (arg === "--read-only" || arg === "--plan") permissionMode = "read-only";
+    else if (arg === "--verbose" || arg === "-v") setLogLevel("debug");
+    else if (arg === "--quiet" || arg === "-q") setLogLevel("warn");
     else if (arg === "--mode") {
       const m = argv[++i];
       if (m === "read-only" || m === "auto-edit" || m === "full-auto") permissionMode = m;
@@ -94,6 +98,30 @@ function printProfiles(config: ChoraleConfig, only?: string): void {
     }
     process.stderr.write("\n");
   }
+}
+
+/** `chorale cost [session]` — aggregate token usage + estimated spend per model. */
+function printCost(store: SessionStore, sessionId?: string): void {
+  const rows = store.usageByModel(sessionId);
+  if (rows.length === 0) {
+    process.stderr.write("No usage recorded yet.\n");
+    return;
+  }
+  process.stderr.write(sessionId ? `Token usage for session ${sessionId}:\n\n` : "Token usage across all sessions:\n\n");
+  process.stderr.write(`  ${"model".padEnd(46)} ${"reqs".padStart(5)} ${"in tok".padStart(10)} ${"out tok".padStart(10)} ${"est $".padStart(9)}\n`);
+  let total = 0;
+  let anyUnknown = false;
+  for (const r of rows) {
+    const cost = estimateCost(r.model, r.input_tokens, r.output_tokens);
+    if (cost == null) anyUnknown = true;
+    else total += cost;
+    const costStr = cost == null ? "?" : `$${cost.toFixed(4)}`;
+    process.stderr.write(
+      `  ${r.model.slice(0, 46).padEnd(46)} ${String(r.requests).padStart(5)} ${String(r.input_tokens).padStart(10)} ${String(r.output_tokens).padStart(10)} ${costStr.padStart(9)}\n`,
+    );
+  }
+  process.stderr.write(`\n  Estimated total: $${total.toFixed(4)}${anyUnknown ? " (+ unpriced models shown as ?)" : ""}\n`);
+  process.stderr.write("  Estimates use built-in rates (src/core/costs.ts) — confirm against your provider's billing.\n");
 }
 
 function printSessions(store: SessionStore): void {
@@ -177,11 +205,18 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (argv[0] === "cost") {
+    const store = new SessionStore();
+    printCost(store, argv[1]);
+    store.close();
+    return;
+  }
+
   const args = parseArgs(argv);
   if (!args.prompt) {
     process.stderr.write(
-      'Usage: chorale [--agent <name>] [--model <provider:model>] [--profile <name>] [--resume <id> | -c] "your prompt"\n' +
-        "       chorale init   ·   chorale sessions   ·   chorale profiles [name]\n",
+      'Usage: chorale [--agent <name>] [--model <provider:model>] [--profile <name>] [--resume <id> | -c] [-v|--quiet] "your prompt"\n' +
+        "       chorale init   ·   chorale sessions   ·   chorale profiles [name]   ·   chorale cost [session]\n",
     );
     process.exit(1);
   }
@@ -225,10 +260,13 @@ async function main(): Promise<void> {
   const agent = loadAgent(file);
   if (!sessionId) sessionId = store.createSession(agent.name);
 
+  // Persist a per-session run transcript (full leveled log) for post-hoc debugging.
+  if (!process.env.CHORALE_LOG_FILE) setLogFile(resolve("data/logs", `${sessionId}.log`));
+
   const activeModel = resolveModelPlan(agent, config, args.model, args.profile).model;
   const profileNote = (args.profile ?? config.activeProfile) ? ` profile=${args.profile ?? config.activeProfile}` : "";
   const priorNote = history.length > 0 ? ` (${history.length} prior msgs)` : "";
-  process.stderr.write(`[chorale] agent=${agent.name} model=${activeModel}${profileNote} session=${sessionId}${priorNote}\n\n`);
+  log.info(`[chorale] agent=${agent.name} model=${activeModel}${profileNote} session=${sessionId}${priorNote}\n\n`);
 
   store.appendMessage(sessionId, "user", args.prompt);
   const result = await runAgent({
@@ -244,11 +282,12 @@ async function main(): Promise<void> {
   store.appendMessage(sessionId, "assistant", result.text, result.model);
 
   const { usage } = result;
+  if (usage) store.recordUsage(sessionId, result.model, usage.inputTokens ?? 0, usage.outputTokens ?? 0);
   const tokens =
     usage && (usage.inputTokens != null || usage.outputTokens != null)
       ? ` · in=${usage.inputTokens ?? "?"} out=${usage.outputTokens ?? "?"} tokens`
       : "";
-  process.stderr.write(`\n[chorale] done · model=${result.model}${tokens} · session=${sessionId}\n`);
+  log.info(`\n[chorale] done · model=${result.model}${tokens} · session=${sessionId}\n`);
   store.close();
 }
 

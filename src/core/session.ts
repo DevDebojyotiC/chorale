@@ -16,6 +16,13 @@ export interface SessionRow {
   title: string | null;
 }
 
+export interface UsageRow {
+  model: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -60,7 +67,33 @@ export class SessionStore {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id);
+      CREATE TABLE IF NOT EXISTS usage (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id    TEXT NOT NULL,
+        model         TEXT NOT NULL,
+        input_tokens  INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        created_at    TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_usage_session ON usage(session_id);
     `);
+  }
+
+  /** Record token usage for one turn (used by the `chorale cost` view). */
+  recordUsage(sessionId: string, model: string, inputTokens: number, outputTokens: number): void {
+    this.db
+      .prepare(`INSERT INTO usage (session_id, model, input_tokens, output_tokens, created_at) VALUES (?, ?, ?, ?, ?)`)
+      .run(sessionId, model, Math.max(0, inputTokens | 0), Math.max(0, outputTokens | 0), nowIso());
+  }
+
+  /** Aggregate usage per model (optionally scoped to one session). */
+  usageByModel(sessionId?: string): UsageRow[] {
+    const where = sessionId ? "WHERE session_id = ?" : "";
+    const sql =
+      `SELECT model, COUNT(*) AS requests, COALESCE(SUM(input_tokens),0) AS input_tokens, ` +
+      `COALESCE(SUM(output_tokens),0) AS output_tokens FROM usage ${where} GROUP BY model ORDER BY output_tokens DESC`;
+    const stmt = this.db.prepare(sql);
+    return (sessionId ? stmt.all(sessionId) : stmt.all()) as UsageRow[];
   }
 
   createSession(agent: string): string {

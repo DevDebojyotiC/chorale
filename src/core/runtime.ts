@@ -17,6 +17,7 @@ import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 import { verifyFiles, verifyFeedback } from "./verify.js";
 import { smokeTest, smokeFeedback } from "./smoke.js";
+import { log } from "./log.js";
 import { parseTextToolCalls, extractCodeBlocks, inferFilename, ensureExports, type ParsedToolCall } from "./tool-call-salvage.js";
 
 /** File-mutating tools — used to detect no-op turns from weak models. */
@@ -99,7 +100,7 @@ async function salvageTextTools(text: string, tools: ToolSet, known: Set<string>
     try {
       const out = await tool.execute(args, {});
       const p = typeof args.path === "string" ? args.path : "";
-      process.stderr.write(`\n[tool·salvaged] ${call.name} ${p}\n`);
+      log.debug(`\n[tool·salvaged] ${call.name} ${p}\n`);
       summaries.push(`${call.name}(${p}) → ${JSON.stringify(out).slice(0, 120)}`);
     } catch (e) {
       summaries.push(`${call.name} → error: ${e instanceof Error ? e.message : String(e)}`);
@@ -134,6 +135,8 @@ export interface RunOptions {
   stream?: boolean;
   /** Max model steps per attempt (overrides config.defaults.maxSteps for multi-file work). */
   maxSteps?: number;
+  /** Agent names already on the delegation path (for cycle detection). */
+  delegationPath?: string[];
 }
 
 /**
@@ -174,6 +177,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       depth: opts.depth ?? 0,
       maxDepth: config.defaults.maxDelegationDepth,
       permissionMode,
+      path: [...(opts.delegationPath ?? []), agent.name],
       run: runAgent,
     });
     const specialists = listAgents(config.agents.dir).filter((a) => a.delegable && a.name !== agent.name);
@@ -263,7 +267,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
               if (WRITE_TOOL_NAMES.has(call.toolName)) sawWriteAttempt = true;
               const input = JSON.stringify(call.input);
               const preview = input.length > 140 ? `${input.slice(0, 140)}…` : input;
-              process.stderr.write(`\n[tool] ${call.toolName} ${preview}\n`);
+              log.debug(`\n[tool] ${call.toolName} ${preview}\n`);
             }
           },
           onError: ({ error }) => {
@@ -296,15 +300,15 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         // Same-model retry on a fast transient error — but only if nothing was streamed yet.
         if (isRetriable(err) && tryN < maxRetries && !emittedAny) {
           const waitMs = backoffMs(tryN);
-          process.stderr.write(`\n[chorale] transient error from "${ref}" — retry ${tryN + 1}/${maxRetries} in ${waitMs}ms…\n`);
+          log.info(`\n[chorale] transient error from "${ref}" — retry ${tryN + 1}/${maxRetries} in ${waitMs}ms…\n`);
           await sleep(waitMs);
           continue;
         }
         lastError = err;
         const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`\n[chorale] model "${ref}" failed: ${msg}\n`);
+        log.info(`\n[chorale] model "${ref}" failed: ${msg}\n`);
         if (ref !== chain[chain.length - 1]) {
-          process.stderr.write(`[chorale] falling back to next model…\n`);
+          log.info(`[chorale] falling back to next model…\n`);
         }
         break; // give up on this model, advance to the next in the chain
       }
@@ -332,7 +336,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       if (!sawNativeToolCall && toolNames.size > 0) {
         const salvaged = await salvageTextTools(result.text, tools, toolNames, prompt);
         if (salvaged.length > 0) {
-          process.stderr.write(`\n[chorale] salvaged ${salvaged.length} tool call(s) written as text\n`);
+          log.info(`\n[chorale] salvaged ${salvaged.length} tool call(s) written as text\n`);
           if (isLast) break;
           messages.push({ role: "assistant", content: result.text });
           messages.push({
@@ -353,10 +357,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       // No-op turn: writes attempted but nothing landed (empty/invalid args).
       if (sawWriteAttempt && touched.size === 0) {
         if (isLast) {
-          process.stderr.write(`\n[chorale] ⚠ writes were attempted but none succeeded after ${maxRounds} tries\n`);
+          log.info(`\n[chorale] ⚠ writes were attempted but none succeeded after ${maxRounds} tries\n`);
           break;
         }
-        process.stderr.write(`\n[chorale] ⚠ no files were written (tool arguments were empty/invalid) — retrying…\n`);
+        log.info(`\n[chorale] ⚠ no files were written (tool arguments were empty/invalid) — retrying…\n`);
         messages.push({ role: "assistant", content: result.text || "(no files written)" });
         messages.push({
           role: "user",
@@ -382,7 +386,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         if (smoke.length > 0) { issues = smoke; feedback = smokeFeedback(smoke); kind = "runtime (self-heal)"; }
       }
       if (issues.length === 0) {
-        process.stderr.write(
+        log.info(
           round > 0
             ? `\n[chorale] ✓ verified + ran clean after ${round} fix round(s)\n`
             : `\n[chorale] ✓ code verified + ran clean\n`,
@@ -390,11 +394,11 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         break;
       }
       if (isLast) {
-        process.stderr.write(`\n[chorale] ⚠ ${issues.length} ${kind} issue(s) remain after ${maxRounds} rounds\n`);
+        log.info(`\n[chorale] ⚠ ${issues.length} ${kind} issue(s) remain after ${maxRounds} rounds\n`);
         break;
       }
-      process.stderr.write(`\n[chorale] ⚠ ${kind} found ${issues.length} issue(s) — asking the model to fix…\n`);
-      for (const i of issues.slice(0, 6)) process.stderr.write(`    ${i.file}: ${i.message}\n`);
+      log.info(`\n[chorale] ⚠ ${kind} found ${issues.length} issue(s) — asking the model to fix…\n`);
+      for (const i of issues.slice(0, 6)) log.info(`    ${i.file}: ${i.message}\n`);
       messages.push({ role: "assistant", content: result.text || "(wrote files)" });
       messages.push({ role: "user", content: feedback });
       result = await attempt(repairTemp(round));
