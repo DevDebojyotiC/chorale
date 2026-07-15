@@ -1,46 +1,52 @@
 # Chorale
 
-A lean, fully-owned, **model-agnostic** multi-agent system in TypeScript — a local,
-open-source replacement for Claude Desktop. Run **any** LLM (local via Ollama/LM Studio/vLLM,
-or serverless via any OpenAI-compatible / Anthropic / HF / Fireworks endpoint) behind one CLI.
-Claude-compatible skills. MCP-native. CLI-first, UI later.
+A lean, fully-owned, **model-agnostic** multi-agent system in TypeScript — a local, open-source
+replacement for Claude Desktop. Run **any** LLM (local via Ollama/LM Studio/vLLM, or serverless via
+any OpenAI-compatible / Anthropic / HF / Fireworks endpoint) behind one CLI. Claude-compatible
+skills. MCP-native. CLI-first, UI later.
 
-> **Status: Phase 1 complete.** Working today: model-agnostic runtime + per-agent fallback,
-> tool-calling agents, a grounded web **Research** agent (Tavily), Claude-compatible **SKILL.md**
-> skills (progressive disclosure), persistent **sessions** (resume across runs), an **orchestrator**
-> that delegates to specialists, and an **MCP client** (connect any MCP tool server). Next (Phase 2):
-> tool-call-repair, an `ink` CLI renderer, more agents (coder/files), and self-learning. See
-> [`DESIGN.md`](DESIGN.md) for the architecture and [`eval/EVALUATION.md`](eval/EVALUATION.md)
-> for the framework evaluation that shaped it.
+> **Status: Phase 2 complete (v0.2.0).** A production **coder** agent that *compensates for each
+> model's weaknesses* — content-level tool-call salvage, verify-repair, runtime **self-healing**,
+> few-shot steering, and a generalized **diagnose-and-compensate** loop. Model **profiles** +
+> `chorale init`. Evidence-backed model routing (**Gemma-4-31B** default → **gpt-oss-120B** escalation)
+> from a full L1–L10 + real-engineering benchmark suite. Hardened (timeouts/retries, leveled logging +
+> transcripts, secret redaction, delegation guards, cost tracking). See
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/PROJECT-STATE.md`](docs/PROJECT-STATE.md).
 
 ## Quickstart
 
 ```bash
 pnpm install
-cp .env.example .env        # fill in keys for the providers you use (optional for local)
+cp .env.example .env                 # keys for the providers you use (optional for local-only)
+pnpm exec tsx src/index.ts init      # detect your models + keys, generate a tailored profile
+chorale doctor                       # confirm your providers are reachable
+chorale "Explain what a chorale of agents is."
 ```
 
-Point the base model at whatever you run. In `config/chorale.config.json5`:
+Point the base model at whatever you run — `config/chorale.config.json5`:
 
 ```json5
-base: { model: "ollama:llama3.2" }   // or "anthropic:claude-opus-4-8", "fireworks:...", etc.
+base: { model: "ollama:qwen2.5-coder:3b" }   // or "anthropic:claude-opus-4-8", "fireworks:...", "hf:...", etc.
 ```
 
-Then:
+## CLI
 
 ```bash
-pnpm dev "Explain what a chorale of agents is."          # interactive dev run (tsx)
-pnpm build && node dist/index.js "same, via the built binary"
-chorale --agent general --model anthropic:claude-haiku-4-5 "force a specific model"
+chorale "prompt"                       # run a turn (prompt may also be piped: echo "fix X" | chorale)
+chorale --agent coder "build a todo CLI that persists to JSON"
+chorale -m hf:google/gemma-4-31B-it --json "..."   # force a model; structured output
+chorale agents | profiles [name] | sessions [rm <id> | prune] | cost [session] | doctor
 ```
 
-## Offline smoke test (no keys, no local model)
+`--help` for the full reference. Flags: `-a/--agent`, `-m/--model`, `-p/--profile`, `-r/--resume`,
+`-c/--continue`, `--mode|--yolo|--read-only`, `--json`, `-v/--verbose`, `-q/--quiet`.
 
-```bash
-node scripts/mock-openai-server.mjs &                  # tiny OpenAI-compatible mock
-chorale --model mock:test-model "prove the pipeline works"
-pnpm exec tsx scripts/proof.ts                         # full pipeline + fallback-chain proof
-```
+## Recommended models
+
+From the [evaluation](docs/model-evaluation-report.md) + [engineering benchmark](docs/engineering-benchmark-report.md):
+**default heavy tier = `hf:google/gemma-4-31B-it`** (fast, ≈$0, reliable through the coder's compensation
+layer), **escalation = `fireworks:…/gpt-oss-120b`** (cheapest perfect scorer for complex/full-stack work).
+Constrained VRAM: `ollama:qwen2.5-coder:3b`. See [`docs/models-and-hardware.md`](docs/models-and-hardware.md).
 
 ## Add a provider — config only, no code
 
@@ -49,8 +55,8 @@ providers: {
   myproxy: { api: "openai-compatible", baseUrl: "https://host/v1", apiKey: "${MY_TOKEN}" },
 }
 ```
-`openai-compatible` covers Ollama, LM Studio, vLLM, Fireworks, HF router, OpenRouter, Groq,
-DeepSeek, and any other OpenAI-compatible endpoint. `anthropic` is a first-class native provider.
+`openai-compatible` covers Ollama, LM Studio, vLLM, Fireworks, HF router, OpenRouter, Groq, DeepSeek,
+and any other OpenAI-compatible endpoint. `anthropic` is a first-class native provider.
 
 ## Add an agent — one file
 
@@ -58,13 +64,27 @@ Drop `agents/<name>.md`:
 
 ```markdown
 ---
-name: research
-description: Multi-source web research producing cited reports.
-model: ${base}                 # inherit the chorale base, or pin e.g. "anthropic:claude-opus-4-8"
-fallbacks: [ollama:qwen2.5]
-tools: []
+name: coder
+description: Writes, edits, debugs, and runs code in the project directory.
+model: hf:google/gemma-4-31B-it
+fallbacks: [fireworks:accounts/fireworks/models/gpt-oss-120b, ollama:qwen3:4b]
+tier: code
+tools: [read, ls, glob, grep, write, edit, multi_edit, bash]
+verify: true       # syntax verify-repair on written files
+fewShot: true      # inject <name>.examples.md worked patterns
+selfHeal: true     # run written code (boot servers / import modules) and repair failures
 ---
-You are Research, a specialist in rigorous, cited investigation.
+You are Chorale-Coder, a meticulous software engineer…
+```
+
+Agents can also `delegate` to specialists, load Claude-compatible **skills** (`skills/<name>/SKILL.md`),
+and use **MCP** tool servers — all declared in frontmatter.
+
+## Offline smoke test (no keys, no local model)
+
+```bash
+node scripts/mock-openai-server.mjs &                  # tiny OpenAI-compatible mock
+chorale --model mock:test-model "prove the pipeline works"
 ```
 
 ## Scripts
@@ -72,9 +92,9 @@ You are Research, a specialist in rigorous, cited investigation.
 | Command | What it does |
 |---|---|
 | `pnpm dev "<prompt>"` | Run the CLI via tsx (no build) |
-| `pnpm build` | Bundle to `dist/` |
-| `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | Run the vitest suite |
+| `pnpm build` · `pnpm typecheck` · `pnpm test` | Bundle · `tsc --noEmit` · vitest (93 tests) |
 
-## Roadmap
-Phase 0 ✅ · Phase 1 (Research agent, skills, MCP, sessions) → see [`DESIGN.md` §18](DESIGN.md).
+## Docs
+[`ARCHITECTURE`](docs/ARCHITECTURE.md) · [`PROJECT-STATE`](docs/PROJECT-STATE.md) · [`PHASES`](docs/PHASES.md) ·
+[`COMMIT-LOG`](docs/COMMIT-LOG.md) · [`ROADMAP`](docs/ROADMAP.md) · [`model profiles`](docs/model-profiles.md) ·
+[`models & hardware`](docs/models-and-hardware.md) · evaluation reports (MD/HTML/PDF) in [`docs/`](docs/).

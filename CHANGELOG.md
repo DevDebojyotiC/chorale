@@ -5,9 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] — Phase 2
 
-Initial development — Phases 0 and 1. Not yet released.
+A production **coder**, evidence-backed model routing, and a full hardening pass. Per-commit detail: [`docs/COMMIT-LOG.md`](docs/COMMIT-LOG.md); feature history: [`docs/PHASES.md`](docs/PHASES.md).
+
+### Added
+- **Coder agent** with sandboxed file/shell tools, a **verify-repair** loop, content-level **tool-call salvage** (runs calls weak models write as text/JSON/fences), and per-agent tick-boxes `verify` / `fewShot` / `selfHeal` (`selfLearn` reserved for Phase 3).
+- **Runtime self-healing** — boots written servers on an injected `PORT` and smoke-imports modules, feeding runtime failures back into the repair loop.
+- **Diagnose-and-compensate** registry — turns any recognized syntax/runtime error into a targeted "cause + fix" hint (model-agnostic).
+- **Model profiles** (named routing policies) + **`chorale init`** (generate a tailored, tiered profile from your installed models + keys).
+- **Benchmark suite** (ramp, bake-off, real-engineering, full-stack) with self-validated graders + MD/HTML/PDF reports; evidence-backed defaults: **Gemma-4-31B** heavy tier, **gpt-oss-120B** escalation.
+- **CLI**: `agents`, `doctor`, `cost`, `sessions rm/prune`, `--help/--version`, stdin piping, `--json`.
+- **Ops/hardening**: per-request timeout + retry/backoff, context-growth guard, leveled logging + per-session run transcript, secret redaction, delegation cycle guard, per-session token/cost persistence.
+
+### Changed
+- Default heavy tier Qwen2.5-7B → **Gemma-4-31B**; escalation GLM-5.2 → **gpt-oss-120B**.
+- `maxVerifyRounds` 3 → 5; new `requestTimeoutMs` / `maxRetries` config defaults.
+
+## [Unreleased — Phases 0 and 1]
 
 ### Added
 
@@ -23,6 +38,4 @@ Initial development — Phases 0 and 1. Not yet released.
 - **CLI**: `chorale [--agent <name>] [--model <provider:model>] [-c | --resume <id>] "prompt"` and `chorale sessions`.
 - Current-date injection into every agent's system prompt.
 
-See [`DESIGN.md`](DESIGN.md) for the architecture and `ROADMAP` (planned) for what's next.
-
-[Unreleased]: https://example.com/compare/HEAD
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the architecture and [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next.
