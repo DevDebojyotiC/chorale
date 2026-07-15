@@ -5,9 +5,10 @@ replacement for Claude Desktop. Run **any** LLM (local via Ollama/LM Studio/vLLM
 any OpenAI-compatible / Anthropic / HF / Fireworks endpoint) behind one CLI. Claude-compatible
 skills. MCP-native. CLI-first, UI later.
 
-> **Status: Phase 2 complete (v0.2.0).** A production **coder** agent that *compensates for each
-> model's weaknesses* — content-level tool-call salvage, verify-repair, runtime **self-healing**,
-> few-shot steering, and a generalized **diagnose-and-compensate** loop. Model **profiles** +
+> **Status: Phase 3 shipped (v0.2.0); Phase 4 (Core Agents) in progress.** A production **coder** agent
+> that *compensates for each model's weaknesses* — content-level tool-call salvage, verify-repair, runtime
+> **self-healing**, few-shot steering, **self-learning**, and a generalized **diagnose-and-compensate** loop.
+> A **reviewer** agent (structured, calibrated code review). Interactive **`chorale tui`**. Model **profiles** +
 > `chorale init`. Evidence-backed model routing (**Gemma-4-31B** default → **gpt-oss-120B** escalation)
 > from a full L1–L10 + real-engineering benchmark suite. Hardened (timeouts/retries, leveled logging +
 > transcripts, secret redaction, delegation guards, cost tracking). See

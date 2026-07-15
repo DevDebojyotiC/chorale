@@ -5,11 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — Phase 3 (in progress, on branch `phase-3`)
+## [Unreleased] — Phase 3 (shipped) + Phase 4 (in progress, branch `phase-4`)
 
 ### Added
 - **Self-learning (`selfLearn`)** — the coder records fixes from its own successful diagnosed repairs (`data/lessons.sqlite`, per agent) and injects the top proven lessons proactively on future runs. `chorale lessons [agent]` to inspect; `CHORALE_NO_LEARN=1` disables it for reproducible benchmarks. Every `diagnose` rule now carries a stable category key.
 - **Ink TUI (`chorale tui`)** — interactive streaming chat REPL; `runAgent` gained `onToken`/`onEvent` renderer hooks. *(The React/Ink TSX is excluded from `npm run typecheck` due to a native-TS7 compiler crash on React types; it is type-transpiled by `npm run build`.)*
+- **Reviewer agent** (Phase 4, Task 1) — read-only code review that emits severity-tagged findings (`BLOCKER`/`MAJOR`/`MINOR`/`NIT`) with `file:line` + fix + a `VERDICT`; inspection tools only (never mutates), delegable, optional `bash` verification. Planted-defect benchmark (`eval/reviewer-*.ts`): recall 5/5 · precision 1/1 on the ≈$0 default model, with a calibration fix (persona rule + few-shot exemplar) that cured false MAJORs on correct code.
+
+### Changed
+- **Package manager pnpm → npm** — removed the pnpm lockfile/`packageManager` field, pinned deps, and added an `esbuild` override so `npm audit` reports 0 vulnerabilities; CI runs on `npm ci`.
+
+### Fixed
+- **Session recency ordering** — `latestSession`/`listSessions`/`pruneSessions` tie-broke arbitrarily when sessions shared a millisecond `updated_at`; added a monotonic `rowid` secondary sort (resolved a CI-only flake).
 
 ## [0.2.0] — Phase 2
 

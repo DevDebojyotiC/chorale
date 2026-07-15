@@ -3,7 +3,7 @@
 The big and small features, decisions, fixes, and findings per phase — the durable project history.
 Updated at the completion of every phase, before shipping. Per-commit detail lives in [`COMMIT-LOG.md`](COMMIT-LOG.md).
 
-> **Last updated:** Phase 3 in progress (post-v0.2.0).
+> **Last updated:** Phase 4 in progress (reviewer agent landed; post-v0.2.0).
 
 ---
 
@@ -69,8 +69,10 @@ Updated at the completion of every phase, before shipping. Per-commit detail liv
 
 **Scope change:** "more agents" is promoted out of Phase 3 into a dedicated **Phase 4 — Core Agents** (one agent per task, each with its own benchmark). The GUI becomes **Phase 5**, after the roster stabilizes. See [`ROADMAP.md`](ROADMAP.md).
 
-## Phase 4 — Core Agents 🔜 (planned)
-The capability phase: grow the agent roster one agent per task, each shipped with an execution-graded benchmark. Proposed order (by leverage): **1** Reviewer/Verifier · **2** Files/Docs · **3** Planner/Architect · **4** Test-writer · **5** Productivity (email/calendar/notes via MCP) — closing with a larger real-world codebase benchmark. Full rationale in [`ROADMAP.md`](ROADMAP.md).
+## Phase 4 — Core Agents 🔜 (in progress)
+The capability phase: grow the agent roster one agent per task, each shipped with an execution-graded benchmark. Order (by leverage): **1** Reviewer/Verifier · **2** Files/Docs · **3** Planner/Architect · **4** Test-writer · **5** Productivity (email/calendar/notes via MCP) — closing with a larger real-world codebase benchmark. Full rationale in [`ROADMAP.md`](ROADMAP.md).
+
+- **Task 1 — Reviewer** ✅: `reviewer` agent — read-only inspection (`read`/`ls`/`glob`/`grep`) + optional `bash` verification, no write tools (it flags; the coder fixes), delegable. Emits severity-tagged findings (`BLOCKER`/`MAJOR`/`MINOR`/`NIT`) with `file:line` + fix + a `VERDICT`. Benchmarked on planted-defect fixtures (`eval/reviewer-*.ts`): **recall 5/5 defects · precision 1/1 clean**, stable over 3 runs on the ≈$0 default model. A **calibration fix** (persona rule + a `fewShot` exemplar on a *held-out* function) cured a false MAJOR on correct code — precision 0/1 → 1/1 with recall unchanged, by generalization not test-tuning. 105 tests.
 
 ## Phase 5 — GUI (planned)
 A richer desktop/web UI over the same UI-agnostic core (on the `onToken`/`onEvent` hooks), once the Phase-4 roster and APIs are stable.
