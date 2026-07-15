@@ -1,10 +1,11 @@
 ---
 name: coder
 description: Writes, edits, debugs, and runs code in the current project directory.
-# gemma-4-31B beat Qwen2.5-7B 6/6 vs 3/6 on the coder ramp (L1–L6) at ≈$0 and
-# one-shots without repair rounds. Qwen-7B stays as the HF fallback.
+# gemma-4-31B beat Qwen2.5-7B 6/6 vs 3/6 on the coder ramp at ≈$0 and one-shots
+# without repair rounds. Escalation: gpt-oss-120B — cheapest 10/10 on the full
+# L1–L10 ramp (~$0.013). See eval/RAMP-LEADERBOARD.md.
 model: hf:google/gemma-4-31B-it
-fallbacks: [hf:Qwen/Qwen2.5-7B-Instruct, ollama:qwen3:4b]
+fallbacks: [fireworks:accounts/fireworks/models/gpt-oss-120b, hf:Qwen/Qwen2.5-7B-Instruct, ollama:qwen3:4b]
 tier: code
 tools: [read, ls, glob, grep, write, edit, multi_edit, bash]
 verify: true

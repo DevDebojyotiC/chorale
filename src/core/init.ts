@@ -116,10 +116,11 @@ export function recommendTieredProfile(r: Resources): TieredRecommendation {
   const hasLocal = r.ollamaUp && local.length > 0;
   // Preference order for heavy tiers, best-value first. hf:gemma-4-31B is the
   // default: it beat Qwen2.5-7B 6/6 vs 3/6 on the coder ramp at ≈$0 and one-shots
-  // (no repair thrash). glm-5p2 / Claude sit behind it as heavier escalation.
+  // (no repair thrash). gpt-oss-120B is the escalation — the cheapest 10/10 on the
+  // full L1–L10 ramp (~$0.013) and fast. Claude sits last. See eval/RAMP-LEADERBOARD.md.
   const serverChain = [
     r.keys.hf ? "hf:google/gemma-4-31B-it" : undefined,
-    r.keys.fireworks ? "fireworks:accounts/fireworks/models/glm-5p2" : undefined,
+    r.keys.fireworks ? "fireworks:accounts/fireworks/models/gpt-oss-120b" : undefined,
     r.keys.anthropic ? "anthropic:claude-sonnet-5" : undefined,
   ].filter((x): x is string => Boolean(x));
   const serverHeavy = serverChain[0];

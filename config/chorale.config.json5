@@ -24,9 +24,9 @@
     "hybrid-1L-1S": {
       default: "ollama:qwen2.5-coder:3b",
       tiers: {
-        code: "fireworks:accounts/fireworks/models/glm-5p2",
-        research: "fireworks:accounts/fireworks/models/glm-5p2",
-        orchestrator: "fireworks:accounts/fireworks/models/glm-5p2",
+        code: "fireworks:accounts/fireworks/models/gpt-oss-120b",
+        research: "fireworks:accounts/fireworks/models/gpt-oss-120b",
+        orchestrator: "fireworks:accounts/fireworks/models/gpt-oss-120b",
       },
       fallbacks: ["ollama:qwen2.5-coder:3b"],
     },
@@ -35,7 +35,7 @@
     "hybrid-1L-manyS": {
       default: "ollama:qwen2.5-coder:3b",
       tiers: {
-        code: "fireworks:accounts/fireworks/models/glm-5p2",
+        code: "fireworks:accounts/fireworks/models/gpt-oss-120b",
         research: "hf:google/gemma-4-31B-it",
         orchestrator: "fireworks:accounts/fireworks/models/kimi-k2p6",
       },
