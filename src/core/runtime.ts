@@ -1,4 +1,4 @@
-import { streamText, stepCountIs } from "ai";
+import { streamText, stepCountIs, NoSuchToolError } from "ai";
 import type { LanguageModelUsage, ToolSet } from "ai";
 import type { ChoraleConfig } from "./config.js";
 import type { Registry, ModelRef } from "./model-registry.js";
@@ -14,6 +14,9 @@ import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/l
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 import { verifyFiles, verifyFeedback } from "./verify.js";
+
+/** File-mutating tools — used to detect no-op turns from weak models. */
+const WRITE_TOOL_NAMES = new Set(["write", "edit", "multi_edit"]);
 
 export interface RunResult {
   /** The model ref that actually produced the answer. */
@@ -99,8 +102,13 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const system = `Current date: ${today}.\n\n${delegateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}`;
   const messages: ChatMessage[] = [...(opts.history ?? []), { role: "user", content: prompt }];
 
+  // Whether the latest attempt tried to write files — used to detect no-op turns
+  // where a weak model emits write calls with empty/invalid arguments.
+  let sawWriteAttempt = false;
+
   // One pass through the model fallback chain, streaming a single answer.
   const attempt = async (): Promise<RunResult> => {
+    sawWriteAttempt = false;
     let lastError: unknown;
     for (const ref of chain) {
       try {
@@ -114,8 +122,24 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           messages,
           tools,
           stopWhen: stepCountIs(config.defaults.maxSteps),
+          // Recover a doubly-JSON-encoded argument string before it's rejected.
+          // (Empty/irrecoverable args are handled by the no-op retry below.)
+          repairToolCall: async ({ toolCall, error }) => {
+            if (NoSuchToolError.isInstance(error)) return null;
+            const raw = (toolCall as { input?: unknown }).input;
+            if (typeof raw === "string") {
+              try {
+                const once: unknown = JSON.parse(raw);
+                if (typeof once === "string") return { ...toolCall, input: once };
+              } catch {
+                /* not recoverable here */
+              }
+            }
+            return null;
+          },
           onStepFinish: ({ toolCalls }) => {
             for (const call of toolCalls) {
+              if (WRITE_TOOL_NAMES.has(call.toolName)) sawWriteAttempt = true;
               const input = JSON.stringify(call.input);
               const preview = input.length > 140 ? `${input.slice(0, 140)}…` : input;
               process.stderr.write(`\n[tool] ${call.toolName} ${preview}\n`);
@@ -164,7 +188,29 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     if (agent.verify) {
       const maxRounds = config.defaults.maxVerifyRounds;
       for (let round = 0; round < maxRounds; round++) {
-        if (touched.size === 0) break;
+        const isLast = round === maxRounds - 1;
+
+        // No-op turn: the model attempted writes but nothing landed (empty/invalid args).
+        if (sawWriteAttempt && touched.size === 0) {
+          if (isLast) {
+            process.stderr.write(`\n[chorale] ⚠ writes were attempted but none succeeded after ${maxRounds} tries\n`);
+            break;
+          }
+          process.stderr.write(`\n[chorale] ⚠ no files were written (tool arguments were empty/invalid) — retrying with an explicit nudge…\n`);
+          messages.push({ role: "assistant", content: result.text || "(no files written)" });
+          messages.push({
+            role: "user",
+            content:
+              "Your previous write/edit tool call(s) did not take effect — the arguments were missing. " +
+              "Call the write tool AGAIN now with explicit `path` and `content` arguments to actually create the file. " +
+              "Do not describe the file; write it.",
+          });
+          result = await attempt();
+          continue;
+        }
+
+        if (touched.size === 0) break; // genuinely nothing to write (e.g. a question)
+
         const issues = await verifyFiles([...touched], cwd);
         if (issues.length === 0) {
           process.stderr.write(
@@ -174,7 +220,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           );
           break;
         }
-        if (round === maxRounds - 1) {
+        if (isLast) {
           process.stderr.write(`\n[chorale] ⚠ ${issues.length} issue(s) remain after ${maxRounds} verify rounds\n`);
           break;
         }
