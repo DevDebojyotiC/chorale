@@ -15,6 +15,8 @@ export interface ToolContext {
   mode: PermissionMode;
   /** Workspace root; all file operations are confined here. */
   cwd: string;
+  /** If provided, write/edit tools record the (workspace-relative) files they touch here. */
+  touched?: Set<string>;
 }
 
 /** Resolve `p` against the workspace root and refuse if it escapes it. */

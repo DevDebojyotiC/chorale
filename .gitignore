@@ -9,3 +9,6 @@ data/
 # Large evaluation clones — keep the report, not the repos
 eval/hermes-agent/
 eval/openclaw/
+
+# Demo apps built by the coder agent
+demo-todo/

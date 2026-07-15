@@ -2,8 +2,28 @@ import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, extname } from "node:path";
 import { resolveInside, rel, SKIP_DIRS, type ToolContext } from "./permissions.js";
+
+const CODE_EXT = new Set([
+  ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".mts", ".cts",
+  ".html", ".htm", ".css", ".json", ".py", ".java", ".go", ".rs",
+  ".c", ".h", ".cpp", ".rb", ".php", ".sh", ".yml", ".yaml",
+]);
+
+/**
+ * Source-side tool-arg repair: some models emit an entire file as a single line
+ * with literal "\n" escapes instead of real newlines. When the content is a code
+ * file with NO real newlines but literal "\n" sequences, unescape it. (The mixed
+ * case is handled downstream by the verify-repair loop.)
+ */
+function normalizeCodeContent(path: string, content: string): string {
+  if (!CODE_EXT.has(extname(path).toLowerCase())) return content;
+  if (!content.includes("\n") && /\\n/.test(content)) {
+    return content.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+  }
+  return content;
+}
 
 const READ_MAX = 30000;
 const GLOB_MAX = 200;
@@ -75,9 +95,11 @@ export function createFileTools(ctx: ToolContext): ToolSet {
     execute: async ({ path, content }) => {
       try {
         const abs = resolveInside(cwd, path);
+        const normalized = normalizeCodeContent(path, content);
         mkdirSync(dirname(abs), { recursive: true });
-        writeFileSync(abs, content, "utf8");
-        return { path: rel(cwd, abs), bytes: Buffer.byteLength(content) };
+        writeFileSync(abs, normalized, "utf8");
+        ctx.touched?.add(rel(cwd, abs));
+        return { path: rel(cwd, abs), bytes: Buffer.byteLength(normalized) };
       } catch (e) {
         return { error: e instanceof Error ? e.message : String(e) };
       }
@@ -108,6 +130,7 @@ export function createFileTools(ctx: ToolContext): ToolSet {
       try {
         const abs = resolveInside(cwd, path);
         applyEdits(abs, [{ old_string, new_string, replace_all }]);
+        ctx.touched?.add(rel(cwd, abs));
         return { path: rel(cwd, abs), ok: true };
       } catch (e) {
         return { error: e instanceof Error ? e.message : String(e) };
@@ -125,6 +148,7 @@ export function createFileTools(ctx: ToolContext): ToolSet {
       try {
         const abs = resolveInside(cwd, path);
         applyEdits(abs, edits);
+        ctx.touched?.add(rel(cwd, abs));
         return { path: rel(cwd, abs), edits: edits.length, ok: true };
       } catch (e) {
         return { error: e instanceof Error ? e.message : String(e) };

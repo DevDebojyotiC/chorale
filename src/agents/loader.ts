@@ -16,6 +16,8 @@ export interface AgentSpec {
   delegable: boolean;
   /** MCP server names (from config.mcp.servers) whose tools this agent may use. */
   mcp: string[];
+  /** Enable the automatic verify-repair loop on files this agent writes (default false). */
+  verify: boolean;
   system: string;
 }
 
@@ -34,6 +36,7 @@ export function loadAgent(filePath: string): AgentSpec {
     skills: Array.isArray(data.skills) ? data.skills.map(String) : [],
     delegable: data.delegable !== false,
     mcp: Array.isArray(data.mcp) ? data.mcp.map(String) : [],
+    verify: data.verify === true,
     system: content.trim(),
   };
 }

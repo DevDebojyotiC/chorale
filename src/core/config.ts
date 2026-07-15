@@ -50,8 +50,9 @@ const ChoraleConfigSchema = z.object({
     .object({
       maxSteps: z.number().int().positive().default(8),
       maxDelegationDepth: z.number().int().min(1).max(5).default(2),
+      maxVerifyRounds: z.number().int().min(1).max(6).default(3),
     })
-    .default({ maxSteps: 8, maxDelegationDepth: 2 }),
+    .default({ maxSteps: 8, maxDelegationDepth: 2, maxVerifyRounds: 3 }),
 });
 
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;

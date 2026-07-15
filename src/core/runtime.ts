@@ -13,6 +13,7 @@ import { createDelegateTool } from "../tools/delegate.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
+import { verifyFiles, verifyFeedback } from "./verify.js";
 
 export interface RunResult {
   /** The model ref that actually produced the answer. */
@@ -64,8 +65,11 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const agentSkills = selectSkills(discoverSkills(config.skills.dirs), agent.skills);
   const mcp = await connectMcpServers(config, agent.mcp);
   const permissionMode: PermissionMode = opts.permissionMode ?? config.permissions.mode;
+  const cwd = process.cwd();
+  // Files the agent writes this run — fed to the verify-repair loop.
+  const touched = new Set<string>();
   const tools: ToolSet = {
-    ...buildToolSet(agent.tools, { mode: permissionMode, cwd: process.cwd() }),
+    ...buildToolSet(agent.tools, { mode: permissionMode, cwd, touched }),
     ...mcp.tools,
   };
   if (agentSkills.length > 0) tools.skill_view = createSkillViewTool(agentSkills);
@@ -95,7 +99,8 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const system = `Current date: ${today}.\n\n${delegateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}`;
   const messages: ChatMessage[] = [...(opts.history ?? []), { role: "user", content: prompt }];
 
-  try {
+  // One pass through the model fallback chain, streaming a single answer.
+  const attempt = async (): Promise<RunResult> => {
     let lastError: unknown;
     for (const ref of chain) {
       try {
@@ -145,9 +150,43 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         }
       }
     }
-
     const last = lastError instanceof Error ? lastError.message : String(lastError);
     throw new Error(`All models in the fallback chain failed (${chain.join(", ")}). Last error: ${last}`);
+  };
+
+  try {
+    let result = await attempt();
+
+    // Verify-repair loop: for agents with `verify: true`, syntax-check every file
+    // written this run and feed failures back to the model to self-correct, until
+    // the code is valid or we exhaust the round budget. This is what lets even a
+    // small model reliably ship working code.
+    if (agent.verify) {
+      const maxRounds = config.defaults.maxVerifyRounds;
+      for (let round = 0; round < maxRounds; round++) {
+        if (touched.size === 0) break;
+        const issues = await verifyFiles([...touched], cwd);
+        if (issues.length === 0) {
+          process.stderr.write(
+            round > 0
+              ? `\n[chorale] ✓ verification passed after ${round} fix round(s)\n`
+              : `\n[chorale] ✓ code verified clean\n`,
+          );
+          break;
+        }
+        if (round === maxRounds - 1) {
+          process.stderr.write(`\n[chorale] ⚠ ${issues.length} issue(s) remain after ${maxRounds} verify rounds\n`);
+          break;
+        }
+        process.stderr.write(`\n[chorale] ⚠ verification found ${issues.length} issue(s) — asking the model to fix…\n`);
+        for (const i of issues.slice(0, 6)) process.stderr.write(`    ${i.file}: ${i.message}\n`);
+        messages.push({ role: "assistant", content: result.text || "(wrote files)" });
+        messages.push({ role: "user", content: verifyFeedback(issues) });
+        result = await attempt();
+      }
+    }
+
+    return result;
   } finally {
     await mcp.close();
   }

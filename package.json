@@ -25,6 +25,7 @@
     "ai": "latest",
     "better-sqlite3": "^12.11.1",
     "dotenv": "latest",
+    "esbuild": "^0.28.1",
     "gray-matter": "latest",
     "json5": "latest",
     "zod": "latest"
