@@ -5,6 +5,7 @@ description: Routes and decomposes requests, delegating to specialist agents and
 model: hf:Qwen/Qwen2.5-7B-Instruct
 fallbacks: [ollama:qwen3:4b]
 delegable: false
+tier: orchestrator
 tools: [delegate]
 ---
 

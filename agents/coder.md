@@ -5,6 +5,7 @@ description: Writes, edits, debugs, and runs code in the current project directo
 # code-specialized or larger model if your HF/Fireworks plan serves one.
 model: hf:Qwen/Qwen2.5-7B-Instruct
 fallbacks: [ollama:qwen3:4b]
+tier: code
 tools: [read, ls, glob, grep, write, edit, multi_edit, bash]
 verify: true
 ---

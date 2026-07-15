@@ -14,11 +14,28 @@ const ProviderConfigSchema = z.object({
   extraBody: z.record(z.string(), z.unknown()).optional(),
 });
 
+/** A model profile: a named agent→model routing policy. See docs/model-profiles.md. */
+const ProfileSchema = z.object({
+  description: z.string().optional(),
+  /** Catch-all model for any agent not otherwise mapped. */
+  default: z.string().optional(),
+  /** Map agent tier (role) → model. */
+  tiers: z.record(z.string(), z.string()).optional(),
+  /** Per-agent model override (highest within the profile). */
+  agents: z.record(z.string(), z.string()).optional(),
+  /** Profile-wide fallback chain, appended after agent + base fallbacks. */
+  fallbacks: z.array(z.string()).optional(),
+});
+
 const ChoraleConfigSchema = z.object({
   base: z.object({
     model: z.string(),
     fallbacks: z.array(z.string()).default([]),
   }),
+  /** Name of the active profile in `profiles` (unset = per-agent.md routing). */
+  activeProfile: z.string().optional(),
+  /** Named model-routing profiles. */
+  profiles: z.record(z.string(), ProfileSchema).optional(),
   providers: z.record(z.string(), ProviderConfigSchema),
   agents: z.object({
     dir: z.string().default("agents"),
@@ -58,6 +75,7 @@ const ChoraleConfigSchema = z.object({
 });
 
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
+export type Profile = z.infer<typeof ProfileSchema>;
 export type ChoraleConfig = z.infer<typeof ChoraleConfigSchema>;
 
 const ENV_RE = /\$\{([A-Z0-9_]+)\}/g;

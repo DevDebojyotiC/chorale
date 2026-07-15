@@ -2,7 +2,7 @@ import { streamText, stepCountIs, NoSuchToolError } from "ai";
 import type { LanguageModelUsage, ToolSet } from "ai";
 import type { ChoraleConfig } from "./config.js";
 import type { Registry, ModelRef } from "./model-registry.js";
-import { resolveRef } from "./model-registry.js";
+import { resolveModelPlan } from "./model-policy.js";
 import type { AgentSpec } from "../agents/loader.js";
 import type { ChatMessage } from "./session.js";
 import { listAgents } from "../agents/loader.js";
@@ -80,6 +80,8 @@ export interface RunOptions {
   permissionMode?: PermissionMode;
   /** Force a specific "<provider>:<model>", overriding the agent's model. */
   modelOverride?: string;
+  /** Active model profile name (overrides config.activeProfile for this run). */
+  profile?: string;
   /** Stream tokens to stdout as they arrive (default true). */
   stream?: boolean;
 }
@@ -94,15 +96,8 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const { config, registry, agent, prompt, modelOverride } = opts;
   const stream = opts.stream ?? true;
 
-  const rawChain = [
-    modelOverride,
-    agent.model,
-    ...agent.fallbacks,
-    ...config.base.fallbacks,
-    config.base.model,
-  ].filter((ref): ref is string => Boolean(ref));
-
-  const chain = [...new Set(rawChain.map((ref) => resolveRef(ref, config)))];
+  const plan = resolveModelPlan(agent, config, modelOverride, opts.profile);
+  const chain = [plan.model, ...plan.fallbacks];
 
   // Assemble tools: the agent's built-in tool allow-list, plus skill_view when
   // the agent has skills. Skills use progressive disclosure — only their

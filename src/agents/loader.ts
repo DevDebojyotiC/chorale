@@ -18,6 +18,8 @@ export interface AgentSpec {
   mcp: string[];
   /** Enable the automatic verify-repair loop on files this agent writes (default false). */
   verify: boolean;
+  /** Agent role, used by model profiles to route by tier (e.g. code, research, chat). */
+  tier: string | undefined;
   system: string;
 }
 
@@ -37,6 +39,7 @@ export function loadAgent(filePath: string): AgentSpec {
     delegable: data.delegable !== false,
     mcp: Array.isArray(data.mcp) ? data.mcp.map(String) : [],
     verify: data.verify === true,
+    tier: data.tier ? String(data.tier) : undefined,
     system: content.trim(),
   };
 }

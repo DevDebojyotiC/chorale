@@ -6,7 +6,7 @@ import { loadAgent } from "../src/agents/loader";
 describe("Phase 0 — config & registry", () => {
   it("loads and validates the chorale config", () => {
     const config = loadConfig();
-    expect(config.base.model).toBe("ollama:qwen3:4b");
+    expect(config.base.model).toBe("ollama:qwen2.5-coder:3b");
     expect(config.providers).toHaveProperty("ollama");
     expect(config.providers).toHaveProperty("anthropic");
     expect(config.providers.ollama?.api).toBe("openai-compatible");
@@ -14,7 +14,7 @@ describe("Phase 0 — config & registry", () => {
 
   it("resolves the ${base} sentinel to the base model", () => {
     const config = loadConfig();
-    expect(resolveRef("${base}", config)).toBe("ollama:qwen3:4b");
+    expect(resolveRef("${base}", config)).toBe("ollama:qwen2.5-coder:3b");
     expect(resolveRef("anthropic:claude-opus-4-8", config)).toBe("anthropic:claude-opus-4-8");
   });
 

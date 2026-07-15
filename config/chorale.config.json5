@@ -2,10 +2,48 @@
   // The chorale's base model + fallback chain. Any agent that doesn't
   // declare its own model inherits `base.model`. Format: "<provider>:<model>".
   base: {
-    // Local Qwen3 4B (Q4) — supports native tool-calling + thinking. Fits ~4GB VRAM.
-    // Add a serverless fallback (e.g. "fireworks:...") once you have a key for heavy agent work.
-    model: "ollama:qwen3:4b",
+    // Qwen2.5-Coder 3B (Q4, ~1.9GB) — fits and stays fast on 4GB VRAM.
+    model: "ollama:qwen2.5-coder:3b",
     fallbacks: [],
+  },
+
+  // Model profiles: named agent→model routing policies. Set `activeProfile` to switch.
+  // Unset = per-agent.md routing (backward compatible). See docs/model-profiles.md.
+  // activeProfile: "local-single",
+  profiles: {
+    // 1. Local Single — one model, zero swapping (best for tight VRAM).
+    "local-single": { default: "ollama:qwen2.5-coder:3b" },
+
+    // 2. Local Varied — different local models per role (accepts reload latency).
+    "local-varied": {
+      default: "ollama:qwen2.5-coder:3b",
+      tiers: { code: "ollama:qwen2.5-coder:3b", research: "ollama:llama3.2:3b", chat: "ollama:qwen2.5:3b" },
+    },
+
+    // 3. Hybrid 1 local + 1 serverless — local for light work, one serverless for heavy.
+    "hybrid-1L-1S": {
+      default: "ollama:qwen2.5-coder:3b",
+      tiers: {
+        code: "fireworks:accounts/fireworks/models/glm-5p2",
+        research: "fireworks:accounts/fireworks/models/glm-5p2",
+        orchestrator: "fireworks:accounts/fireworks/models/glm-5p2",
+      },
+      fallbacks: ["ollama:qwen2.5-coder:3b"],
+    },
+
+    // 4. Hybrid 1 local + many serverless — a specialist per role.
+    "hybrid-1L-manyS": {
+      default: "ollama:qwen2.5-coder:3b",
+      tiers: {
+        code: "fireworks:accounts/fireworks/models/glm-5p2",
+        research: "hf:Qwen/Qwen2.5-7B-Instruct",
+        orchestrator: "fireworks:accounts/fireworks/models/kimi-k2p6",
+      },
+      fallbacks: ["ollama:qwen2.5-coder:3b"],
+    },
+
+    // 5. Custom — empty profile: each agent.md's own model wins.
+    custom: {},
   },
 
   // Every provider is just config. `openai-compatible` is the universal catch-all:

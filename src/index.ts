@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 import "dotenv/config";
-import { resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
 import { loadConfig } from "./core/config.js";
-import { buildRegistry, resolveRef } from "./core/model-registry.js";
+import type { ChoraleConfig } from "./core/config.js";
+import { buildRegistry } from "./core/model-registry.js";
+import { resolveModelPlan } from "./core/model-policy.js";
 import { loadAgent } from "./agents/loader.js";
+import type { AgentSpec } from "./agents/loader.js";
 import { runAgent } from "./core/runtime.js";
 import { SessionStore } from "./core/session.js";
 import type { ChatMessage } from "./core/session.js";
@@ -16,6 +19,7 @@ interface CliArgs {
   resume?: string;
   continueLatest: boolean;
   permissionMode?: PermissionMode;
+  profile?: string;
   prompt: string;
 }
 
@@ -25,6 +29,7 @@ function parseArgs(argv: string[]): CliArgs {
   let resume: string | undefined;
   let continueLatest = false;
   let permissionMode: PermissionMode | undefined;
+  let profile: string | undefined;
   const rest: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -33,6 +38,7 @@ function parseArgs(argv: string[]): CliArgs {
     else if (arg === "--model" || arg === "-m") model = argv[++i];
     else if (arg === "--resume" || arg === "-r") resume = argv[++i];
     else if (arg === "--continue" || arg === "-c") continueLatest = true;
+    else if (arg === "--profile" || arg === "-p") profile = argv[++i];
     else if (arg === "--yolo") permissionMode = "full-auto";
     else if (arg === "--read-only" || arg === "--plan") permissionMode = "read-only";
     else if (arg === "--mode") {
@@ -40,7 +46,52 @@ function parseArgs(argv: string[]): CliArgs {
       if (m === "read-only" || m === "auto-edit" || m === "full-auto") permissionMode = m;
     } else if (arg !== undefined) rest.push(arg);
   }
-  return { agent, model, resume, continueLatest, permissionMode, prompt: rest.join(" ").trim() };
+  return { agent, model, resume, continueLatest, permissionMode, profile, prompt: rest.join(" ").trim() };
+}
+
+/** Load every agent spec in the agents dir (best-effort). */
+function loadAllAgents(dir: string): AgentSpec[] {
+  const specs: AgentSpec[] = [];
+  let files: string[];
+  try {
+    files = readdirSync(dir);
+  } catch {
+    return specs;
+  }
+  for (const f of files) {
+    if (!f.endsWith(".md")) continue;
+    try {
+      specs.push(loadAgent(join(dir, f)));
+    } catch {
+      /* skip malformed */
+    }
+  }
+  return specs;
+}
+
+/** Print each profile and the agent→model table it produces. */
+function printProfiles(config: ChoraleConfig, only?: string): void {
+  const profiles = config.profiles ?? {};
+  const names = Object.keys(profiles);
+  process.stderr.write(`Active profile: ${config.activeProfile ?? "(none — per-agent.md routing)"}\n\n`);
+  if (names.length === 0) {
+    process.stderr.write("No profiles defined. Agents use their agent.md model + the base fallback.\n");
+    return;
+  }
+  if (only && !profiles[only]) {
+    process.stderr.write(`Profile "${only}" not found. Available: ${names.join(", ")}\n`);
+    return;
+  }
+  const specs = loadAllAgents(config.agents.dir);
+  for (const name of only ? [only] : names) {
+    const p = profiles[name]!;
+    process.stderr.write(`▸ ${name}${name === config.activeProfile ? " (active)" : ""}${p.description ? ` — ${p.description}` : ""}\n`);
+    for (const spec of specs) {
+      const plan = resolveModelPlan(spec, config, undefined, name);
+      process.stderr.write(`    ${spec.name.padEnd(14)}${spec.tier ? ` [${spec.tier}]` : ""} → ${plan.model}\n`);
+    }
+    process.stderr.write("\n");
+  }
 }
 
 function printSessions(store: SessionStore): void {
@@ -66,11 +117,16 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (argv[0] === "profiles") {
+    printProfiles(loadConfig(), argv[1]);
+    return;
+  }
+
   const args = parseArgs(argv);
   if (!args.prompt) {
     process.stderr.write(
-      'Usage: chorale [--agent <name>] [--model <provider:model>] [--resume <id> | -c] "your prompt"\n' +
-        "       chorale sessions\n",
+      'Usage: chorale [--agent <name>] [--model <provider:model>] [--profile <name>] [--resume <id> | -c] "your prompt"\n' +
+        "       chorale sessions   ·   chorale profiles [name]\n",
     );
     process.exit(1);
   }
@@ -114,9 +170,10 @@ async function main(): Promise<void> {
   const agent = loadAgent(file);
   if (!sessionId) sessionId = store.createSession(agent.name);
 
-  const activeModel = resolveRef(args.model ?? agent.model, config);
+  const activeModel = resolveModelPlan(agent, config, args.model, args.profile).model;
+  const profileNote = (args.profile ?? config.activeProfile) ? ` profile=${args.profile ?? config.activeProfile}` : "";
   const priorNote = history.length > 0 ? ` (${history.length} prior msgs)` : "";
-  process.stderr.write(`[chorale] agent=${agent.name} model=${activeModel} session=${sessionId}${priorNote}\n\n`);
+  process.stderr.write(`[chorale] agent=${agent.name} model=${activeModel}${profileNote} session=${sessionId}${priorNote}\n\n`);
 
   store.appendMessage(sessionId, "user", args.prompt);
   const result = await runAgent({
@@ -127,6 +184,7 @@ async function main(): Promise<void> {
     history,
     modelOverride: args.model,
     permissionMode: args.permissionMode,
+    profile: args.profile,
   });
   store.appendMessage(sessionId, "assistant", result.text, result.model);
 
