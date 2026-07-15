@@ -24,6 +24,8 @@ import { runAgent } from "../src/core/runtime.js";
 const rawArgs = process.argv.slice(2);
 const onlyArg = rawArgs.find((x) => x.startsWith("--only="));
 const ONLY = onlyArg ? onlyArg.slice("--only=".length).split(",") : null;
+const repeatArg = rawArgs.find((x) => x.startsWith("--repeat="));
+const REPEAT = repeatArg ? Math.max(1, Number(repeatArg.slice("--repeat=".length)) || 1) : 1;
 const modelArgs = rawArgs.filter((x) => !x.startsWith("--"));
 const MODELS = modelArgs.length
   ? modelArgs
@@ -337,6 +339,50 @@ const projects = ONLY ? PROJECTS.filter((p) => ONLY.includes(p.id)) : PROJECTS;
 process.stdout.write(`\n########## REAL-ENGINEERING BENCHMARK ##########\n`);
 process.stdout.write(`Projects: ${projects.map((p) => p.id).join(", ")}\nModels: ${MODELS.join(", ")}\n`);
 
+interface RunResult2 { grade: Grade; secs: number; inTok: number; outTok: number }
+async function runOnce(model: string, proj: Project): Promise<RunResult2> {
+  const ws = mkdtempSync(join(tmpdir(), `chorale-proj-${proj.id}-`));
+  if (proj.setup) proj.setup(ws);
+  const t0 = Date.now();
+  let grade: Grade = { passed: 0, total: 1, fails: ["did not run"] };
+  let inTok = 0, outTok = 0;
+  try {
+    process.chdir(ws);
+    const res = await raceTimeout(
+      runAgent({ config, registry, agent: coder, prompt: proj.prompt, modelOverride: model, permissionMode: "full-auto", stream: false, maxSteps: proj.maxSteps }),
+      HARD_TIMEOUT_MS,
+    );
+    process.chdir(repoRoot);
+    if (res !== "TIMEOUT") { inTok = res.usage?.inputTokens ?? 0; outTok = res.usage?.outputTokens ?? 0; }
+    grade = res === "TIMEOUT" ? { passed: 0, total: 1, fails: ["TIMEOUT"] } : await proj.grade(ws);
+  } catch (e) {
+    process.chdir(repoRoot);
+    grade = { passed: 0, total: 1, fails: ["harness error: " + (e instanceof Error ? e.message : String(e))] };
+  } finally {
+    try { rmSync(ws, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+  return { grade, secs: Math.round((Date.now() - t0) / 1000), inTok, outTok };
+}
+
+// Repeat mode: run each model×project REPEAT times and report a reliability distribution.
+if (REPEAT > 1) {
+  for (const model of MODELS) {
+    process.stdout.write(`\n===== ${model.replace(/.*\//, "")} (×${REPEAT}) =====\n`);
+    for (const proj of projects) {
+      let fullPass = 0, sumP = 0, sumT = 0, sumSecs = 0;
+      for (let k = 1; k <= REPEAT; k++) {
+        const r = await runOnce(model, proj);
+        const ok = r.grade.passed === r.grade.total;
+        if (ok) fullPass += 1;
+        sumP += r.grade.passed; sumT += r.grade.total; sumSecs += r.secs;
+        process.stdout.write(`  ${proj.id} #${String(k).padStart(2)}  ${r.grade.passed}/${r.grade.total}  (${r.secs}s)${ok ? "" : "  ✗ " + r.grade.fails.slice(0, 2).join(" | ").slice(0, 120)}\n`);
+      }
+      process.stdout.write(`  → ${proj.id}: FULL-PASS ${fullPass}/${REPEAT} trials · mean ${Math.round((sumP / sumT) * 100)}% · avg ${Math.round(sumSecs / REPEAT)}s\n`);
+    }
+  }
+  process.exit(0);
+}
+
 interface Row { model: string; cells: Record<string, Grade>; inTok: number; outTok: number; secs: number }
 const rows: Row[] = [];
 
@@ -344,30 +390,11 @@ for (const model of MODELS) {
   process.stdout.write(`\n===== ${model.replace(/.*\//, "")} =====\n`);
   const row: Row = { model, cells: {}, inTok: 0, outTok: 0, secs: 0 };
   for (const proj of projects) {
-    const ws = mkdtempSync(join(tmpdir(), `chorale-proj-${proj.id}-`));
-    if (proj.setup) proj.setup(ws);
-    const t0 = Date.now();
-    let grade: Grade = { passed: 0, total: 1, fails: ["did not run"] };
-    try {
-      process.chdir(ws);
-      const res = await raceTimeout(
-        runAgent({ config, registry, agent: coder, prompt: proj.prompt, modelOverride: model, permissionMode: "full-auto", stream: false, maxSteps: proj.maxSteps }),
-        HARD_TIMEOUT_MS,
-      );
-      process.chdir(repoRoot);
-      if (res !== "TIMEOUT") { row.inTok += res.usage?.inputTokens ?? 0; row.outTok += res.usage?.outputTokens ?? 0; }
-      grade = res === "TIMEOUT" ? { passed: 0, total: 1, fails: ["TIMEOUT"] } : await proj.grade(ws);
-    } catch (e) {
-      process.chdir(repoRoot);
-      grade = { passed: 0, total: 1, fails: ["harness error: " + (e instanceof Error ? e.message : String(e))] };
-    } finally {
-      try { rmSync(ws, { recursive: true, force: true }); } catch { /* ignore */ }
-    }
-    const secs = Math.round((Date.now() - t0) / 1000);
-    row.secs += secs;
-    row.cells[proj.id] = grade;
-    const pct = Math.round((grade.passed / grade.total) * 100);
-    process.stdout.write(`  ${proj.id.padEnd(9)} ${grade.passed}/${grade.total}  (${pct}%, ${secs}s)${grade.fails.length ? "  ✗ " + grade.fails.slice(0, 3).join(" | ").slice(0, 160) : ""}\n`);
+    const r = await runOnce(model, proj);
+    row.secs += r.secs; row.inTok += r.inTok; row.outTok += r.outTok;
+    row.cells[proj.id] = r.grade;
+    const pct = Math.round((r.grade.passed / r.grade.total) * 100);
+    process.stdout.write(`  ${proj.id.padEnd(9)} ${r.grade.passed}/${r.grade.total}  (${pct}%, ${r.secs}s)${r.grade.fails.length ? "  ✗ " + r.grade.fails.slice(0, 3).join(" | ").slice(0, 160) : ""}\n`);
   }
   rows.push(row);
 }

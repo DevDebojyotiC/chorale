@@ -125,4 +125,19 @@ Harness: [`eval/coder-projects.ts`](../eval/coder-projects.ts) · Grader self-te
 
 ---
 
+## 11. Appendix — Can Prompting Fix Gemma's Full-Stack Lapse?
+
+Gemma's full-stack failures all shared one root cause: it hardcoded the port instead of reading `process.env.PORT`, so the grader's spawned server never came up. Two mechanisms could plausibly address it — **content-level salvage** (post-process the output) or **meta-prompting** (steer the model). Salvage was rejected as the wrong tool: a regex that rewrites `.listen(3000)` is brittle (misses `const P = 3000` and framework variants), risky (fixed ports are sometimes intentional), and would overfit to this one benchmark. Meta-prompting was tested properly.
+
+A general **operational-correctness rule** was added to `agents/coder.md` (honor the interface contract literally; never hardcode a value the task said to make configurable; read ports/paths from the environment; re-check the contract before finishing) — general craft guidance that applies to every model and task, not a patch aimed at the port bug. Then the full-stack task was run **10× before and 10× after** (Gemma is free on HF):
+
+| Condition | Full-pass | Mean | Failure mode |
+|-----------|:---------:|:----:|--------------|
+| Baseline (current prompt) | 7/10 | 70% | hardcoded port × 3 |
+| + operational-correctness rule | 8/10 | 80% | hardcoded port × 2 |
+
+**A one-run difference over ten is within noise — not evidence of a real fix.** Even with a rule that explicitly says "read `process.env.PORT`, never hardcode," *and* the task prompt already stating the same, Gemma still hardcoded the port in ~20% of runs. This is an instruction-*following* lapse, and prompting nudges it at best. The rule was kept — it is sound general guidance that can only help across operational tasks — but the honest conclusion is that **neither salvage nor meta-prompting makes Gemma reliable for unattended full-stack work.** The dependable fix is the architecture already in place: **escalate to gpt-oss-120B for complex/critical builds** (a perfect record here). This experiment confirms that decision rather than replacing it.
+
+---
+
 *Chorale is a personal, open-source, model-agnostic multi-agent system. Measurements were taken through its production coder pipeline; numbers will shift as models, prices, and the pipeline evolve.*

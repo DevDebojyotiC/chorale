@@ -197,6 +197,19 @@ pnpm exec tsx eval/coder-projects.ts --only=framework,store,fullstack</code></pr
 <p class="note">Harness: <code>eval/coder-projects.ts</code> · Grader self-test: <code>eval/projects-selftest.ts</code> · Reference solutions: <code>eval/projects/_ref/</code></p>
 </div>
 
+<div class="section">
+<h2><span class="n">9</span> Appendix — Can Prompting Fix Gemma's Full-Stack Lapse?</h2>
+<p>Gemma's full-stack failures shared one root cause: it hardcoded the port instead of reading <code>process.env.PORT</code>, so the spawned server never came up. Two fixes were considered. <strong>Content-level salvage</strong> was rejected as the wrong tool — a regex rewriting <code>.listen(3000)</code> is brittle (misses <code>const P = 3000</code> and framework variants), risky (fixed ports are sometimes intentional), and would overfit to this one benchmark. <strong>Meta-prompting</strong> was tested properly: a general operational-correctness rule was added to <code>coder.md</code> (honor the interface contract literally; never hardcode a configurable value; read ports/paths from the environment; re-check before finishing), then the full-stack task was run <strong>10× before and 10× after</strong>.</p>
+<table>
+  <thead><tr><th>Condition</th><th class="c">Full-pass</th><th class="c">Mean</th><th>Failure mode</th></tr></thead>
+  <tbody>
+    <tr><td>Baseline (current prompt)</td><td class="c">7/10</td><td class="c">70%</td><td>hardcoded port × 3</td></tr>
+    <tr><td>+ operational-correctness rule</td><td class="c">8/10</td><td class="c">80%</td><td>hardcoded port × 2</td></tr>
+  </tbody>
+</table>
+<p><strong>A one-run difference over ten is within noise — not evidence of a real fix.</strong> Even with a rule that explicitly says "read <code>process.env.PORT</code>, never hardcode," and the task prompt already stating the same, Gemma still hardcoded the port in ~20% of runs — an instruction-<em>following</em> lapse that prompting nudges at best. The rule was kept (sound general guidance), but neither salvage nor meta-prompting makes Gemma reliable for unattended full-stack work. The dependable fix is the architecture already in place: <strong>escalate to gpt-oss-120B for complex/critical builds.</strong> This experiment confirms that decision rather than replacing it.</p>
+</div>
+
 <div class="foot">Chorale is a personal, open-source, model-agnostic multi-agent system. Measurements were taken through its production coder pipeline; numbers will shift as models, prices, and the pipeline evolve. Generated from docs/engineering-benchmark-report.md.</div>
 
 </body>
