@@ -4,7 +4,7 @@ import readline from "node:readline";
 import { resolve, join } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
 import { loadConfig } from "./core/config.js";
-import { detectResources, recommendProfile, missingLocalModels, setActiveProfile } from "./core/init.js";
+import { detectResources, recommendTieredProfile, writeGeneratedProfile, setActiveProfile } from "./core/init.js";
 import type { ChoraleConfig } from "./core/config.js";
 import { buildRegistry } from "./core/model-registry.js";
 import { resolveModelPlan } from "./core/model-policy.js";
@@ -109,32 +109,34 @@ function printSessions(store: SessionStore): void {
   process.stderr.write(`\nResume:  chorale --resume <id> "..."   ·   latest:  chorale -c "..."\n`);
 }
 
-/** `chorale init` — detect models + keys, recommend a profile, and (optionally) apply it. */
+/** `chorale init` — detect models + keys, generate a tailored profile, and (optionally) apply it. */
 async function runInit(auto: boolean): Promise<void> {
   const config = loadConfig();
   const res = await detectResources(config);
-  const rec = recommendProfile(res);
+  const rec = recommendTieredProfile(res);
 
   process.stderr.write("Chorale setup\n\n");
-  process.stderr.write(
-    `  Ollama: ${res.ollamaUp ? `running — ${res.ollamaModels.length ? res.ollamaModels.join(", ") : "no models"}` : "not running"}\n`,
-  );
+  process.stderr.write(`  Ollama: ${res.ollamaUp ? (res.ollamaModels.join(", ") || "no models") : "not running"}\n`);
   const keyList = Object.entries(res.keys).filter(([, v]) => v).map(([k]) => k);
   process.stderr.write(`  API keys: ${keyList.length ? keyList.join(", ") : "none"}\n\n`);
-  process.stderr.write(`  Recommended profile: ${rec.profile}\n    ${rec.reason}\n`);
-  if (rec.localModel) process.stderr.write(`    local model: ${rec.localModel}\n`);
-  const missing = missingLocalModels(config, rec.profile, res.ollamaModels);
-  if (missing.length) {
-    process.stderr.write(`    ⚠ references local models you don't have: ${missing.join(", ")}\n`);
-    process.stderr.write(`      (pull with 'ollama pull <name>' or edit the profile's model refs)\n`);
+  process.stderr.write(`  Recommended mode: ${rec.mode}\n\n`);
+  process.stderr.write(`  Generated profile "recommended":\n`);
+  process.stderr.write(`    default${" ".repeat(9)}→ ${rec.profile.default}\n`);
+  for (const [tier, model] of Object.entries(rec.profile.tiers ?? {})) {
+    process.stderr.write(`    ${tier.padEnd(14)}→ ${model}\n`);
+  }
+  if (rec.pulls.length) {
+    process.stderr.write(`\n  Optional — better per-tier local models:\n`);
+    for (const p of rec.pulls) process.stderr.write(`    ollama pull ${p}\n`);
   }
   process.stderr.write("\n");
 
   const configPath = resolve("config/chorale.config.json5");
   const apply = () => {
-    setActiveProfile(configPath, rec.profile);
-    process.stderr.write(`✓ Set activeProfile = "${rec.profile}".\n`);
-    process.stderr.write(`  Inspect it:  chorale profiles ${rec.profile}\n`);
+    writeGeneratedProfile(configPath, "recommended", rec.profile);
+    setActiveProfile(configPath, "recommended");
+    process.stderr.write(`✓ Wrote profile "recommended" and set it active.\n`);
+    process.stderr.write(`  Inspect:  chorale profiles recommended\n`);
   };
 
   if (auto) {
@@ -142,11 +144,11 @@ async function runInit(auto: boolean): Promise<void> {
     return;
   }
   if (!process.stdin.isTTY) {
-    process.stderr.write("Run `chorale init --auto` to apply, or answer the prompt in an interactive terminal.\n");
+    process.stderr.write("Run `chorale init --auto` to write & activate this profile.\n");
     return;
   }
   const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
-  const answer = await new Promise<string>((r) => rl.question(`Apply profile "${rec.profile}"? [Y/n] `, r));
+  const answer = await new Promise<string>((r) => rl.question("Write & activate this profile? [Y/n] ", r));
   rl.close();
   if (/^n/i.test(answer.trim())) {
     process.stderr.write("No changes made.\n");

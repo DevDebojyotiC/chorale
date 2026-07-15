@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { recommendProfile, missingLocalModels, setActiveProfile, pickLocalCoder } from "../src/core/init";
+import { recommendProfile, missingLocalModels, setActiveProfile, pickLocalCoder, recommendTieredProfile, writeGeneratedProfile } from "../src/core/init";
 import type { Resources } from "../src/core/init";
 import type { ChoraleConfig } from "../src/core/config";
 
@@ -41,6 +41,47 @@ describe("Phase 2 — init wizard logic", () => {
       profiles: { p: { tiers: { code: "ollama:qwen2.5-coder:3b", research: "ollama:llama3.2:3b" }, default: "fireworks:x" } },
     } as unknown as ChoraleConfig;
     expect(missingLocalModels(cfg, "p", ["qwen2.5-coder:3b"])).toEqual(["ollama:llama3.2:3b"]);
+  });
+});
+
+describe("Phase 2 — tiered init recommendation", () => {
+  it("hybrid: heavy tiers → serverless, light tiers → local, smallest → utility", () => {
+    const rec = recommendTieredProfile(
+      R({ ollamaUp: true, ollamaModels: ["qwen2.5-coder:3b", "llama3.2:1b"], keys: { fireworks: true, anthropic: false, hf: false, tavily: false } }),
+    );
+    expect(rec.mode).toMatch(/hybrid/);
+    expect(rec.profile.tiers?.code).toMatch(/^fireworks:/);
+    expect(rec.profile.tiers?.chat).toMatch(/^ollama:/);
+    expect(rec.profile.tiers?.utility).toBe("ollama:llama3.2:1b");
+    expect(rec.profile.default).toBe("ollama:qwen2.5-coder:3b");
+  });
+
+  it("fully local when no keys: all tiers use installed models", () => {
+    const rec = recommendTieredProfile(R({ ollamaUp: true, ollamaModels: ["qwen2.5-coder:3b"] }));
+    expect(rec.mode).toBe("fully local");
+    expect(rec.profile.tiers?.code).toBe("ollama:qwen2.5-coder:3b");
+  });
+});
+
+describe("writeGeneratedProfile (marker region, re-runnable)", () => {
+  it("inserts then replaces the generated region idempotently", () => {
+    const d = mkdtempSync(join(tmpdir(), "chorale-gen-"));
+    const path = join(d, "c.json5");
+    writeFileSync(path, "{\n  profiles: {\n    custom: {},\n  },\n}\n");
+
+    writeGeneratedProfile(path, "recommended", { default: "ollama:x", tiers: { code: "fireworks:y" } });
+    let out = readFileSync(path, "utf8");
+    expect(out).toContain('"recommended": {');
+    expect(out).toContain('"ollama:x"');
+
+    // re-run with different content → replaces, never duplicates
+    writeGeneratedProfile(path, "recommended", { default: "ollama:z", tiers: { code: "hf:q" } });
+    out = readFileSync(path, "utf8");
+    expect((out.match(/chorale-init generated \(re-run/g) ?? []).length).toBe(1);
+    expect(out).toContain('"ollama:z"');
+    expect(out).not.toContain('"ollama:x"');
+    expect(out).toContain("custom: {}"); // untouched
+    rmSync(d, { recursive: true, force: true });
   });
 });
 
