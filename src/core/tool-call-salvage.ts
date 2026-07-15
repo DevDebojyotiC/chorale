@@ -13,33 +13,35 @@ export interface ParsedToolCall {
   args: Record<string, unknown>;
 }
 
-/** Extract top-level, balanced JSON objects from a string (string-aware). */
-function extractJsonObjects(s: string): Record<string, unknown>[] {
-  const out: Record<string, unknown>[] = [];
+/**
+ * Extract top-level, balanced `{…}` regions from a string. String-aware for BOTH
+ * `"` and backtick delimiters, so a value written as a JS template literal
+ * (`"content": `…code…``) doesn't throw off brace counting. Returns raw slices;
+ * parsing (strict then loose) happens in the caller.
+ */
+function extractObjectRegions(s: string): string[] {
+  const out: string[] = [];
   for (let i = 0; i < s.length; i++) {
     if (s[i] !== "{") continue;
     let depth = 0;
     let inStr = false;
     let esc = false;
+    let quote = "";
     for (let j = i; j < s.length; j++) {
       const c = s[j]!;
       if (inStr) {
         if (esc) esc = false;
         else if (c === "\\") esc = true;
-        else if (c === '"') inStr = false;
-      } else if (c === '"') {
+        else if (c === quote) inStr = false;
+      } else if (c === '"' || c === "`") {
         inStr = true;
+        quote = c;
       } else if (c === "{") {
         depth++;
       } else if (c === "}") {
         depth--;
         if (depth === 0) {
-          try {
-            const o: unknown = JSON.parse(s.slice(i, j + 1));
-            if (o && typeof o === "object" && !Array.isArray(o)) out.push(o as Record<string, unknown>);
-          } catch {
-            /* not valid JSON */
-          }
+          out.push(s.slice(i, j + 1));
           i = j;
           break;
         }
@@ -49,22 +51,74 @@ function extractJsonObjects(s: string): Record<string, unknown>[] {
   return out;
 }
 
+/** Pull a string value for the first matching key, tolerating backtick OR double-quote delimiters. */
+function extractStringValue(region: string, keys: string[]): string | undefined {
+  for (const k of keys) {
+    const bt = region.match(new RegExp("\"" + k + "\"\\s*:\\s*`([\\s\\S]*?)`"));
+    if (bt) return bt[1];
+    const dq = region.match(new RegExp("\"" + k + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\""));
+    if (dq) {
+      try {
+        return JSON.parse(`"${dq[1]}"`) as string;
+      } catch {
+        return dq[1];
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Loose fallback for a `{…}` region that ISN'T strict JSON — typically because a
+ * code model wrote `"content": `…``  (a template literal) or left trailing commas.
+ * Recovers the common write/edit shapes by field-scraping.
+ */
+function looseToolCall(region: string, known: Set<string>): ParsedToolCall | null {
+  const nameM = region.match(/"(?:name|tool|tool_name)"\s*:\s*"([^"]+)"/);
+  const name = nameM?.[1];
+  if (!name || !known.has(name)) return null;
+  const args: Record<string, unknown> = {};
+  const path = extractStringValue(region, ["path", "file_path", "filename", "file"]);
+  if (path !== undefined) args.path = path;
+  const content = extractStringValue(region, ["content", "code", "text", "data"]);
+  if (content !== undefined) args.content = content;
+  const oldStr = extractStringValue(region, ["old_string"]);
+  if (oldStr !== undefined) args.old_string = oldStr;
+  const newStr = extractStringValue(region, ["new_string"]);
+  if (newStr !== undefined) args.new_string = newStr;
+  return Object.keys(args).length > 0 ? { name, args } : null;
+}
+
 /**
  * Parse tool calls a model wrote as TEXT. Handles bare JSON, ```tool/```json
- * fences, and <tool_call>…</tool_call> tags (the JSON inside is found either way).
- * Only returns calls whose name is a known tool.
+ * fences, and <tool_call>…</tool_call> tags. Falls back to a loose field-scrape
+ * when a region isn't strict JSON (e.g. backtick-delimited `content`). Only
+ * returns calls whose name is a known tool.
  */
 export function parseTextToolCalls(text: string, known: Set<string>): ParsedToolCall[] {
   const calls: ParsedToolCall[] = [];
   const seen = new Set<string>();
-  for (const obj of extractJsonObjects(text)) {
-    const name = obj.name ?? obj.tool ?? obj.tool_name;
-    const args = obj.arguments ?? obj.args ?? obj.parameters ?? obj.input;
-    if (typeof name === "string" && known.has(name) && args && typeof args === "object" && !Array.isArray(args)) {
-      const key = name + JSON.stringify(args);
+  for (const region of extractObjectRegions(text)) {
+    let call: ParsedToolCall | null = null;
+    try {
+      const o: unknown = JSON.parse(region);
+      if (o && typeof o === "object" && !Array.isArray(o)) {
+        const obj = o as Record<string, unknown>;
+        const name = obj.name ?? obj.tool ?? obj.tool_name;
+        const args = obj.arguments ?? obj.args ?? obj.parameters ?? obj.input;
+        if (typeof name === "string" && known.has(name) && args && typeof args === "object" && !Array.isArray(args)) {
+          call = { name, args: args as Record<string, unknown> };
+        }
+      }
+    } catch {
+      /* not strict JSON — try the loose scraper below */
+    }
+    if (!call) call = looseToolCall(region, known);
+    if (call) {
+      const key = call.name + JSON.stringify(call.args);
       if (!seen.has(key)) {
         seen.add(key);
-        calls.push({ name, args: args as Record<string, unknown> });
+        calls.push(call);
       }
     }
   }
@@ -78,6 +132,24 @@ export function extractCodeBlocks(text: string): Array<{ lang: string; code: str
     out.push({ lang: (m[1] ?? "").trim(), code: (m[2] ?? "").trim() });
   }
   return out;
+}
+
+/**
+ * Weak models frequently write a correct module but forget to `export` anything,
+ * making the symbol unreachable. If a JS/TS module declares top-level symbols but
+ * has no export at all, append an export for them. No-op if any export exists, or
+ * for non-module files. Applied only on the salvage path, so native tool calls
+ * (capable models) are never touched.
+ */
+export function ensureExports(code: string, filename: string): string {
+  if (!/\.(mjs|cjs|jsx?|tsx?)$/i.test(filename)) return code;
+  if (/\bexport\b/.test(code) || /\bmodule\.exports\b/.test(code) || /\bexports\.[\w$]/.test(code)) return code;
+  const names = new Set<string>();
+  const declRe = /^(?:async\s+)?(?:function|class|const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
+  let m: RegExpExecArray | null;
+  while ((m = declRe.exec(code)) !== null) names.add(m[1]!);
+  if (names.size === 0) return code;
+  return code.replace(/\s*$/, "") + `\n\nexport { ${[...names].join(", ")} };\n`;
 }
 
 /** Best-effort filename referenced in a prompt (e.g. "solution.mjs", "index.html"). */

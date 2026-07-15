@@ -14,7 +14,7 @@ import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/l
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 import { verifyFiles, verifyFeedback } from "./verify.js";
-import { parseTextToolCalls, extractCodeBlocks, inferFilename, type ParsedToolCall } from "./tool-call-salvage.js";
+import { parseTextToolCalls, extractCodeBlocks, inferFilename, ensureExports, type ParsedToolCall } from "./tool-call-salvage.js";
 
 /** File-mutating tools — used to detect no-op turns from weak models. */
 const WRITE_TOOL_NAMES = new Set(["write", "edit", "multi_edit"]);
@@ -27,10 +27,19 @@ const WRITE_TOOL_NAMES = new Set(["write", "edit", "multi_edit"]);
 async function salvageTextTools(text: string, tools: ToolSet, known: Set<string>, prompt: string): Promise<string[]> {
   const calls: ParsedToolCall[] = parseTextToolCalls(text, known);
   if (calls.length === 0 && "write" in tools) {
-    const blocks = extractCodeBlocks(text);
-    const fn = inferFilename(prompt);
-    if (blocks.length === 1 && fn && (blocks[0]?.code.length ?? 0) > 0) {
-      calls.push({ name: "write", args: { path: fn, content: blocks[0]!.code } });
+    // Don't treat a block that is itself a tool-call object (e.g. a ```json fence
+    // wrapping {"name":"write",...}) as file contents — that's a call we failed to parse.
+    const isToolCallJson = (code: string) => /^\s*\{[\s\S]*"(?:name|tool|tool_name)"\s*:/.test(code);
+    const isFilename = (s: string) => /^[\w.\-/]+\.[A-Za-z0-9]{1,6}$/.test(s);
+    const blocks = extractCodeBlocks(text).filter((b) => b.code.length > 0 && !isToolCallJson(b.code));
+    // Preferred format: one fence per file, tagged with the file path (```solution.mjs).
+    const named = blocks.filter((b) => isFilename(b.lang));
+    if (named.length > 0) {
+      for (const b of named) calls.push({ name: "write", args: { path: b.lang, content: b.code } });
+    } else {
+      // Otherwise a single untagged code block → the file named in the prompt.
+      const fn = inferFilename(prompt);
+      if (blocks.length === 1 && fn) calls.push({ name: "write", args: { path: fn, content: blocks[0]!.code } });
     }
   }
 
@@ -46,6 +55,10 @@ async function salvageTextTools(text: string, tools: ToolSet, known: Set<string>
       } else {
         // Strip a leading slash so an "absolute" path stays inside the workspace.
         args = { ...args, path: args.path.replace(/^[/\\]+/, "") };
+      }
+      // Whole-file writes: rescue a module the model forgot to export from.
+      if (call.name === "write" && typeof args.content === "string" && typeof args.path === "string") {
+        args = { ...args, content: ensureExports(args.content, args.path) };
       }
     }
     try {
@@ -147,7 +160,9 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   let sawNativeToolCall = false;
 
   // One pass through the model fallback chain, streaming a single answer.
-  const attempt = async (): Promise<RunResult> => {
+  // `temperature` is raised on repair rounds so the model doesn't regenerate the
+  // exact same (broken) tokens it just produced — the key to actually fixing code.
+  const attempt = async (temperature?: number): Promise<RunResult> => {
     sawWriteAttempt = false;
     sawNativeToolCall = false;
     let lastError: unknown;
@@ -162,6 +177,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           system,
           messages,
           tools,
+          ...(temperature !== undefined ? { temperature } : {}),
           stopWhen: stepCountIs(config.defaults.maxSteps),
           // Recover a doubly-JSON-encoded argument string before it's rejected.
           // (Empty/irrecoverable args are handled by the no-op retry below.)
@@ -228,6 +244,9 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     // retrying no-ops. This is what makes even local, non-tool-calling models work.
     const toolNames = new Set(Object.keys(tools));
     const maxRounds = config.defaults.maxVerifyRounds;
+    // Escalate sampling each repair round: forces a different completion so the
+    // model can escape a wrong answer it would otherwise reproduce verbatim.
+    const repairTemp = (round: number) => Math.min(0.9, 0.5 + 0.2 * round);
     for (let round = 0; round < maxRounds; round++) {
       const isLast = round === maxRounds - 1;
 
@@ -245,7 +264,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
               salvaged.map((s) => `- ${s}`).join("\n") +
               "\nIf the task is complete, briefly confirm; otherwise continue.",
           });
-          result = await attempt();
+          result = await attempt(repairTemp(round));
           continue;
         }
       }
@@ -268,7 +287,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
             "Call the write tool AGAIN now with explicit `path` and `content` arguments to actually create the file. " +
             "Do not describe the file; write it.",
         });
-        result = await attempt();
+        result = await attempt(repairTemp(round));
         continue;
       }
 
@@ -291,7 +310,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       for (const i of issues.slice(0, 6)) process.stderr.write(`    ${i.file}: ${i.message}\n`);
       messages.push({ role: "assistant", content: result.text || "(wrote files)" });
       messages.push({ role: "user", content: verifyFeedback(issues) });
-      result = await attempt();
+      result = await attempt(repairTemp(round));
     }
 
     return result;

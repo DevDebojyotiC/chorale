@@ -83,10 +83,13 @@ export async function verifyFiles(files: string[], cwd: string): Promise<VerifyI
 /** Format verify issues into a corrective instruction for the model. */
 export function verifyFeedback(issues: VerifyIssue[]): string {
   const lines = issues.map((i) => `- ${i.file}: ${i.message}`).join("\n");
+  const files = [...new Set(issues.map((i) => i.file))].join(", ");
   return (
-    `Automated syntax verification found ${issues.length} problem(s) in the code you just wrote. ` +
-    `Re-read the affected file(s) with the read tool, fix ONLY these issues, and save. ` +
-    `A common cause is writing literal "\\n" sequences into code instead of real newlines. ` +
-    `Do not add commentary — just make the fix.\n\n${lines}`
+    `Automated syntax verification FAILED on the code you just wrote (${issues.length} problem(s)). ` +
+    `The file does not parse, so your previous attempt does not count. ` +
+    `Write the COMPLETE corrected file again with the write tool — a full, self-contained rewrite of ${files}, ` +
+    `not a patch and not the same text. Fix the exact error(s) below at the reported line(s). ` +
+    `Common causes: an extra or missing ) ] } , a string closed early, or literal "\\n" sequences instead of real newlines. ` +
+    `Output only the write tool call.\n\n${lines}`
   );
 }
