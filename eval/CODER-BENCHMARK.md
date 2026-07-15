@@ -46,3 +46,25 @@ loop **on**. Every run is scored on three axes:
   logic bugs across arbitrary tasks, not just this benchmark's.
 - **Single task.** Expanding to a small suite (API client, CLI, refactor, bug-fix) would give per-tier
   data to tune capability-adaptive behavior (step budgets, verification depth) per model.
+
+## Difficulty ladder (2026-07-15)
+
+Five escalating, auto-graded challenges (hidden test suites), local qwen added. Reproduce:
+`pnpm exec tsx eval/coder-ladder.ts`. Levels: L1 Roman · L2 Brackets · L3 Expression-evaluator ·
+L4 LRU-cache · L5 JSON-parser (no JSON.parse).
+
+| Model | L1 | L2 | L3 | L4 | L5 | ceiling |
+|---|:-:|:-:|:-:|:-:|:-:|---|
+| qwen3:4b (local) | ⏱ | ⏱ | ⏱ | ⏱ | ⏱ | never completed (200s timeout every level) |
+| Qwen2.5-7B | ✓ | ✓ | ✓ | ✗ | ✗ | L3 (L4 dup-declaration, L5 runtime crash) |
+| gpt-oss-120B | ✓ | ✓ | ✓ | ✓ | ✓ | 5/5, fastest |
+| GLM-5.2 | ✓ | ✓ | ✓ | ✓ | ✓ | 5/5 |
+| Kimi-K2 | ✓ | ✓ | ✓ | ✓ | ⏱ | L4 (L5 timeout, not wrong) |
+
+### Takeaways
+- The harness is not the ceiling for capable models: **gpt-oss-120B and GLM-5.2 solved all 5**, incl. a
+  from-scratch JSON parser. The field never fully broke within 5 levels.
+- **Local 4 GB is non-viable for agentic coding** — timed out on even L1.
+- **Two actionable harness gaps found:** (1) esbuild syntax-check is more lenient than Node's ESM parser
+  (missed a duplicate-declaration bug) → verify with `node --check`/real import; (2) syntax ≠ correctness
+  (a runtime `undefined` crash) → add test-execution verification to the coder loop.
