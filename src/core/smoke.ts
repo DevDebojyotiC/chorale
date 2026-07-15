@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveInside } from "../tools/permissions.js";
+import { diagnose } from "./diagnose.js";
 
 /**
  * Runtime self-healing checks — the layer beyond syntax verification. Instead of
@@ -73,13 +74,13 @@ export async function smokeTest(files: string[], cwd: string): Promise<SmokeIssu
   return issues;
 }
 
-/** Corrective instruction for runtime (not syntax) failures. */
+/** Corrective instruction for runtime (not syntax) failures, with targeted diagnosis. */
 export function smokeFeedback(issues: SmokeIssue[]): string {
   const lines = issues.map((i) => `- ${i.file}: ${i.message}`).join("\n");
   const files = [...new Set(issues.map((i) => i.file))].join(", ");
   return (
     `Your code passed syntax checks but FAILED when actually run (${issues.length} runtime problem(s)). ` +
     `Fix ${files} so it runs correctly as specified, then rewrite the complete corrected file with the write tool. ` +
-    `Do not add commentary — just make it run.\n\n${lines}`
+    `Do not add commentary — just make it run.${diagnose(issues.map((i) => i.message))}\n\n${lines}`
   );
 }
