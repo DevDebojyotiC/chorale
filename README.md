@@ -18,10 +18,16 @@ skills. MCP-native. CLI-first, UI later.
 ```bash
 pnpm install
 cp .env.example .env                 # keys for the providers you use (optional for local-only)
-pnpm exec tsx src/index.ts init      # detect your models + keys, generate a tailored profile
+pnpm build && npm link               # expose the `chorale` command on your PATH
+#   ↳ no link? just use `pnpm dev "<prompt>"` (runs via tsx, no build) for everything below.
+chorale init                         # detect your models + keys, generate a tailored profile
 chorale doctor                       # confirm your providers are reachable
 chorale "Explain what a chorale of agents is."
+chorale tui                          # or drop into the interactive terminal UI
 ```
+
+> The linked `chorale` runs the built `dist/`, so re-run `pnpm build` after code changes
+> (or use `pnpm dev …` during development). Undo the link with `npm unlink -g chorale`.
 
 Point the base model at whatever you run — `config/chorale.config.json5`:
 
