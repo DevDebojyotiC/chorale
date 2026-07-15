@@ -158,6 +158,12 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   // Whether the latest attempt made ANY native tool call — if not, we try to
   // salvage tool calls the model wrote as plain text.
   let sawNativeToolCall = false;
+  // Token usage accumulated across EVERY attempt (fallbacks + salvage/verify
+  // rounds), so callers see the true cost of the turn, not just the last call.
+  let cumInput = 0;
+  let cumOutput = 0;
+  let cumTotal = 0;
+  let sawUsage = false;
 
   // One pass through the model fallback chain, streaming a single answer.
   // `temperature` is raised on repair rounds so the model doesn't regenerate the
@@ -222,6 +228,12 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         if (stream && text) process.stdout.write("\n");
 
         const usage = await Promise.resolve(result.totalUsage).catch(() => undefined);
+        if (usage) {
+          if (usage.inputTokens != null || usage.outputTokens != null || usage.totalTokens != null) sawUsage = true;
+          cumInput += usage.inputTokens ?? 0;
+          cumOutput += usage.outputTokens ?? 0;
+          cumTotal += usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+        }
         return { model: ref, text, usage };
       } catch (err) {
         lastError = err;
@@ -313,6 +325,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       result = await attempt(repairTemp(round));
     }
 
+    // Report cumulative usage across all attempts (undefined if no provider reported any).
+    if (sawUsage) {
+      result.usage = { ...(result.usage ?? {}), inputTokens: cumInput, outputTokens: cumOutput, totalTokens: cumTotal } as LanguageModelUsage;
+    }
     return result;
   } finally {
     await mcp.close();
