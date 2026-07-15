@@ -26,7 +26,7 @@ const cfg = {
   skills: { dirs: [] },
   mcp: { servers: {} },
   permissions: { mode: "auto-edit" },
-  defaults: { maxSteps: 8, maxDelegationDepth: 2, maxVerifyRounds: 3 },
+  defaults: { maxSteps: 8, maxDelegationDepth: 2, maxVerifyRounds: 3, requestTimeoutMs: 180_000, maxRetries: 2 },
   profiles: {
     "local-single": { default: "ollama:qwen2.5-coder:3b" },
     "local-varied": { default: "ollama:qwen2.5-coder:3b", tiers: { research: "ollama:llama3.2:3b" } },

@@ -28,7 +28,7 @@ const SEARCH_UNAVAILABLE_NOTE =
 
 /** Tavily: an AI-oriented search API that returns extracted page CONTENT, not just links. */
 async function tavilySearch(query: string, maxResults: number, apiKey: string): Promise<Source[]> {
-  const res = await fetchWithTimeout("https://api.tavily.com/search", FETCH_TIMEOUT_MS, {
+  const res = await fetchResilient("https://api.tavily.com/search", FETCH_TIMEOUT_MS, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ query, max_results: maxResults, search_depth: "basic" }),
@@ -55,6 +55,27 @@ async function fetchWithTimeout(url: string, ms: number, init?: RequestInit): Pr
     });
   } finally {
     clearTimeout(timer);
+  }
+}
+
+const wsleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** fetchWithTimeout + retry-with-backoff on transient failures (429 / 5xx / network). */
+async function fetchResilient(url: string, ms: number, init?: RequestInit, retries = 2): Promise<Response> {
+  let last: unknown;
+  for (let n = 0; ; n++) {
+    try {
+      const res = await fetchWithTimeout(url, ms, init);
+      if ((res.status === 429 || (res.status >= 500 && res.status < 600)) && n < retries) {
+        await wsleep(Math.min(4000, 400 * 2 ** n) + Math.floor(Math.random() * 200));
+        continue;
+      }
+      return res;
+    } catch (e) {
+      last = e;
+      if (n < retries) { await wsleep(Math.min(4000, 400 * 2 ** n)); continue; }
+      throw last;
+    }
   }
 }
 
@@ -89,10 +110,11 @@ function decodeDdgHref(href: string): string {
 
 /** Core web search via the DuckDuckGo HTML endpoint (no API key). */
 async function ddgSearch(query: string, limit: number): Promise<SearchResult[]> {
-  const res = await fetchWithTimeout(
+  const res = await fetchResilient(
     `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
     FETCH_TIMEOUT_MS,
   );
+  if (!res.ok) throw new Error(`DuckDuckGo HTTP ${res.status} (search endpoint is blocking automated requests)`);
   const html = await res.text();
 
   const snippets: string[] = [];
@@ -120,7 +142,7 @@ type FetchResult = { url: string; text: string; truncated: boolean } | { url: st
 /** Fetch a URL and extract text, truncated to maxChars. Never throws. */
 async function fetchAndExtract(url: string, maxChars: number): Promise<FetchResult> {
   try {
-    const res = await fetchWithTimeout(url, FETCH_TIMEOUT_MS);
+    const res = await fetchResilient(url, FETCH_TIMEOUT_MS);
     if (!res.ok) return { url, error: `HTTP ${res.status}` };
     const contentType = res.headers.get("content-type") ?? "";
     const body = await res.text();
@@ -153,7 +175,8 @@ export const webSearch = tool({
       if (results.length === 0) return { query, results: [], note: SEARCH_UNAVAILABLE_NOTE };
       return { query, results };
     } catch (e) {
-      return { error: `Search failed: ${e instanceof Error ? e.message : String(e)}` };
+      const base = `Search failed: ${e instanceof Error ? e.message : String(e)}`;
+      return { error: tavilyKey ? base : `${base} — ${SEARCH_UNAVAILABLE_NOTE}` };
     }
   },
 });
@@ -205,7 +228,8 @@ export const webResearch = tool({
       const other = results.slice(toRead).map(({ title, url, snippet }) => ({ title, url, snippet }));
       return { query, read, other_results: other };
     } catch (e) {
-      return { error: `Research failed: ${e instanceof Error ? e.message : String(e)}` };
+      const base = `Research failed: ${e instanceof Error ? e.message : String(e)}`;
+      return { error: tavilyKey ? base : `${base} — ${SEARCH_UNAVAILABLE_NOTE}` };
     }
   },
 });

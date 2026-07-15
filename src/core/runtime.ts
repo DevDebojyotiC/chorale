@@ -22,6 +22,38 @@ import { parseTextToolCalls, extractCodeBlocks, inferFilename, ensureExports, ty
 /** File-mutating tools — used to detect no-op turns from weak models. */
 const WRITE_TOOL_NAMES = new Set(["write", "edit", "multi_edit"]);
 
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+/** Exponential backoff with jitter, capped at 8s. */
+export const backoffMs = (n: number): number => Math.min(8000, 500 * 2 ** n) + Math.floor(Math.random() * 250);
+
+/**
+ * A fast, transient failure worth retrying on the SAME model: rate limits (429),
+ * server errors (5xx), and connection resets. Timeouts/aborts are deliberately
+ * NOT retriable — a hung provider stays hung, so we fall back instead of waiting again.
+ */
+export function isRetriable(e: unknown): boolean {
+  const anyE = e as { statusCode?: number; status?: number; message?: string; name?: string };
+  const status = anyE?.statusCode ?? anyE?.status;
+  if (status === 429 || (typeof status === "number" && status >= 500 && status < 600)) return true;
+  const msg = `${anyE?.name ?? ""} ${anyE?.message ?? String(e)}`;
+  if (/timed?\s*out|timeout|aborted|AbortError|TimeoutError/i.test(msg)) return false;
+  return /\b429\b|\b5\d\d\b|rate.?limit|overloaded|too many requests|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|fetch failed|socket hang up|network error/i.test(msg);
+}
+
+/** ~char budget guarding the model's context window (~30k tokens). */
+const MAX_CONTEXT_CHARS = 120_000;
+/**
+ * Keep the conversation under a char budget so a long verify-repair chain or a big
+ * resumed session can't overflow the context window (or balloon cost). Preserves the
+ * earliest message (the task) and the most recent turns; drops the stale middle.
+ */
+export function capContext(msgs: ChatMessage[], keepRecent = 8): void {
+  const total = (): number => msgs.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
+  while (total() > MAX_CONTEXT_CHARS && msgs.length > keepRecent + 1) {
+    msgs.splice(1, 1); // drop the oldest-after-first; index 0 (task) and the tail stay
+  }
+}
+
 /**
  * Execute tool calls that a model wrote as plain text (JSON, tags, or a lone code
  * block). Returns short summaries for feedback. Missing write paths are inferred
@@ -188,8 +220,15 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const attempt = async (temperature?: number): Promise<RunResult> => {
     sawWriteAttempt = false;
     sawNativeToolCall = false;
+    capContext(messages);
     let lastError: unknown;
+    const timeoutMs = config.defaults.requestTimeoutMs;
+    const maxRetries = config.defaults.maxRetries;
     for (const ref of chain) {
+      // Retry the SAME model on fast transient errors before falling back.
+      for (let tryN = 0; ; tryN++) {
+      // True once we've streamed any output — then we must NOT retry (would double-print).
+      let emittedAny = false;
       try {
         const model = registry.languageModel(ref as ModelRef);
         // Capture stream errors ourselves; the SDK's default onError logs a full
@@ -201,6 +240,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           messages,
           tools,
           ...(temperature !== undefined ? { temperature } : {}),
+          abortSignal: AbortSignal.timeout(timeoutMs),
           stopWhen: stepCountIs(opts.maxSteps ?? config.defaults.maxSteps),
           // Recover a doubly-JSON-encoded argument string before it's rejected.
           // (Empty/irrecoverable args are handled by the no-op retry below.)
@@ -236,11 +276,11 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         for await (const delta of result.textStream) {
           const clean = stripper.push(delta);
           text += clean;
-          if (stream && clean) process.stdout.write(clean);
+          if (stream && clean) { process.stdout.write(clean); emittedAny = true; }
         }
         const tail = stripper.flush();
         text += tail;
-        if (stream && tail) process.stdout.write(tail);
+        if (stream && tail) { process.stdout.write(tail); emittedAny = true; }
         if (streamError) throw streamError;
         if (stream && text) process.stdout.write("\n");
 
@@ -253,12 +293,21 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         }
         return { model: ref, text, usage };
       } catch (err) {
+        // Same-model retry on a fast transient error — but only if nothing was streamed yet.
+        if (isRetriable(err) && tryN < maxRetries && !emittedAny) {
+          const waitMs = backoffMs(tryN);
+          process.stderr.write(`\n[chorale] transient error from "${ref}" — retry ${tryN + 1}/${maxRetries} in ${waitMs}ms…\n`);
+          await sleep(waitMs);
+          continue;
+        }
         lastError = err;
         const msg = err instanceof Error ? err.message : String(err);
         process.stderr.write(`\n[chorale] model "${ref}" failed: ${msg}\n`);
         if (ref !== chain[chain.length - 1]) {
           process.stderr.write(`[chorale] falling back to next model…\n`);
         }
+        break; // give up on this model, advance to the next in the chain
+      }
       }
     }
     const last = lastError instanceof Error ? lastError.message : String(lastError);

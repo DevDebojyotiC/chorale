@@ -36,6 +36,19 @@ const canConnect = (port: number): Promise<boolean> =>
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** Kill a spawned process and its children, cross-platform (Windows taskkill / POSIX process group). */
+function killTree(child: ReturnType<typeof spawn>): void {
+  try {
+    if (process.platform === "win32") {
+      if (child.pid) execFileSync("taskkill", ["/F", "/T", "/PID", String(child.pid)], { stdio: "ignore" });
+    } else if (child.pid) {
+      try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
+    } else {
+      child.kill("SIGKILL");
+    }
+  } catch { /* already gone */ }
+}
+
 /** Boot/import each written module and report anything that fails to run. */
 export async function smokeTest(files: string[], cwd: string): Promise<SmokeIssue[]> {
   const issues: SmokeIssue[] = [];
@@ -48,11 +61,11 @@ export async function smokeTest(files: string[], cwd: string): Promise<SmokeIssu
     if (SERVER_RE.test(code)) {
       // Boot it with an injected port and confirm it actually listens THERE.
       const port = await freePort();
-      const child = spawn("node", [abs], { cwd, env: { ...process.env, PORT: String(port) }, stdio: "ignore" });
+      // detached on POSIX so the whole process group can be killed (servers may spawn children).
+      const child = spawn("node", [abs], { cwd, env: { ...process.env, PORT: String(port) }, stdio: "ignore", detached: process.platform !== "win32" });
       let up = false;
       for (let i = 0; i < 20; i++) { if (await canConnect(port)) { up = true; break; } await delay(200); }
-      try { child.kill(); } catch { /* ignore */ }
-      try { if (child.pid) execFileSync("taskkill", ["/F", "/T", "/PID", String(child.pid)], { stdio: "ignore" }); } catch { /* non-windows / already gone */ }
+      killTree(child);
       if (!up) {
         issues.push({
           file,

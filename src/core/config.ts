@@ -70,8 +70,12 @@ const ChoraleConfigSchema = z.object({
       maxSteps: z.number().int().positive().default(8),
       maxDelegationDepth: z.number().int().min(1).max(5).default(2),
       maxVerifyRounds: z.number().int().min(1).max(8).default(5),
+      /** Per model-request timeout (ms). A hung provider aborts and falls back instead of hanging forever. */
+      requestTimeoutMs: z.number().int().positive().default(180_000),
+      /** Retries of the SAME model on fast transient errors (429 / 5xx / connection resets) before falling back. */
+      maxRetries: z.number().int().min(0).max(5).default(2),
     })
-    .default({ maxSteps: 8, maxDelegationDepth: 2, maxVerifyRounds: 5 }),
+    .default({ maxSteps: 8, maxDelegationDepth: 2, maxVerifyRounds: 5, requestTimeoutMs: 180_000, maxRetries: 2 }),
 });
 
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
