@@ -24,6 +24,22 @@ writeFileSync("data.json", JSON.stringify(state)); // persist so the next proces
 const json = (res, code, body) => { res.writeHead(code, { "content-type": "application/json" }); res.end(body === undefined ? "" : JSON.stringify(body)); };
 ```
 
+### Serve HTML from a separate file — never inline a big page in a template literal
+Embedding a full HTML page (especially one with its own `<script>`) inside a JS backtick
+string is the #1 syntax-error trap: a nested backtick closes the string early. Put the page
+in its own `.html` file and read it. No nesting, nothing to escape.
+```js
+// index.html   <-- a normal .html file; its <script> can use backticks freely
+// server.mjs:
+import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
+const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+createServer((req, res) => {
+  if (req.url === "/") { res.writeHead(200, { "content-type": "text/html" }); res.end(html); return; }
+  // ...API routes...
+}).listen(process.env.PORT || 3000);
+```
+
 ### An ES module always exports what the task asked for
 ```js
 export function solve(input) { /* ... */ }   // named export the caller can import

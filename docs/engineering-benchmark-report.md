@@ -158,7 +158,30 @@ Following the prompting experiment, two further mechanisms were built as **custo
 
 But the live runs delivered a **diagnostic surprise**: across 20 Gemma full-stack runs, self-heal logged **zero catches**. Inspecting the failures showed *why* — Gemma's full-stack failures are overwhelmingly **template-literal syntax errors** (`Syntax error "\`"`) in the large inline HTML string, which crash the server before it can run. Those are caught by *syntax* verification (self-heal only runs on syntactically-clean code), and Gemma frequently cannot repair them within the round budget. The "server did not start" failures were mostly malformed HTML templates, **not** hardcoded ports. With all mechanisms on, one 10-run sample reached 10/10; isolating self-heal (few-shot off) gave 8/10.
 
-**Honest conclusion.** Both mechanisms are sound, general infrastructure — self-heal in particular is a *proven ground-truth safety net* for the "logically right, operationally wrong" class, and it benefits **every** model, not just Gemma. But neither makes Gemma reliable for complex full-stack work: its dominant failure is a **capability limit** (emitting and self-repairing large embedded HTML), which context-engineering nudges only within noise. The dependable fix for complex builds remains **escalation to gpt-oss-120B**. Self-learning (reflect on failures, reuse lessons and self-derived exemplars) is the next lever — parked for Phase 3.
+**Interim conclusion.** Both mechanisms are sound, general infrastructure — self-heal in particular is a *proven ground-truth safety net* for the "logically right, operationally wrong" class, and it benefits **every** model. But at this point neither had made Gemma reliable for complex full-stack work, and its dominant failure looked like an immovable **capability limit**. That framing turned out to be wrong once the failure was diagnosed precisely — **see §13.** (Self-learning — reflect on failures, reuse lessons and self-derived exemplars — remains the next lever, parked for Phase 3.)
+
+---
+
+## 13. Compensating for the Weakness — a Measured Fix
+
+The coder's mandate is to *compensate for each model's shortcomings*, not route around them. §12 stopped one step short: it diagnosed Gemma's failure (large HTML embedded in a JS template literal → a nested backtick closes the string early → `Syntax error "\`"`) but concluded escalation was the fix. With the cause pinned down, three **targeted, general** measures were added instead:
+
+1. **Structural steer (few-shot).** A `coder.examples.md` exemplar shows HTML served from a separate `.html` file via `readFileSync` — removing the nested-backtick trap entirely instead of asking the model to navigate it.
+2. **Targeted repair diagnostics.** When syntax verification sees a backtick / template-literal error, the feedback now *names the exact cause* (a big HTML page with an inline `<script>` nested in a JS template literal) and *prescribes the file-based fix* — rather than a generic "rewrite it."
+3. **More repair headroom.** The verify-repair budget was raised from 3 to 5 rounds so a full restructure fits.
+
+None of these is grader-specific — they are general craft that helps every model and any HTML-serving task. Measured on Gemma full-stack, **20 runs (two batches of 10)**:
+
+| Condition | Full-pass | Mean |
+|-----------|:---------:|:----:|
+| Baseline (no measures) | 7/10 | 70% |
+| + operational rule | 8/10 | 80% |
+| + few-shot examples | 8/10 | 80% |
+| **+ targeted compensation (steer + diagnostics + budget)** | **20/20** | **100%** |
+
+Gemma went from ~70% to a clean **100% across 20 runs**, most **one-shot** — servers now start in 3–6s, and the 16–18s "server did not start" stall signature is gone.
+
+**The lesson generalizes the coder's purpose.** A precisely diagnosed model weakness *can* be engineered around from our end — by changing the strategy to one the model executes reliably, and by making the repair loop's feedback specific to the failure rather than generic. Escalation to gpt-oss-120B stays available for genuinely hard cases, but for this class the coder now **compensates**, exactly as intended — which makes Gemma-4-31B a viable default for full-stack projects, not just simple ones.
 
 ---
 

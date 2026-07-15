@@ -19,8 +19,14 @@ The founding "self-improving agent" goal. Sketch:
 
 Expected payoff: compounding reliability from the agent's own experience, feeding better exemplars back into `fewShot`.
 
-### Known lever, not yet pulled
-- `maxVerifyRounds` (currently 3) — some Gemma full-stack failures are template-literal syntax errors it can't repair within 3 rounds; a larger budget (and/or a "serve HTML from a file, not a giant template literal" exemplar) may convert some. Whack-a-mole; escalation remains the reliable path for complex builds.
+### Compensation that worked (Phase 2)
+Gemma's full-stack failure (template-literal syntax errors in inline HTML) was fixed from our
+end — **70% → 100% over 20 runs** — by three general measures, not by escalation:
+- a **file-based HTML exemplar** in `coder.examples.md` (serve HTML from a `.html` file, don't inline it);
+- **targeted repair diagnostics** in `verifyFeedback` (name the backtick cause + prescribe the fix);
+- **`maxVerifyRounds` 3 → 5** so a full restructure fits.
+Principle: a precisely diagnosed model weakness can be engineered around by (a) steering to a
+strategy the model executes reliably, and (b) making repair feedback specific to the failure.
 
 ## Other phase-2 follow-ups (not yet done)
 - Ink/TUI renderer for the CLI.

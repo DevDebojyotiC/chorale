@@ -80,6 +80,31 @@ export async function verifyFiles(files: string[], cwd: string): Promise<VerifyI
   return issues;
 }
 
+/** Detect an error whose root cause is a backtick / template-literal problem. */
+function isTemplateLiteralError(issues: VerifyIssue[]): boolean {
+  return issues.some((i) => /[`]|template literal|unterminated string|unterminated template/i.test(i.message));
+}
+
+/**
+ * Error-specific repair guidance — the coder compensating for a known failure mode.
+ * The dominant hard-file failure is a big HTML page (often with an inline <script>
+ * that itself uses backticks) embedded in a JS template literal: a nested backtick
+ * closes the string early. Generic "rewrite it" feedback doesn't fix that; naming the
+ * cause AND the escape-the-trap strategy (serve HTML from a file) does.
+ */
+function targetedHint(issues: VerifyIssue[]): string {
+  if (!isTemplateLiteralError(issues)) return "";
+  return (
+    "\n\nAT LEAST ONE ERROR IS A BACKTICK / TEMPLATE-LITERAL PROBLEM. This almost always means you " +
+    "embedded a large HTML page — often containing a <script> that itself uses backticks or ${...} — " +
+    "inside a JS template literal, and a nested backtick closed the string early. Do NOT try to escape " +
+    "your way out. Instead RESTRUCTURE: write the HTML to a SEPARATE file (e.g. `index.html` or " +
+    "`public/index.html`) as a normal file, and in the server read and serve it with " +
+    "`readFileSync(new URL('./index.html', import.meta.url), 'utf8')`. Keep any JS the page needs inside " +
+    "that .html file's own <script>. This removes every nested-backtick trap. Rewrite it this way now."
+  );
+}
+
 /** Format verify issues into a corrective instruction for the model. */
 export function verifyFeedback(issues: VerifyIssue[]): string {
   const lines = issues.map((i) => `- ${i.file}: ${i.message}`).join("\n");
@@ -90,6 +115,6 @@ export function verifyFeedback(issues: VerifyIssue[]): string {
     `Write the COMPLETE corrected file again with the write tool — a full, self-contained rewrite of ${files}, ` +
     `not a patch and not the same text. Fix the exact error(s) below at the reported line(s). ` +
     `Common causes: an extra or missing ) ] } , a string closed early, or literal "\\n" sequences instead of real newlines. ` +
-    `Output only the write tool call.\n\n${lines}`
+    `Output only the write tool call.${targetedHint(issues)}\n\n${lines}`
   );
 }
