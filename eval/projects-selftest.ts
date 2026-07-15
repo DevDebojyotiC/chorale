@@ -94,5 +94,35 @@ else if (cmd === "rm") { const id=Number(rest[0]); s.items = s.items.filter(x=>x
   rmSync(d, { recursive: true, force: true });
 }
 
+// ---- Framework: reference → 7/7 ----
+{
+  const d = ws();
+  cpSync(resolve("eval/projects/_ref/app.mjs"), join(d, "app.mjs"));
+  const g = await P.framework!.grade(d);
+  expect("framework good", `${g.passed}/${g.total}`, "7/7");
+  if (g.fails.length) process.stdout.write("    " + g.fails.join("\n    ") + "\n");
+  rmSync(d, { recursive: true, force: true });
+}
+
+// ---- Store: reference → 7/7 ----
+{
+  const d = ws();
+  cpSync(resolve("eval/projects/_ref/store.mjs"), join(d, "store.mjs"));
+  const g = await P.store!.grade(d);
+  expect("store good", `${g.passed}/${g.total}`, "7/7");
+  if (g.fails.length) process.stdout.write("    " + g.fails.join("\n    ") + "\n");
+  rmSync(d, { recursive: true, force: true });
+}
+
+// ---- Full-stack: reference server → 10/10 (spawns a real HTTP server) ----
+{
+  const d = ws();
+  cpSync(resolve("eval/projects/_ref/server.mjs"), join(d, "server.mjs"));
+  const g = await P.fullstack!.grade(d);
+  expect("fullstack good", `${g.passed}/${g.total}`, "10/10");
+  if (g.fails.length) process.stdout.write("    " + g.fails.join("\n    ") + "\n");
+  rmSync(d, { recursive: true, force: true });
+}
+
 process.stdout.write(ok ? "\n✅ all graders validated\n" : "\n❌ grader validation FAILED\n");
 process.exit(ok ? 0 : 1);

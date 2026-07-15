@@ -10,19 +10,27 @@
  * Usage: pnpm exec tsx eval/coder-projects.ts ["model1" "model2" ...]
  */
 import "dotenv/config";
-import { mkdtempSync, rmSync, cpSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, cpSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import net from "node:net";
 import { loadConfig } from "../src/core/config.js";
 import { buildRegistry } from "../src/core/model-registry.js";
 import { loadAgent } from "../src/agents/loader.js";
 import { runAgent } from "../src/core/runtime.js";
 
-const MODELS = process.argv.slice(2).length
-  ? process.argv.slice(2)
+const rawArgs = process.argv.slice(2);
+const onlyArg = rawArgs.find((x) => x.startsWith("--only="));
+const ONLY = onlyArg ? onlyArg.slice("--only=".length).split(",") : null;
+const modelArgs = rawArgs.filter((x) => !x.startsWith("--"));
+const MODELS = modelArgs.length
+  ? modelArgs
   : ["hf:google/gemma-4-31B-it", "fireworks:accounts/fireworks/models/gpt-oss-120b", "fireworks:accounts/fireworks/models/minimax-m2p7"];
+
+const freePort = (): Promise<number> =>
+  new Promise((res) => { const s = net.createServer(); s.listen(0, () => { const p = (s.address() as net.AddressInfo).port; s.close(() => res(p)); }); });
 
 // Normalized rates ($/M): [cached input, output]. null = not on these cards (HF ≈ $0).
 const RATES: Record<string, [number, number] | null> = {
@@ -37,11 +45,20 @@ const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 type Check = [string, () => void | Promise<void>];
 interface Grade { passed: number; total: number; fails: string[] }
 
+const CHECK_TIMEOUT_MS = 15_000;
 async function scoreChecks(checks: Check[]): Promise<Grade> {
   let passed = 0;
   const fails: string[] = [];
   for (const [name, fn] of checks) {
-    try { await fn(); passed += 1; } catch (e) { fails.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); }
+    try {
+      // Per-check timeout: model code (e.g. a route handler that never responds)
+      // must not stall the whole benchmark.
+      await Promise.race([
+        Promise.resolve().then(fn),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("check timed out (" + CHECK_TIMEOUT_MS / 1000 + "s)")), CHECK_TIMEOUT_MS)),
+      ]);
+      passed += 1;
+    } catch (e) { fails.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); }
   }
   return { passed, total: checks.length, fails };
 }
@@ -186,6 +203,119 @@ const PROJECTS: Project[] = [
       ]);
     },
   },
+
+  // ---------- Tier 2 — advanced engineering ----------
+  {
+    id: "framework", title: "Mini web framework (routing + middleware)", skill: "framework", maxSteps: 18,
+    prompt:
+      "Build a minimal Express-like web framework in app.mjs (ESM, Node built-ins only). Export `createApp()` returning an `app` with:\n" +
+      "• app.use(fn) — register global middleware (req, res, next) run in order for EVERY request.\n" +
+      "• app.get(path, handler) and app.post(path, handler) — routes. Paths may contain params like /users/:id, parsed onto req.params.\n" +
+      "• On req: `method`, `path`, `params`, `query` (parsed from the ?a=1&b=2 query string), and `body` (the JSON-parsed request body for POST).\n" +
+      "• On res: `status(code)` (sets status, returns res for chaining), `json(obj)` (respond with JSON at the current status, default 200), `send(str)`, `end()`.\n" +
+      "• app.inject({ method, url, body }) → Promise resolving to { statusCode, body } where body is the response body as a STRING. It runs the middleware chain, then the matching route handler. A middleware calls next() to continue; if a middleware sends a response, remaining middleware and the handler are skipped. If no route matches, respond 404.\n" +
+      "No external packages.",
+    grade: async (dir) => {
+      const m = await tryImport(join(dir, "app.mjs"));
+      const createApp = (m?.createApp ?? m?.default) as (() => Mod) | undefined;
+      if (typeof createApp !== "function") return { passed: 0, total: 7, fails: ["no createApp export"] };
+      const app = createApp();
+      app.use((req: Mod, _res: Mod, next: () => void) => { req.hits = (req.hits || 0) + 1; next(); });
+      app.use((req: Mod, res: Mod, next: () => void) => { if (req.path === "/blocked") res.status(401).json({ error: "no" }); else next(); });
+      app.get("/health", (req: Mod, res: Mod) => res.json({ ok: true, hits: req.hits }));
+      app.get("/users/:id", (req: Mod, res: Mod) => res.json({ id: req.params.id }));
+      app.get("/search", (req: Mod, res: Mod) => res.json({ q: req.query.q }));
+      app.post("/echo", (req: Mod, res: Mod) => res.status(201).json({ got: req.body }));
+      app.get("/blocked", (_req: Mod, res: Mod) => res.json({ reached: true }));
+      const inj = async (o: Mod): Promise<{ statusCode: number; json: Mod }> => {
+        const r = await (app.inject as (x: Mod) => Promise<{ statusCode: number; body: string }>)(o);
+        let j: Mod = {};
+        try { j = JSON.parse(r.body); } catch { /* non-json */ }
+        return { statusCode: r.statusCode, json: j };
+      };
+      return scoreChecks([
+        ["GET returns json (200)", async () => { const r = await inj({ method: "GET", url: "/health" }); a(r.statusCode === 200 && r.json.ok === true, "health " + JSON.stringify(r)); }],
+        ["middleware ran once", async () => { const r = await inj({ method: "GET", url: "/health" }); a(r.json.hits === 1, "hits " + r.json.hits); }],
+        ["route params", async () => { const r = await inj({ method: "GET", url: "/users/42" }); a(String(r.json.id) === "42", "id " + JSON.stringify(r.json)); }],
+        ["query parsing", async () => { const r = await inj({ method: "GET", url: "/search?q=hi" }); a(r.json.q === "hi", "q " + JSON.stringify(r.json)); }],
+        ["unknown route → 404", async () => { const r = await inj({ method: "GET", url: "/nope" }); a(r.statusCode === 404, "status " + r.statusCode); }],
+        ["POST body + status(201)", async () => { const r = await inj({ method: "POST", url: "/echo", body: { a: 1 } }); a(r.statusCode === 201 && r.json.got && r.json.got.a === 1, "echo " + JSON.stringify(r)); }],
+        ["middleware short-circuits", async () => { const r = await inj({ method: "GET", url: "/blocked" }); a(r.statusCode === 401 && r.json.reached === undefined, "blocked " + JSON.stringify(r)); }],
+      ]);
+    },
+  },
+  {
+    id: "store", title: "Redux-like state store (reducers + middleware)", skill: "state", maxSteps: 16,
+    prompt:
+      "Build a Redux-like state container in store.mjs (ESM, Node built-ins only). Export:\n" +
+      "• createStore(reducer, preloadedState, enhancer): a store with getState(); dispatch(action) (runs the reducer, updates state, calls every subscriber, returns the action); subscribe(listener) (returns an unsubscribe function). If `enhancer` is a function, return enhancer(createStore)(reducer, preloadedState).\n" +
+      "• combineReducers(reducersObject): returns one reducer producing an object whose keys are slices, each updated by its own reducer.\n" +
+      "• applyMiddleware(...middlewares): returns an enhancer. Each middleware has the signature store => next => action => result and they compose so the first wraps the rest and the innermost next is the base dispatch. Middleware receives a store exposing getState and the fully-wrapped dispatch (so a thunk middleware can dispatch function actions).\n" +
+      "No external packages.",
+    grade: async (dir) => {
+      const m = await tryImport(join(dir, "store.mjs"));
+      const createStore = m?.createStore as ((r: Mod, s?: Mod, e?: Mod) => Mod) | undefined;
+      const combineReducers = m?.combineReducers as ((o: Mod) => Mod) | undefined;
+      const applyMiddleware = m?.applyMiddleware as ((...mw: Mod[]) => Mod) | undefined;
+      if (typeof createStore !== "function") return { passed: 0, total: 7, fails: ["no createStore export"] };
+      const counter = (s: Mod = { count: 0 }, act: Mod): Mod => act.type === "inc" ? { count: s.count + 1 } : act.type === "add" ? { count: s.count + (act.n as number) } : s;
+      return scoreChecks([
+        ["dispatch updates state", () => { const st = createStore(counter, { count: 0 }); st.dispatch({ type: "inc" }); a(st.getState().count === 1, "count " + st.getState().count); }],
+        ["preloaded state", () => { const st = createStore(counter, { count: 5 }); a(st.getState().count === 5, "pre " + st.getState().count); }],
+        ["dispatch returns action", () => { const st = createStore(counter, { count: 0 }); const r = st.dispatch({ type: "inc" }); a(r && r.type === "inc", "ret"); }],
+        ["subscribe + unsubscribe", () => { const st = createStore(counter, { count: 0 }); let n = 0; const un = st.subscribe(() => { n += 1; }); st.dispatch({ type: "inc" }); st.dispatch({ type: "inc" }); un(); st.dispatch({ type: "inc" }); a(n === 2, "notified " + n); }],
+        ["combineReducers slices", () => { if (typeof combineReducers !== "function") throw new Error("no combineReducers"); const root = combineReducers({ a: counter, b: counter }); const st = createStore(root); st.dispatch({ type: "inc" }); const s = st.getState(); a(s.a.count === 1 && s.b.count === 1, "slices " + JSON.stringify(s)); }],
+        ["applyMiddleware (thunk)", () => { if (typeof applyMiddleware !== "function") throw new Error("no applyMiddleware"); const thunk = (store: Mod) => (next: (a: Mod) => Mod) => (action: Mod) => typeof action === "function" ? (action as (d: Mod, g: () => Mod) => unknown)(store.dispatch, store.getState) : next(action); const st = createStore(counter, { count: 0 }, applyMiddleware(thunk)); (st.dispatch as (a: unknown) => unknown)((d: (a: Mod) => void) => { d({ type: "add", n: 3 }); }); a(st.getState().count === 3, "thunk " + st.getState().count); }],
+        ["middleware sees getState", () => { if (typeof applyMiddleware !== "function") throw new Error("no applyMiddleware"); let seen = -1; const spy = (store: Mod) => (next: (a: Mod) => Mod) => (action: Mod) => { const r = next(action); seen = store.getState().count; return r; }; const st = createStore(counter, { count: 0 }, applyMiddleware(spy)); st.dispatch({ type: "inc" }); a(seen === 1, "seen " + seen); }],
+      ]);
+    },
+  },
+  {
+    id: "fullstack", title: "End-to-end full-stack task app (server + REST + persistence + UI)", skill: "fullstack", maxSteps: 24,
+    prompt:
+      "Build a full-stack 'task manager' web app using ONLY Node built-ins (no npm packages). Create server.mjs, started with `node server.mjs`, listening on the port in process.env.PORT (default 3000). It must provide:\n" +
+      "1. A REST API (Content-Type application/json):\n" +
+      "   • GET /api/tasks → 200, a JSON array of tasks, each { id, title, done }.\n" +
+      "   • POST /api/tasks with JSON body { title } → 201, the created task (server assigns an integer id, done=false).\n" +
+      "   • PATCH /api/tasks/:id with a JSON body (e.g. { done:true } or { title }) → 200 with the updated task, or 404 if the id does not exist.\n" +
+      "   • DELETE /api/tasks/:id → 204 (empty body), or 404 if the id does not exist.\n" +
+      "2. A frontend at GET / → 200 with Content-Type text/html: an HTML page containing a <form> to add a task and a <script> that fetch()es /api/tasks and renders them into the page.\n" +
+      "3. Persistence: tasks are stored in a tasks.json file in the current directory so they survive restarts (create it if missing).\n" +
+      "4. Any unknown route → 404. Parse JSON request bodies.\n" +
+      "You do NOT need to run or test the server yourself — it will be started and exercised automatically. Just write the file(s).",
+    grade: async (dir) => {
+      if (!existsSync(join(dir, "server.mjs"))) return { passed: 0, total: 10, fails: ["no server.mjs"] };
+      const port = await freePort();
+      const base = `http://127.0.0.1:${port}`;
+      const child = spawn("node", ["server.mjs"], { cwd: dir, env: { ...process.env, PORT: String(port) }, stdio: "ignore" });
+      let up = false;
+      for (let i = 0; i < 45; i++) {
+        try { await fetch(base + "/api/tasks"); up = true; break; } catch { await delay(200); }
+      }
+      const firstId = async (): Promise<number> => { const r = await fetch(base + "/api/tasks"); const arr = (await r.json()) as Mod[]; return (arr.find((x) => x.title === "Buy milk") ?? arr[0])?.id as number; };
+      let grade: Grade;
+      try {
+        grade = !up
+          ? { passed: 0, total: 10, fails: ["server did not start (port " + port + ")"] }
+          : await scoreChecks([
+            ["GET /api/tasks → array", async () => { const r = await fetch(base + "/api/tasks"); a(r.status === 200, "status " + r.status); a(Array.isArray(await r.json()), "array"); }],
+            ["API is application/json", async () => { const r = await fetch(base + "/api/tasks"); a((r.headers.get("content-type") ?? "").includes("application/json"), "ctype " + r.headers.get("content-type")); }],
+            ["POST creates (201 + task)", async () => { const r = await fetch(base + "/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "Buy milk" }) }); a(r.status === 201, "status " + r.status); const t = (await r.json()) as Mod; a(t.id !== undefined && t.title === "Buy milk" && t.done === false, "task " + JSON.stringify(t)); }],
+            ["GET lists the created task", async () => { const arr = (await (await fetch(base + "/api/tasks")).json()) as Mod[]; a(arr.some((x) => x.title === "Buy milk"), "listed"); }],
+            ["PATCH toggles done (200)", async () => { const id = await firstId(); const r = await fetch(`${base}/api/tasks/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ done: true }) }); a(r.status === 200, "status " + r.status); a(((await r.json()) as Mod).done === true, "done"); }],
+            ["DELETE removes (204 + gone)", async () => { const id = await firstId(); const r = await fetch(`${base}/api/tasks/${id}`, { method: "DELETE" }); a(r.status === 204, "status " + r.status); const arr = (await (await fetch(base + "/api/tasks")).json()) as Mod[]; a(!arr.some((x) => x.id === id), "gone"); }],
+            ["PATCH missing id → 404", async () => { const r = await fetch(`${base}/api/tasks/999999`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ done: true }) }); a(r.status === 404, "status " + r.status); }],
+            ["unknown route → 404", async () => { const r = await fetch(base + "/nope"); a(r.status === 404, "status " + r.status); }],
+            ["GET / serves an HTML UI", async () => { const r = await fetch(base + "/"); a(r.status === 200, "status " + r.status); a((r.headers.get("content-type") ?? "").includes("text/html"), "html ctype"); const h = await r.text(); a(/<form/i.test(h) && /<script/i.test(h), "form+script"); }],
+            ["frontend + persistence wired", async () => { const h = await (await fetch(base + "/")).text(); a(/\/api\/tasks/.test(h), "frontend calls /api/tasks"); await fetch(base + "/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "persisted" }) }); await delay(120); a(existsSync(join(dir, "tasks.json")) && /persisted/.test(readFileSync(join(dir, "tasks.json"), "utf8")), "tasks.json persisted"); }],
+          ]);
+      } finally {
+        try { child.kill(); } catch { /* ignore */ }
+        try { if (child.pid) execFileSync("taskkill", ["/F", "/T", "/PID", String(child.pid)], { stdio: "ignore" }); } catch { /* ignore */ }
+      }
+      return grade;
+    },
+  },
 ];
 
 function raceTimeout<T>(p: Promise<T>, ms: number): Promise<T | "TIMEOUT"> {
@@ -202,9 +332,10 @@ if (!isMain) {
 const config = loadConfig();
 const registry = buildRegistry(config);
 const coder = loadAgent(resolve(repoRoot, "agents/coder.md"));
+const projects = ONLY ? PROJECTS.filter((p) => ONLY.includes(p.id)) : PROJECTS;
 
 process.stdout.write(`\n########## REAL-ENGINEERING BENCHMARK ##########\n`);
-process.stdout.write(`Projects: ${PROJECTS.map((p) => p.id).join(", ")}\nModels: ${MODELS.join(", ")}\n`);
+process.stdout.write(`Projects: ${projects.map((p) => p.id).join(", ")}\nModels: ${MODELS.join(", ")}\n`);
 
 interface Row { model: string; cells: Record<string, Grade>; inTok: number; outTok: number; secs: number }
 const rows: Row[] = [];
@@ -212,7 +343,7 @@ const rows: Row[] = [];
 for (const model of MODELS) {
   process.stdout.write(`\n===== ${model.replace(/.*\//, "")} =====\n`);
   const row: Row = { model, cells: {}, inTok: 0, outTok: 0, secs: 0 };
-  for (const proj of PROJECTS) {
+  for (const proj of projects) {
     const ws = mkdtempSync(join(tmpdir(), `chorale-proj-${proj.id}-`));
     if (proj.setup) proj.setup(ws);
     const t0 = Date.now();
@@ -243,11 +374,11 @@ for (const model of MODELS) {
 
 // ---- Summary ----
 process.stdout.write(`\n\n########## RESULTS ##########\n\n`);
-const head = ["model".padEnd(14), ...PROJECTS.map((p) => p.id.padEnd(9)), "overall", "in tok", "out tok", "sec", "cost$"];
+const head = ["model".padEnd(14), ...projects.map((p) => p.id.padEnd(9)), "overall", "in tok", "out tok", "sec", "cost$"];
 process.stdout.write(head.join("  ") + "\n");
 for (const r of rows) {
   let sp = 0, st = 0;
-  const cells = PROJECTS.map((p) => { const g = r.cells[p.id]!; sp += g.passed; st += g.total; return `${g.passed}/${g.total}`.padEnd(9); });
+  const cells = projects.map((p) => { const g = r.cells[p.id]!; sp += g.passed; st += g.total; return `${g.passed}/${g.total}`.padEnd(9); });
   const rate = RATES[r.model];
   const cost = rate ? (r.inTok * rate[0] + r.outTok * rate[1]) / 1e6 : 0;
   process.stdout.write([
