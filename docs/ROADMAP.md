@@ -8,16 +8,13 @@ Three mechanisms, exposed as **customizable per-agent tick-boxes** (agent.md fro
 |--------|--------|--------------|
 | `fewShot` | ✅ Shipped (Phase 2) | Injects `<name>.examples.md` worked patterns into the prompt (show, don't tell). |
 | `selfHeal` | ✅ Shipped (Phase 2) | Runtime self-healing: smoke-boots written servers on an injected port and smoke-imports modules, feeding runtime failures back into the repair loop. |
-| `selfLearn` | 🅿️ **Parked for Phase 3** (toggle recognized, currently inert) | Self-learning from past runs. |
+| `selfLearn` | ✅ Shipped (Phase 3) | Learns fixes from its own successful repairs and injects them proactively next run. See [`self-learning.md`](self-learning.md). |
 
-### Phase 3 — `selfLearn` (self-learning agents)
-The founding "self-improving agent" goal. Sketch:
-- **Reflection:** after a task, extract a durable lesson from what worked/failed ("servers must read `process.env.PORT`"; "avoid giant inline HTML template literals — serve from a file").
-- **Lessons store:** persist lessons per agent (ties into the memory concept), with provenance and a success/failure signal.
-- **Retrieval:** inject the most relevant lessons — and the agent's own past-correct exemplars — into future runs (self-derived few-shot, which beats hand-written).
-- **Decay/curation:** prune stale or low-value lessons so the store stays sharp.
-
-Expected payoff: compounding reliability from the agent's own experience, feeding better exemplars back into `fewShot`.
+### Phase 3 — `selfLearn` (self-learning agents) ✅ v1 shipped
+Capture fixes from successful diagnosed repairs → per-agent `data/lessons.sqlite` → inject top proven
+lessons proactively next run → prune losers. `chorale lessons` to inspect; `CHORALE_NO_LEARN=1` for
+reproducible eval. Full design: [`self-learning.md`](self-learning.md). **v2 (todo):** LLM reflection for
+*novel* failures + task-level strategy lessons; promote high-confidence lessons into the diagnose registry.
 
 ### Compensation that worked (Phase 2)
 Gemma's full-stack failure (template-literal syntax errors in inline HTML) was fixed from our

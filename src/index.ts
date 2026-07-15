@@ -17,7 +17,9 @@ import type { ChatMessage } from "./core/session.js";
 import type { PermissionMode } from "./tools/permissions.js";
 import { setLogLevel, setLogFile, log } from "./core/log.js";
 import { estimateCost } from "./core/costs.js";
+import { closeLessonStore } from "./core/lessons.js";
 import { checkProviders } from "./core/doctor.js";
+import { LessonStore } from "./core/lessons.js";
 
 interface CliArgs {
   agent?: string;
@@ -49,6 +51,7 @@ Commands:
   sessions rm <id>              delete a session
   sessions prune [--keep N]     keep the N most-recent sessions (default 20)
   cost [session]                token usage + estimated spend per model
+  lessons [agent]               show what agents learned from past repairs
   doctor                        ping every configured provider for reachability
 
 Options:
@@ -163,6 +166,26 @@ function printCost(store: SessionStore, sessionId?: string): void {
   }
   process.stderr.write(`\n  Estimated total: $${total.toFixed(4)}${anyUnknown ? " (+ unpriced models shown as ?)" : ""}\n`);
   process.stderr.write("  Estimates use built-in rates (src/core/costs.ts) — confirm against your provider's billing.\n");
+}
+
+/** `chorale lessons [agent]` — show what agents have learned from past repairs. */
+function printLessons(agent?: string): void {
+  const store = new LessonStore();
+  try {
+    const rows = store.list(agent);
+    if (rows.length === 0) {
+      process.stderr.write("No lessons learned yet — they accrue as the coder repairs its own mistakes.\n");
+      return;
+    }
+    process.stderr.write(agent ? `Lessons for ${agent}:\n\n` : "Lessons learned across agents:\n\n");
+    let lastAgent = "";
+    for (const r of rows) {
+      if (r.agent !== lastAgent) { process.stderr.write(`▸ ${r.agent}\n`); lastAgent = r.agent; }
+      process.stderr.write(`    [${r.key}] ${r.wins}/${r.uses} wins  ${r.lesson.slice(0, 120)}\n`);
+    }
+  } finally {
+    store.close();
+  }
 }
 
 /** `chorale agents` — list available agents with their resolved model, tier, and tools. */
@@ -312,6 +335,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (argv[0] === "lessons") {
+    printLessons(argv[1]);
+    return;
+  }
+
   const args = parseArgs(argv);
   let prompt = args.prompt;
   if (!prompt && !process.stdin.isTTY) prompt = (await readStdin()).trim(); // piped prompt
@@ -392,6 +420,7 @@ async function main(): Promise<void> {
       : "";
   log.info(`\n[chorale] done · model=${result.model}${tokens} · session=${sessionId}\n`);
   store.close();
+  closeLessonStore();
 }
 
 main().catch((err: unknown) => {

@@ -27,7 +27,7 @@ Full evidence: [`model-evaluation-report.md`](model-evaluation-report.md), [`eng
 - `chorale doctor`: ollama / fireworks / hf reachable; `chorale cost`: per-model spend; transcripts written & redacted.
 
 ## Known limitations / not done
-- **`selfLearn`** toggle is recognized but **inert — parked for Phase 3**.
+- **`selfLearn`** v1 is **live** (Phase 3, Task 1): learns fixes from successful repairs, injects them proactively; `chorale lessons` to inspect. v2 (LLM reflection for novel failures) is future work.
 - Benchmarks are self-contained projects (up to a full-stack app), **not thousand-line codebases**; N is small on the hardest tiers.
 - No UI/TUI yet (CLI-first by design); no files/docs or reviewer agent yet.
 - Research falls back to brittle DuckDuckGo scraping without a Tavily key (degrades gracefully, but Tavily recommended).
