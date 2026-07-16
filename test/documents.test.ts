@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDocumentTools, WRITE_DOC_TOOLS, READ_ONLY_DOC_TOOLS } from "../src/tools/documents";
@@ -103,6 +103,31 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
   it("refuses paths that escape the workspace and unsupported formats", async () => {
     expect((await exec(tools.read_doc)({ path: "../secret.pdf" })).error).toMatch(/escapes/);
     expect((await exec(tools.write_doc)({ path: "x.rtf", content: "hi" })).error).toMatch(/unsupported/);
+  });
+
+  it("theme 'report' produces presentation-grade CSS; 'minimal' stays plain", async () => {
+    const md = "# Title\n\n## Section\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n> A callout.\n";
+    await exec(tools.write_doc)({ path: "r.html", content: md, theme: "report" });
+    const r = readFileSync(join(dir, "r.html"), "utf8");
+    expect(r).toMatch(/--accent:/); // design tokens (CSS variables)
+    expect(r).toMatch(/linear-gradient/); // gradient cover title
+    expect(r).toMatch(/thead th\{[^}]*background:var\(--accent\)/); // colored table header
+    expect(r).toMatch(/nth-child\(even\)/); // zebra striping
+    expect(r).toMatch(/blockquote\{[^}]*border-left/); // callout box
+    expect(r).toMatch(/@media print/); // print styles
+    expect(r).toMatch(/prefers-color-scheme:dark/); // dark mode
+
+    await exec(tools.write_doc)({ path: "m.html", content: md, theme: "minimal" });
+    const m = readFileSync(join(dir, "m.html"), "utf8");
+    expect(m).not.toMatch(/linear-gradient/);
+    expect(m).not.toMatch(/--accent/);
+  });
+
+  it("themes carry through convert (md → styled pdf uses the browser engine)", async () => {
+    writeFileSync(join(dir, "n.md"), "# Big Report\n\nRevenue 5000.\n");
+    const res = await exec(tools.convert)({ from: "n.md", to: "n.pdf", theme: "report" });
+    expect(["browser", "pdfkit"]).toContain(res.engine);
+    expect((await exec(tools.read_doc)({ path: "n.pdf" })).content).toContain("5000");
   });
 
   it("gates write tools by permission mode; read_doc always available", () => {
