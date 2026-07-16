@@ -57,6 +57,27 @@ editing, and all answer-text tasks are solid, but it is flappier at **creating a
 edit. Same pattern as the reviewer: the cheap, fast default model is the more reliable choice; escalation adds
 little for doc work. N is small.
 
+## Document formats — read · create · convert (beyond plain text)
+The scribe handles real binary/office/web formats through deterministic tools (`read_doc`, `write_doc`,
+`write_sheet`, `convert`) — the model authors Markdown/rows, the tools do the binary I/O. Benchmarked by
+**round-trip** (`eval/scribe-formats.ts`): produce a file → read it back → the content survived.
+
+| Op | Formats | gemma (default) | gpt-oss |
+|----|---------|-----------------|---------|
+| **Create** | XLSX · DOCX · PDF · PPTX | **4/4** | 3/4 (PPTX flaky) |
+| **Read/extract** | XLSX · PDF · DOCX · **image (OCR)** | **4/4** | 3/4 (OCR read flaky) |
+| **Convert** | md→pdf · csv→xlsx · docx→md | **3/3** | **3/3** |
+
+**gemma: 11/11.** PDF creation renders via headless Chrome/Edge for fidelity (26 KB rendered PDFs), with a
+pure-JS pdfkit fallback. Images are OCR'd via tesseract.js (model-agnostic — works even on text-only gemma).
+Also supported by the same tools: HTML, CSV/TSV, JSON/YAML/TOML. Libraries: exceljs, mammoth, docx (via
+html-to-docx), pdf-parse, pdfkit, marked, pptxgenjs, officeparser, tesseract.js — `npm audit` stays **0**.
+
+gpt-oss (escalation) is flappier at *creating* a new file (missed PPTX) and one OCR read — the same pattern
+as everywhere: the default model is the reliable one. Unit tests round-trip every format deterministically
+(`test/documents.test.ts`); OCR is verified via a committed fixture + this benchmark (tesseract needs a
+one-time language-data download, so it's excluded from the offline unit suite).
+
 ## Caveats
 Small fixtures, small N. Content graders use term coverage + structure regexes + the groundedness checker;
 they verify *correctness signals* (right facts present, nothing invented, right structure), not subjective
