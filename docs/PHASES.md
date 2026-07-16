@@ -3,9 +3,15 @@
 The big and small features, decisions, fixes, and findings per phase — the durable project history.
 Updated at the completion of every phase, before shipping. Per-commit detail lives in [`COMMIT-LOG.md`](COMMIT-LOG.md).
 
-> **Last updated:** Phase 4 in progress (reviewer agent landed; post-v0.2.0).
+> **Last updated:** Phase 4 in progress (reviewer + scribe agents landed; planner/gate framework underway; post-v0.2.0).
+
+> **Detailed per-phase write-ups** (verbose — concepts + the decisions behind them, and *why*):
+> [`PHASE-0-1.md`](PHASE-0-1.md) · [`PHASE-2.md`](PHASE-2.md) · [`PHASE-3.md`](PHASE-3.md) · [`PHASE-4.md`](PHASE-4.md).
+> This file is the concise index; each `PHASE-*.md` expands its phase.
 
 ---
+
+> **Foundation phases 0 & 1 detailed write-up:** [`PHASE-0-1.md`](PHASE-0-1.md).
 
 ## Phase 0 — Bootstrap ✅
 - Repo, TypeScript, tsup build, vitest, ESLint, CI (`.github/workflows/ci.yml`).
@@ -23,6 +29,8 @@ Updated at the completion of every phase, before shipping. Per-commit detail liv
 - Offline **mock provider** for a keyless pipeline proof.
 
 ## Phase 2 — The coder, benchmarks, hardening ✅ (v0.2.0)
+
+> **Detailed write-up:** [`PHASE-2.md`](PHASE-2.md) — the coder, salvage, the model evidence, compensation, and hardening.
 
 ### Coder agent & weak-model robustness
 - **Coder agent** with sandboxed file/shell tools and a **verify-repair loop** (esbuild syntax check → feed errors back with escalating temperature).
@@ -59,7 +67,9 @@ Updated at the completion of every phase, before shipping. Per-commit detail liv
 
 **Test count:** 93 · **Provider health:** ollama/fireworks/hf reachable.
 
-## Phase 3 — In progress
+## Phase 3 — Self-learning, TUI, tooling ✅
+
+> **Detailed write-up:** [`PHASE-3.md`](PHASE-3.md) — self-learning, the UI-agnostic core + TUI, the npm migration, and the scope pivot.
 
 **Done**
 - **Task 1 — `selfLearn`** ✅: the coder learns fixes from its own successful diagnosed repairs (per-agent `data/lessons.sqlite`) and injects the top proven lessons proactively next run; `chorale lessons` to inspect; `CHORALE_NO_LEARN=1` for reproducible eval. See [`self-learning.md`](self-learning.md).
