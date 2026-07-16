@@ -118,6 +118,13 @@ consistency) but has its own palette, type, and signature components:
 Demos: `docs/scribe-profile-*.html` (all light, all with their distinctive components). A unit test asserts every
 profile registers, renders light, and carries its signature component.
 
+### Topic-aware document length
+Documents are sized to their topic, not one-size-fits-all (`src/tools/doc-pages.ts`): an **invoice defaults to 1 page**,
+a **medical report to 3–4**, an **academic paper/thesis to 12+**, etc. `resolvePageTarget(topic, requested?)` returns the
+target; a **user-specified count always overrides** the default (`parsePageRequest` reads "5 pages" / "two-page" /
+"10-page" from plain instructions). Scribe authors content to the target and can verify by rendering to PDF and counting
+pages — adjusting depth/detail, never padding with filler.
+
 ## Caveats
 Small fixtures, small N. Content graders use term coverage + structure regexes + the groundedness checker;
 they verify *correctness signals* (right facts present, nothing invented, right structure), not subjective

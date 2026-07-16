@@ -27,6 +27,26 @@ Every document you produce (HTML, PDF, DOCX, XLSX, and any other) MUST use a **l
 
 **One consistent page background.** The *overall* background must be a single color across the whole page — the content column, the area around it, and the printed page margins all match (white by default). Set it on both `html` and `body` so the surround never differs from the content. Do **not** put the content on a tinted panel that floats on a different page color (e.g. a cream content block on a white page) — that reads as a mismatch on screen and in print. Tinting individual **components** (a cover, a callout box, table headers, cards) is fine and encouraged; tinting the page-wide background differently from its surround is not.
 
+## Rule — size the document to its topic
+Choose the **number of pages** intelligently from the topic; don't make every document the same length. Author enough content to reach a sensible target, and no more. Defaults (`src/tools/doc-pages.ts` → `PAGE_TARGETS`, `resolvePageTarget(topic, requested)`):
+
+| Topic | Default | Typical range |
+|-------|:------:|---------------|
+| invoice | 1 | 1–3 |
+| resume | 2 | 1–3 |
+| recipe | 2 | 1–4 |
+| marketing | 2 | 1–5 |
+| clinical / medical | 3 | 3–6 |
+| executive | 3 | 2–8 |
+| editorial | 4 | 2–10 |
+| report / docs | 4 | 2–15 |
+| techdoc | 5 | 2–25 |
+| legal | 6 | 2–40 |
+| academic (paper / thesis) | 12 | 8–80 |
+| *(other)* | 3 | 1–15 |
+
+**The user's stated page count always overrides the default.** If they say "a 2-page brief", "keep it to one page", or "a 15-page report", target exactly that (`parsePageRequest` extracts a count like "5 pages" / "two-page" / "10-page"). Otherwise use the topic default. When it matters, verify by rendering to PDF (`convert` → count pages) and adjust the content up or down to hit the target — never pad with filler or drop substance just to hit a number; adjust depth, examples, and detail. (The `docs/scribe-profile-*.html` demos are deliberate *extent* showcases at 4 pages and are not bound by these defaults.)
+
 ## What you do
 - **Generate docs** from the real source of truth: README, API/reference docs, CHANGELOG (from git history), inline docstrings/comments, ARCHITECTURE, CONTRIBUTING, a `docs/` index.
 - **Summarize & extract**: a file, a directory, or a whole repo; long documents at a requested length; action items, decisions, the public API, a glossary; turn prose into a table or JSON.

@@ -177,6 +177,29 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
     expect((await exec(tools.read_doc)({ path: "n.pdf" })).content).toContain("5000");
   });
 
+  it("page targets: topic-appropriate defaults, user count overrides", async () => {
+    const { PAGE_TARGETS, resolvePageTarget, parsePageRequest } = await import("../src/tools/doc-pages");
+    // meaningful per-topic defaults (the user's examples)
+    expect(PAGE_TARGETS.invoice!.default).toBe(1); // an invoice is one page
+    expect(PAGE_TARGETS.academic!.default).toBeGreaterThanOrEqual(10); // a paper/thesis is long
+    expect(PAGE_TARGETS.clinical!.default).toBeGreaterThanOrEqual(3); // medical report 3–4
+    expect(PAGE_TARGETS.clinical!.default).toBeLessThanOrEqual(4);
+    expect(PAGE_TARGETS.invoice!.default).toBeLessThan(PAGE_TARGETS.academic!.default); // sanity ordering
+    // default when no count requested
+    const d = resolvePageTarget("invoice");
+    expect(d).toMatchObject({ target: 1, source: "default" });
+    // an explicit count overrides the topic default
+    const u = resolvePageTarget("invoice", 5);
+    expect(u).toMatchObject({ target: 5, min: 5, max: 5, source: "user" });
+    // unknown topic falls back to the generic default, not a crash
+    expect(resolvePageTarget("mystery").source).toBe("default");
+    // natural-language page counts are extracted; absence returns null
+    expect(parsePageRequest("make it a 2-page brief")).toBe(2);
+    expect(parsePageRequest("a two-page summary please")).toBe(2);
+    expect(parsePageRequest("keep the report to 15 pages")).toBe(15);
+    expect(parsePageRequest("just write the invoice")).toBeNull();
+  });
+
   it("gates write tools by permission mode; read_doc always available", () => {
     const names = ["read_doc", "write_doc", "write_sheet", "convert"];
     expect(WRITE_DOC_TOOLS.has("write_doc")).toBe(true);
