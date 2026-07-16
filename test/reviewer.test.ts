@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { loadAgent } from "../src/agents/loader";
 import { securityClassesIn } from "../src/core/runtime";
 import { FIXTURES, RAMP, gradeReview, numberedCode } from "../eval/reviewer-fixtures";
-import { PRECISION, MULTI, POLYGLOT, EXPERT } from "../eval/reviewer-suites";
+import { PRECISION, MULTI, POLYGLOT, EXPERT, DIFF } from "../eval/reviewer-suites";
 
 describe("Phase 4 — reviewer agent", () => {
   it("loads with a read-only inspection toolset and is delegable", () => {
@@ -96,6 +96,13 @@ describe("Phase 4 — reviewer suites (precision / multi / polyglot / expert)", 
     // EXPERT mixes hard defects with one adversarial clean control.
     expect(EXPERT.some((f) => f.clean)).toBe(true);
     expect(EXPERT.some((f) => f.defects.length > 0)).toBe(true);
+    // DIFF fixtures are unified diffs (regressions + one correct-change control).
+    expect(DIFF.length).toBeGreaterThan(0);
+    for (const f of DIFF) {
+      expect(f.lang).toBe("diff");
+      expect(f.code).toContain("@@");
+    }
+    expect(DIFF.some((f) => f.clean)).toBe(true);
   });
 
   it("a clean fixture with a bogus BLOCKER is scored as a false positive", () => {

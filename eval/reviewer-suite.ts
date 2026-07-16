@@ -13,12 +13,12 @@ import { buildRegistry } from "../src/core/model-registry.js";
 import { loadAgent } from "../src/agents/loader.js";
 import { runAgent } from "../src/core/runtime.js";
 import { gradeReview, numberedCode, type Fixture } from "./reviewer-fixtures.js";
-import { PRECISION, MULTI, POLYGLOT, EXPERT } from "./reviewer-suites.js";
+import { PRECISION, MULTI, POLYGLOT, EXPERT, DIFF } from "./reviewer-suites.js";
 
 process.env.CHORALE_NO_LEARN = "1"; // single-pass base measurement
 process.env.CHORALE_NO_CRITIQUE = "1";
 
-const SUITES: Record<string, Fixture[]> = { precision: PRECISION, multi: MULTI, polyglot: POLYGLOT, expert: EXPERT };
+const SUITES: Record<string, Fixture[]> = { precision: PRECISION, multi: MULTI, polyglot: POLYGLOT, expert: EXPERT, diff: DIFF };
 const which = process.argv[2] ?? "all";
 const rest = process.argv.slice(3);
 const models = rest.length ? rest : ["hf:google/gemma-4-31B-it", "fireworks:accounts/fireworks/models/gpt-oss-120b"];
@@ -29,6 +29,12 @@ const registry = buildRegistry(config);
 const reviewer = loadAgent(resolve(process.cwd(), "agents/reviewer.md"));
 
 function prompt(f: Fixture): string {
+  if (f.lang === "diff") {
+    return (
+      "Review the following unified diff — judge the change. Report findings in your exact format and end with a VERDICT.\n\n" +
+      "```diff\n" + f.code + "\n```"
+    );
+  }
   return (
     `Review the following ${f.lang} code. Report findings in your exact format and end with a VERDICT.\n\n` +
     "```" +

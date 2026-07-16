@@ -5,7 +5,7 @@
  * Run: npx tsx eval/reviewer-selftest.ts
  */
 import { FIXTURES, RAMP, gradeReview } from "./reviewer-fixtures.js";
-import { PRECISION, MULTI, POLYGLOT, EXPERT } from "./reviewer-suites.js";
+import { PRECISION, MULTI, POLYGLOT, EXPERT, DIFF } from "./reviewer-suites.js";
 
 let ok = true;
 const expect = (label: string, got: string | number, want: string | number): void => {
@@ -72,7 +72,7 @@ for (const f of defectFixtures) {
     expect(`precision ${f.id} no false positive on APPROVE`, gradeReview(f, "Correct.\nVERDICT: APPROVE").falseBlockers, 0);
     expect(`precision ${f.id} flags a bogus BLOCKER`, gradeReview(f, "- [BLOCKER] x:1 — bogus.").falseBlockers, 1);
   }
-  for (const f of [...MULTI, ...POLYGLOT, ...EXPERT.filter((x) => !x.clean)]) {
+  for (const f of [...MULTI, ...POLYGLOT, ...EXPERT.filter((x) => !x.clean), ...DIFF.filter((x) => !x.clean)]) {
     const perfect = f.defects.map((d) => `- [MAJOR] x:${d.line} — ${d.terms[0]}.`).join("\n");
     expect(`suite perfect catches all of ${f.id}`, `${gradeReview(f, perfect).caught.length}/${f.defects.length}`, `${f.defects.length}/${f.defects.length}`);
     expect(`suite empty misses ${f.id}`, gradeReview(f, "No issues.").caught.length, 0);

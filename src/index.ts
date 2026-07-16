@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import "dotenv/config";
 import readline from "node:readline";
+import { execSync } from "node:child_process";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -54,6 +55,7 @@ Commands:
   cost [session]                token usage + estimated spend per model
   lessons [agent]               show what agents learned from past repairs
   doctor                        ping every configured provider for reachability
+  review [--staged] [paths…]    review your git diff (or the given files) with the reviewer agent
 
 Options:
   -a, --agent <name>            which agent (default: general)
@@ -282,6 +284,67 @@ async function runInit(auto: boolean): Promise<void> {
   apply();
 }
 
+/** Number lines 1-based so the reviewer can cite file:line accurately. */
+function numberLines(src: string): string {
+  return src.split("\n").map((l, i) => `${String(i + 1).padStart(3, " ")}  ${l}`).join("\n");
+}
+
+/**
+ * `chorale review [--staged] [--model M] [paths...]` — run the reviewer agent on a
+ * git diff (default: unstaged working changes; `--staged` for the index) or on the
+ * given files. Read-only (never mutates); the self-critique pass produces the final review.
+ */
+async function runReview(argv: string[]): Promise<void> {
+  let model: string | undefined;
+  let staged = false;
+  const paths: string[] = [];
+  for (let i = 1; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--model" || a === "-m") model = argv[++i];
+    else if (a === "--staged") staged = true;
+    else if (a && !a.startsWith("-")) paths.push(a);
+  }
+
+  let content: string;
+  if (paths.length) {
+    const parts: string[] = [];
+    for (const p of paths) {
+      if (!existsSync(p)) {
+        process.stderr.write(`File not found: ${p}\n`);
+        process.exit(1);
+      }
+      parts.push(`### ${p}\n\`\`\`\n${numberLines(readFileSync(p, "utf8"))}\n\`\`\``);
+    }
+    content = "Review these files. Report findings in your exact format and end with a VERDICT.\n\n" + parts.join("\n\n");
+  } else {
+    let diff = "";
+    try {
+      diff = execSync(staged ? "git diff --staged" : "git diff", { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+    } catch {
+      process.stderr.write("Could not run `git diff` (not a git repository?). Pass file paths to review instead.\n");
+      process.exit(1);
+    }
+    if (!diff.trim()) {
+      process.stderr.write(`No ${staged ? "staged " : ""}changes to review.${staged ? "" : " (Use --staged for the index, or pass file paths.)"}\n`);
+      return;
+    }
+    content = "Review the following unified diff — judge the change. Report findings in your exact format and end with a VERDICT.\n\n```diff\n" + diff + "\n```";
+  }
+
+  const config = loadConfig();
+  const registry = buildRegistry(config);
+  const file = resolve(config.agents.dir, "reviewer.md");
+  if (!existsSync(file)) {
+    process.stderr.write(`Reviewer agent not found at ${file}\n`);
+    process.exit(1);
+  }
+  const agent = loadAgent(file);
+  const activeModel = resolveModelPlan(agent, config, model).model;
+  log.info(`[chorale] reviewing ${paths.length ? `${paths.length} file(s)` : `git diff${staged ? " --staged" : ""}`} · model=${activeModel}\n\n`);
+  await runAgent({ config, registry, agent, prompt: content, modelOverride: model, permissionMode: "read-only", stream: true });
+  closeLessonStore();
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
 
@@ -306,6 +369,11 @@ async function main(): Promise<void> {
 
   if (argv[0] === "doctor") {
     await runDoctor(loadConfig());
+    return;
+  }
+
+  if (argv[0] === "review") {
+    await runReview(argv);
     return;
   }
 

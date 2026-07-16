@@ -230,6 +230,73 @@ export function track(event) {
   },
 ];
 
+/**
+ * Diff review — the reviewer judges a unified diff (the most common real review mode):
+ * catch regressions the CHANGE introduces, and don't flag a correct, complete change.
+ * `code` holds the diff; the harness frames it as "review this diff".
+ */
+export const DIFF: Fixture[] = [
+  {
+    id: "D-dropped-null-guard",
+    title: "Refactor drops a null guard (regression)",
+    lang: "diff",
+    code: `--- a/user.js
++++ b/user.js
+@@ -1,4 +1,3 @@
+ export function displayName(user) {
+-  if (!user) return "Guest";
+   return user.name;
+ }`,
+    defects: [
+      { key: "dropped-guard", line: 2, terms: ["null", "guard", "removed", "dropped", "crash", "throws", "undefined", "!user", "guest", "no longer"] },
+    ],
+  },
+  {
+    id: "D-flipped-comparison",
+    title: "Boundary flipped >= to > (off-by-one regression)",
+    lang: "diff",
+    code: `--- a/eligibility.js
++++ b/eligibility.js
+@@ -1,3 +1,3 @@
+ export function isAdult(age) {
+-  return age >= 18;
++  return age > 18;
+ }`,
+    defects: [
+      { key: "flipped-comparison", line: 2, terms: ["off-by-one", "boundary", "excludes 18", "18", ">= 18", "> 18", "greater than or equal", "now excludes", "18-year"] },
+    ],
+  },
+  {
+    id: "D-typo-field",
+    title: "Renamed property introduces a typo (undefined)",
+    lang: "diff",
+    code: `--- a/parse.js
++++ b/parse.js
+@@ -1,3 +1,3 @@
+ export function items(data) {
+-  return data.results;
++  return data.result;
+ }`,
+    defects: [
+      { key: "typo-field", line: 2, terms: ["result", "results", "typo", "property", "undefined", "wrong field", "renamed", "does not exist"] },
+    ],
+  },
+  {
+    id: "D-correct-change",
+    title: "Correct improvement — copy + numeric comparator (no regression)",
+    lang: "diff",
+    clean: true,
+    code: `--- a/sort.js
++++ b/sort.js
+@@ -1,3 +1,3 @@
+ export function sorted(nums) {
+-  return nums.sort();
++  return [...nums].sort((a, b) => a - b);
+ }`,
+    defects: [],
+  },
+];
+
 /** Non-JS defects — the reviewer must not be JS-only. */
 export const POLYGLOT: Fixture[] = [
   {
