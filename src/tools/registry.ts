@@ -13,7 +13,7 @@ const staticTools: ToolSet = {
 };
 
 /** Tools handled elsewhere in the runtime (not built here). */
-const RUNTIME_TOOLS = new Set(["delegate", "skill_view"]);
+const RUNTIME_TOOLS = new Set(["delegate", "skill_view", "gate"]);
 
 /**
  * Build an agent's ToolSet from its tool name allow-list, applying the permission

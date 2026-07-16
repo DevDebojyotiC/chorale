@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadAgent } from "../src/agents/loader";
 import { chainWith, canRunGate, withGateChain, gateChain, MAX_GATE_DEPTH } from "../src/core/gate";
+import { createGateTool } from "../src/tools/gate-tool";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const run = (t: any) => (i: any) => t.execute(i, {});
 
 describe("Phase 4 — generalized gate framework (config)", () => {
   let dir: string;
@@ -95,5 +99,47 @@ describe("Phase 4 — gate loop prevention (ancestor exclusion)", () => {
     expect(chainWith("planner")).toEqual(["coder", "reviewer", "planner"]);
     expect(canRunGate(chainWith("planner"), "coder").ok).toBe(false); // planner can't gate back to coder
     delete process.env.CHORALE_GATE_CHAIN;
+  });
+});
+
+describe("Phase 4 — on-demand gate() tool (graceful degradation + light-2 note)", () => {
+  it("rejects a gate not on the caller's allow-list", async () => {
+    const tool = createGateTool({
+      allowed: ["planner"],
+      callerChain: ["coder"],
+      recordUnmet: () => {},
+      run: async () => ({ ok: true, text: "unused" }),
+    });
+    const r = await run(tool)({ agent: "reviewer", task: "x" }); // reviewer not permitted
+    expect(r.error).toMatch(/not an available gate/i);
+  });
+
+  it("passes a permitted gate's result back", async () => {
+    const tool = createGateTool({
+      allowed: ["planner"],
+      callerChain: ["coder"],
+      recordUnmet: () => {},
+      run: async (agent, task) => ({ ok: true, text: `plan for: ${task}` }),
+    });
+    const r = await run(tool)({ agent: "planner", task: "build X" });
+    expect(r).toMatchObject({ agent: "planner", result: "plan for: build X" });
+  });
+
+  it("on refusal, returns the reason with inline-degradation guidance AND records the unmet need", async () => {
+    const notes: string[] = [];
+    const tool = createGateTool({
+      allowed: ["planner"],
+      callerChain: ["coder", "reviewer", "planner", "researcher"], // planner is an ancestor
+      recordUnmet: (n) => notes.push(n),
+      run: async (_agent, _task, chain) => {
+        const d = canRunGate(chain, "planner"); // the real guard the runtime uses
+        return d.ok ? { ok: true, text: "plan" } : { ok: false, reason: d.reason! };
+      },
+    });
+    const r = await run(tool)({ agent: "planner", task: "plan the complex research" });
+    expect(r.refused).toMatch(/loop/i); // researcher can't re-enter planner
+    expect(r.guidance).toMatch(/inline/i); // told to proceed inline (graceful degradation)
+    expect(notes).toHaveLength(1); // the unmet need is recorded to bubble up (light-2)
+    expect(notes[0]).toMatch(/planner/);
   });
 });

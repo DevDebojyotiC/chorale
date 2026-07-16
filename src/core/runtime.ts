@@ -12,6 +12,7 @@ import { buildToolSet } from "../tools/registry.js";
 import type { PermissionMode } from "../tools/permissions.js";
 import { createSkillViewTool } from "../tools/skill.js";
 import { createDelegateTool } from "../tools/delegate.js";
+import { createGateTool } from "../tools/gate-tool.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
@@ -85,19 +86,56 @@ export function securityClassesIn(text: string): Set<string> {
 }
 
 /**
- * Review gate: after a coding agent's output verifies clean, ask the `reviewer` agent
- * for a semantic second opinion on the written files and return its BLOCKER/MAJOR
- * finding lines (empty = approved). Single-pass (no self-critique) to bound cost.
+ * Run an allow-listed agent as a GATE: one pass, no self-critique, loop-guarded via the gate
+ * chain. Returns the gate agent's text, or a structured refusal reason (already in the chain,
+ * depth cap, disabled, unknown/unloadable, or errored). The caller decides how to use the text
+ * and how to degrade on refusal. `callerChain` must already include the caller (chainWith).
+ */
+async function runGate(opts: {
+  agentName: string;
+  prompt: string;
+  callerChain: string[];
+  config: ChoraleConfig;
+  registry: Registry;
+  permissionMode?: PermissionMode;
+}): Promise<{ ok: true; text: string } | { ok: false; reason: string }> {
+  const decision = canRunGate(opts.callerChain, opts.agentName);
+  if (!decision.ok) return { ok: false, reason: decision.reason ?? "gate refused" };
+  const file = resolve(opts.config.agents.dir, `${opts.agentName}.md`);
+  if (!existsSync(file)) return { ok: false, reason: `unknown gate agent "${opts.agentName}"` };
+  let spec: AgentSpec;
+  try {
+    spec = loadAgent(file);
+  } catch (e) {
+    return { ok: false, reason: `failed to load gate agent "${opts.agentName}": ${e instanceof Error ? e.message : String(e)}` };
+  }
+  const prevCritique = process.env.CHORALE_NO_CRITIQUE;
+  process.env.CHORALE_NO_CRITIQUE = "1"; // one pass, no self-critique
+  try {
+    const res = await withGateChain(opts.callerChain, () =>
+      runAgent({ config: opts.config, registry: opts.registry, agent: spec, prompt: opts.prompt, permissionMode: opts.permissionMode ?? "read-only", stream: false }),
+    );
+    return { ok: true, text: res.text };
+  } catch (err) {
+    return { ok: false, reason: `gate "${opts.agentName}" errored: ${err instanceof Error ? err.message : String(err)}` };
+  } finally {
+    if (prevCritique === undefined) delete process.env.CHORALE_NO_CRITIQUE;
+    else process.env.CHORALE_NO_CRITIQUE = prevCritique;
+  }
+}
+
+/**
+ * Review gate: after a coding agent's output verifies clean, ask the `reviewer` agent for a
+ * semantic second opinion on the written files and return its BLOCKER/MAJOR finding lines
+ * (empty = approved). An instance of the generic gate mechanism (runGate).
  */
 async function reviewGateFindings(
   files: string[],
   cwd: string,
   config: ChoraleConfig,
   registry: Registry,
+  callerChain: string[],
 ): Promise<string[]> {
-  const reviewerFile = resolve(config.agents.dir, "reviewer.md");
-  if (!existsSync(reviewerFile)) return [];
-  const reviewer = loadAgent(reviewerFile);
   const parts: string[] = [];
   for (const f of files) {
     const p = isAbsolute(f) ? f : resolve(cwd, f);
@@ -112,24 +150,16 @@ async function reviewGateFindings(
     "Review these just-written files for correctness and security BUGS only (ignore style/nits). " +
     "Report findings in your exact format and end with a VERDICT.\n\n" +
     parts.join("\n\n");
-  // One reviewer pass (no self-critique). Loop prevention is handled by the gate chain the
-  // caller advanced (withGateChain): the reviewer's own gates see it in the chain already.
-  const prevCritique = process.env.CHORALE_NO_CRITIQUE;
-  process.env.CHORALE_NO_CRITIQUE = "1";
-  try {
-    const res = await runAgent({ config, registry, agent: reviewer, prompt, permissionMode: "read-only", stream: false });
-    log.debug(`[chorale] review gate raw: ${res.text.length} chars · ${res.text.match(/VERDICT:[^\n]*/)?.[0] ?? "(no verdict)"}\n`);
-    return res.text
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => /^-?\s*\[\s*(BLOCKER|MAJOR)\s*\]/i.test(l));
-  } catch (err) {
-    log.info(`[chorale] review gate errored: ${err instanceof Error ? err.message : String(err)}\n`);
-    return []; // a failed gate must not block the coder's result
-  } finally {
-    if (prevCritique === undefined) delete process.env.CHORALE_NO_CRITIQUE;
-    else process.env.CHORALE_NO_CRITIQUE = prevCritique;
+  const r = await runGate({ agentName: "reviewer", prompt, callerChain, config, registry, permissionMode: "read-only" });
+  if (!r.ok) {
+    log.info(`[chorale] review gate skipped: ${r.reason}\n`);
+    return []; // a refused/failed gate must not block the coder's result
   }
+  log.debug(`[chorale] review gate raw: ${r.text.length} chars · ${r.text.match(/VERDICT:[^\n]*/)?.[0] ?? "(no verdict)"}\n`);
+  return r.text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^-?\s*\[\s*(BLOCKER|MAJOR)\s*\]/i.test(l));
 }
 
 /** ~char budget guarding the model's context window (~30k tokens). */
@@ -205,6 +235,9 @@ export interface RunResult {
   model: string;
   text: string;
   usage: LanguageModelUsage | undefined;
+  /** Gates the agent needed but couldn't run (loop-guarded/refused) — a light advisory
+   * signal that bubbles up so a caller can react. Empty/absent when all gates ran. */
+  unmetGates?: string[];
 }
 
 export interface RunOptions {
@@ -294,6 +327,28 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     }
   }
 
+  // Gates the agent needed but couldn't run this turn (loop-guarded/refused) — surfaced on
+  // the result as a light advisory signal (graceful degradation + upward note).
+  const unmetGates: string[] = [];
+  const myGateChain = chainWith(agent.name);
+
+  // On-demand gates: give the agent a `gate` tool restricted to its permitted gate agents,
+  // plus a prompt block naming them. Refusals degrade gracefully and are recorded above.
+  let gateBlock = "";
+  const onDemandGates = [...new Set((agent.gates ?? []).filter((g) => g.mode === "on-demand").map((g) => g.agent))];
+  if (onDemandGates.length > 0) {
+    tools.gate = createGateTool({
+      allowed: onDemandGates,
+      callerChain: myGateChain,
+      recordUnmet: (note) => unmetGates.push(note),
+      run: (agentName, task, callerChain) => runGate({ agentName, prompt: task, callerChain, config, registry, permissionMode }),
+    });
+    gateBlock =
+      "## Gates you can invoke (via the gate tool)\n" +
+      onDemandGates.map((a) => `- ${a}`).join("\n") +
+      "\nA gate is an advisory second opinion/plan whose result feeds back into your work. If a gate is refused (loop-guarded), proceed inline and note the unmet need.\n\n";
+  }
+
   // Few-shot: inject the agent's worked examples (<name>.examples.md) when enabled.
   // Showing correct patterns tends to beat stating rules for weaker models.
   let fewShotBlock = "";
@@ -323,7 +378,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const system = `Current date: ${today}.\n\n${delegateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}${fewShotBlock}${lessonsBlock}`;
+  const system = `Current date: ${today}.\n\n${delegateBlock}${gateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}${fewShotBlock}${lessonsBlock}`;
   const messages: ChatMessage[] = [...(opts.history ?? []), { role: "user", content: prompt }];
 
   // Self-critique (the reviewer's form of self-healing): after the main turn, feed
@@ -332,16 +387,18 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const critique = agent.selfCritique && process.env.CHORALE_NO_CRITIQUE !== "1";
   let suppressOutput = critique;
 
-  // Gate chain including this agent — used to forbid re-entering any agent already active
-  // in the lineage (no loops), and to bound depth. See src/core/gate.ts.
-  const myGateChain = chainWith(agent.name);
   // Review gate: an auto reviewer gate that fires after this agent's code verifies clean —
   // a semantic second opinion that fixes any BLOCKER/MAJOR it finds. Disable with CHORALE_NO_REVIEW_GATE=1.
-  // Only fires if running "reviewer" wouldn't loop back into an agent already in the chain.
-  const reviewGate =
+  // Only fires if running "reviewer" wouldn't loop back into an agent already in the chain;
+  // if it's wanted but loop-guarded, record the unmet need (graceful degradation).
+  const wantsReviewGate =
     process.env.CHORALE_NO_REVIEW_GATE !== "1" &&
-    (agent.gates ?? []).some((g) => g.agent === "reviewer" && g.mode === "auto" && g.when === "post-verify") &&
-    canRunGate(myGateChain, "reviewer").ok;
+    (agent.gates ?? []).some((g) => g.agent === "reviewer" && g.mode === "auto" && g.when === "post-verify");
+  const reviewDecision = wantsReviewGate ? canRunGate(myGateChain, "reviewer") : { ok: false as const };
+  const reviewGate = wantsReviewGate && reviewDecision.ok;
+  if (wantsReviewGate && !reviewDecision.ok && "reason" in reviewDecision && reviewDecision.reason) {
+    unmetGates.push(`reviewer: ${reviewDecision.reason}`);
+  }
 
   // Whether the latest attempt tried to write files — used to detect no-op turns
   // where a weak model emits write calls with empty/invalid arguments.
@@ -594,9 +651,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         // Review gate: a semantic second opinion from the reviewer on the clean code.
         // Catches logic/security bugs that syntax + smoke can't. Bounded by the repair budget.
         if (reviewGate && !isLast) {
-          // Advance the gate chain to include this agent so the reviewer (and anything it
-          // gates) cannot re-enter an agent already in the lineage.
-          const findings = await withGateChain(myGateChain, () => reviewGateFindings([...touched], cwd, config, registry));
+          const findings = await reviewGateFindings([...touched], cwd, config, registry, myGateChain);
           if (findings.length > 0) {
             log.info(`\n[chorale] ⚠ review gate: ${findings.length} blocking finding(s) — asking the coder to fix…\n`);
             for (const f of findings.slice(0, 6)) log.info(`    ${f}\n`);
@@ -672,6 +727,11 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     // Report cumulative usage across all attempts (undefined if no provider reported any).
     if (sawUsage) {
       result.usage = { ...(result.usage ?? {}), inputTokens: cumInput, outputTokens: cumOutput, totalTokens: cumTotal } as LanguageModelUsage;
+    }
+    // Light-2 signal: surface any gates that were needed but couldn't run (graceful degradation).
+    if (unmetGates.length > 0) {
+      result.unmetGates = [...new Set(unmetGates)];
+      log.info(`\n[chorale] ℹ ${result.unmetGates.length} gate(s) unavailable this turn (handled inline): ${result.unmetGates.join("; ")}\n`);
     }
     return result;
   } finally {
