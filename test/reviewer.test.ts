@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { loadAgent } from "../src/agents/loader";
 import { securityClassesIn } from "../src/core/runtime";
 import { FIXTURES, RAMP, gradeReview, numberedCode } from "../eval/reviewer-fixtures";
-import { PRECISION, MULTI, POLYGLOT, EXPERT, DIFF } from "../eval/reviewer-suites";
+import { PRECISION, MULTI, POLYGLOT, EXPERT, DIFF, MULTIFILE } from "../eval/reviewer-suites";
 
 describe("Phase 4 — reviewer agent", () => {
   it("loads with a read-only inspection toolset and is delegable", () => {
@@ -103,6 +103,11 @@ describe("Phase 4 — reviewer suites (precision / multi / polyglot / expert)", 
       expect(f.code).toContain("@@");
     }
     expect(DIFF.some((f) => f.clean)).toBe(true);
+    // MULTIFILE fixtures are tiny projects (≥2 files) with cross-contract defects + a clean control.
+    expect(MULTIFILE.length).toBeGreaterThan(0);
+    for (const f of MULTIFILE) expect(Object.keys(f.files).length).toBeGreaterThanOrEqual(2);
+    expect(MULTIFILE.some((f) => f.clean)).toBe(true);
+    expect(MULTIFILE.some((f) => f.defects.length > 0)).toBe(true);
   });
 
   it("a clean fixture with a bogus BLOCKER is scored as a false positive", () => {

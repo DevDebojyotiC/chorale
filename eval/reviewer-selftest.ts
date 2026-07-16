@@ -5,7 +5,8 @@
  * Run: npx tsx eval/reviewer-selftest.ts
  */
 import { FIXTURES, RAMP, gradeReview } from "./reviewer-fixtures.js";
-import { PRECISION, MULTI, POLYGLOT, EXPERT, DIFF } from "./reviewer-suites.js";
+import { PRECISION, MULTI, POLYGLOT, EXPERT, DIFF, MULTIFILE } from "./reviewer-suites.js";
+import type { Fixture } from "./reviewer-fixtures.js";
 
 let ok = true;
 const expect = (label: string, got: string | number, want: string | number): void => {
@@ -76,6 +77,19 @@ for (const f of defectFixtures) {
     const perfect = f.defects.map((d) => `- [MAJOR] x:${d.line} — ${d.terms[0]}.`).join("\n");
     expect(`suite perfect catches all of ${f.id}`, `${gradeReview(f, perfect).caught.length}/${f.defects.length}`, `${f.defects.length}/${f.defects.length}`);
     expect(`suite empty misses ${f.id}`, gradeReview(f, "No issues.").caught.length, 0);
+  }
+}
+
+// 8) Multi-file (cross-contract) fixtures grade via the same term-match.
+{
+  for (const f of MULTIFILE) {
+    if (f.clean) {
+      expect(`multifile ${f.id} clean control`, gradeReview(f as unknown as Fixture, "Consistent.\nVERDICT: APPROVE").falseBlockers, 0);
+    } else {
+      const perfect = f.defects.map((d) => `- [MAJOR] x — ${d.terms[0]}.`).join("\n");
+      expect(`multifile perfect catches ${f.id}`, gradeReview(f as unknown as Fixture, perfect).caught.length, f.defects.length);
+      expect(`multifile empty misses ${f.id}`, gradeReview(f as unknown as Fixture, "All consistent.").caught.length, 0);
+    }
   }
 }
 

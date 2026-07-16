@@ -10,7 +10,63 @@
  *
  * All graded by the same `gradeReview` from reviewer-fixtures.ts.
  */
-import type { Fixture } from "./reviewer-fixtures.js";
+import type { Fixture, Defect } from "./reviewer-fixtures.js";
+
+/** A multi-file fixture: a tiny project whose defect only shows ACROSS files. */
+export interface MFFixture {
+  id: string;
+  title: string;
+  files: Record<string, string>;
+  defects: Defect[];
+  clean?: boolean;
+}
+
+/** Cross-contract bugs the reviewer can only catch by reading multiple files. */
+export const MULTIFILE: MFFixture[] = [
+  {
+    id: "MF-arg-order",
+    title: "Caller passes arguments in the wrong order",
+    files: {
+      "lib.mjs": `export function transfer(fromId, toId, amount) {\n  return { debit: fromId, credit: toId, amount };\n}\n`,
+      "app.mjs": `import { transfer } from "./lib.mjs";\nexport function pay(amount, sender, recipient) {\n  return transfer(amount, sender, recipient);\n}\n`,
+    },
+    defects: [
+      { key: "arg-order", line: 3, terms: ["order", "swapped", "wrong order", "argument order", "parameter order", "transfer expects", "fromid", "mismatch", "positional"] },
+    ],
+  },
+  {
+    id: "MF-shape-mismatch",
+    title: "Consumer reads fields the producer does not return",
+    files: {
+      "store.mjs": `export function currentUser() {\n  return { userId: 42, fullName: "Ada" };\n}\n`,
+      "view.mjs": `import { currentUser } from "./store.mjs";\nexport function greeting() {\n  const u = currentUser();\n  return \`Hello \${u.name} (#\${u.id})\`;\n}\n`,
+    },
+    defects: [
+      { key: "shape-mismatch", line: 4, terms: ["u.name", "u.id", "fullname", "userid", "field", "property", "undefined", "does not return", "does not have", "mismatch"] },
+    ],
+  },
+  {
+    id: "MF-missing-await",
+    title: "Caller does not await an async callee (cross-file)",
+    files: {
+      "api.mjs": `export async function load(id) {\n  return { id, ok: true };\n}\n`,
+      "main.mjs": `import { load } from "./api.mjs";\nexport function ready(id) {\n  const r = load(id);\n  return r.ok;\n}\n`,
+    },
+    defects: [
+      { key: "cross-await", line: 3, terms: ["await", "promise", "async", "not awaited", "returns a promise", "r.ok", "load is async", "undefined"] },
+    ],
+  },
+  {
+    id: "MF-clean",
+    title: "Consistent contract across files (control — no defect)",
+    files: {
+      "math.mjs": `export function add(a, b) {\n  return a + b;\n}\n`,
+      "calc.mjs": `import { add } from "./math.mjs";\nexport function sum3(x, y, z) {\n  return add(add(x, y), z);\n}\n`,
+    },
+    defects: [],
+    clean: true,
+  },
+];
 
 /** Tricky but CORRECT — success = zero BLOCKER/MAJOR findings (NITs are fine). */
 export const PRECISION: Fixture[] = [
