@@ -93,14 +93,19 @@ export function normalizePlan(input: { summary?: unknown; steps?: unknown }): Pl
   const rawSteps: RawStep[] = Array.isArray(input.steps) ? (input.steps as RawStep[]) : [];
   // Assign canonical ids s1..sN by order; map any numeric/loose depends references onto them.
   const idFor = (i: number): string => `s${i + 1}`;
+  // Resolve a dependency reference to a canonical step id. An in-range number maps to sN.
+  // Anything unresolvable (out-of-range number, or a title/free-text ref) is KEPT as a
+  // sentinel rather than dropped, so validatePlan flags it as a bad dependency instead of the
+  // DAG silently losing an edge the model intended.
   const refToId = (ref: unknown): string | null => {
     const s = String(ref ?? "").trim().replace(/^#/, "");
+    if (!s) return null; // genuinely empty — nothing to reference
     const asNum = s.match(/^s?(\d+)$/i);
     if (asNum) {
       const n = parseInt(asNum[1]!, 10);
-      return n >= 1 && n <= rawSteps.length ? idFor(n - 1) : null;
+      return n >= 1 && n <= rawSteps.length ? idFor(n - 1) : `s${n}`; // out-of-range → dangling id (flagged)
     }
-    return null;
+    return s; // free-text ref → keep as-is so validatePlan surfaces it as a bad dependency
   };
   const steps: PlanStep[] = rawSteps.map((r, i) => ({
     id: idFor(i),
@@ -174,7 +179,11 @@ export function parsePlan(text: string): Plan | null {
         layer = layerTail[1]!.toLowerCase();
         rest = rest.slice(0, layerTail.index).trim();
       }
-      cur = { title: rest, agent, layer, depends: [], accept: "", files: [], design: /design|architect|decision/i.test(rest) };
+      // A design decision means an up-front technical *choice*, not merely a step whose title
+      // contains "design" (e.g. "Design the login screen" is ordinary build work). Only trip on
+      // phrasing that implies a decision/architecture/trade-off.
+      const design = /\b(design decision|architectur|trade-?off|choose between|decide (?:on|between)|evaluate options)\b/i.test(rest);
+      cur = { title: rest, agent, layer, depends: [], accept: "", files: [], design };
       accs.push(cur);
       continue;
     }
@@ -222,12 +231,14 @@ export function assessComplexity(plan: Plan): ComplexityResult {
 // ── Validation (assignments, DAG, ordering, grounding) ────────────────────────
 
 export interface PlanIssue {
-  kind: "unknown-agent" | "bad-dependency" | "cycle" | "ordering" | "ungrounded" | "empty";
+  kind: "unknown-agent" | "bad-dependency" | "cycle" | "ordering" | "ungrounded" | "new-file-exists" | "missing-acceptance" | "empty";
   step?: string;
   message: string;
 }
 
-// A rough layer precedence for the ordering sanity check: earlier layers should not depend on later ones.
+// A rough layer precedence for the ordering sanity check: earlier layers should not depend on
+// later ones. `other` is a catch-all with no meaningful position, so it is excluded from the
+// check (see validatePlan) to avoid false "reversed order" flags.
 const LAYER_ORDER: Record<PlanLayer, number> = { schema: 0, api: 1, ui: 2, tests: 3, docs: 3, infra: 0, other: 2 };
 
 /** Detect a cycle in the dependency graph via DFS; returns true if any cycle exists. */
@@ -264,19 +275,26 @@ export function validatePlan(plan: Plan, opts: { agents: string[]; cwd: string }
     if (known.size > 0 && !known.has(s.agent)) {
       issues.push({ kind: "unknown-agent", step: s.id, message: `Step ${s.id} is assigned to "${s.agent}", which is not an available specialist (${opts.agents.join(", ")}).` });
     }
+    if (s.acceptance.trim() === "") {
+      issues.push({ kind: "missing-acceptance", step: s.id, message: `Step ${s.id} has no acceptance criterion — add a concrete, checkable "done" condition.` });
+    }
     for (const dep of s.dependsOn) {
       if (!ids.has(dep)) {
         issues.push({ kind: "bad-dependency", step: s.id, message: `Step ${s.id} depends on "${dep}", which is not a step in the plan.` });
       } else {
         const from = plan.steps.find((x) => x.id === dep)!;
-        if (LAYER_ORDER[s.layer] < LAYER_ORDER[from.layer]) {
+        // Skip the ordering check when either side is the `other` catch-all (no meaningful position).
+        if (s.layer !== "other" && from.layer !== "other" && LAYER_ORDER[s.layer] < LAYER_ORDER[from.layer]) {
           issues.push({ kind: "ordering", step: s.id, message: `Step ${s.id} (${s.layer}) depends on ${dep} (${from.layer}) — that reverses the usual build order.` });
         }
       }
     }
     for (const f of s.files) {
-      if (f.status === "existing" && !existsSync(resolve(opts.cwd, f.path))) {
+      const onDisk = existsSync(resolve(opts.cwd, f.path));
+      if (f.status === "existing" && !onDisk) {
         issues.push({ kind: "ungrounded", step: s.id, message: `Step ${s.id} references existing file "${f.path}", which does not exist in the repo.` });
+      } else if (f.status === "new" && onDisk) {
+        issues.push({ kind: "new-file-exists", step: s.id, message: `Step ${s.id} marks "${f.path}" as new, but it already exists — mark it existing, or choose a different path.` });
       }
     }
   }

@@ -14,7 +14,7 @@ import { createSkillViewTool } from "../tools/skill.js";
 import { createDelegateTool } from "../tools/delegate.js";
 import { createGateTool } from "../tools/gate-tool.js";
 import { createPlanTool } from "../tools/plan-tool.js";
-import { parsePlan, type Plan } from "./plan.js";
+import { parsePlan, validatePlan, planFeedback, type Plan } from "./plan.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
@@ -621,6 +621,35 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         opts.onEvent?.({ type: "verify", text: `docs: ${missing.length + dropped.length + fab.length} issue(s) — fixing` });
         messages.push({ role: "assistant", content: result.text || "(wrote docs)" });
         messages.push({ role: "user", content: parts.join("\n\n") });
+        result = await attempt(repairTemp(round));
+        continue;
+      }
+
+      // (1.6) Plan validation — for planning agents (the planner). Validate the captured (or
+      // text-parsed) plan against the real repo — assignments, the dependency DAG, ordering, and
+      // grounded file references — and loop back to fix issues. The planner's analog of the coder's
+      // verify and the scribe's groundCheck: a plan's guarantees are enforced, not just documented.
+      if (agent.tools.includes("plan") && process.env.CHORALE_NO_PLAN_CHECK !== "1") {
+        const plan = capturedPlan ?? parsePlan(result.text);
+        if (!plan) break; // no plan emitted (e.g. a clarifying question) — nothing to validate
+        const roster = listAgents(config.agents.dir)
+          .filter((a) => a.delegable && a.name !== agent.name)
+          .map((a) => a.name);
+        const issues = validatePlan(plan, { agents: roster, cwd });
+        if (issues.length === 0) {
+          log.info(round > 0 ? `\n[chorale] ✓ plan valid after ${round} fix round(s)\n` : `\n[chorale] ✓ plan valid (assignments, DAG, ordering, grounding)\n`);
+          break;
+        }
+        if (isLast) {
+          log.info(`\n[chorale] ⚠ ${issues.length} plan issue(s) remain after ${maxRounds} rounds\n`);
+          break;
+        }
+        log.info(`\n[chorale] ⚠ plan: ${issues.length} issue(s) — asking to fix…\n`);
+        for (const i of issues.slice(0, 6)) log.info(`    ${i.message}\n`);
+        opts.onEvent?.({ type: "verify", text: `plan: ${issues.length} issue(s) — fixing` });
+        messages.push({ role: "assistant", content: result.text || "(emitted a plan)" });
+        messages.push({ role: "user", content: planFeedback(issues) });
+        capturedPlan = null; // force a fresh capture on the repair round (avoid a stale plan)
         result = await attempt(repairTemp(round));
         continue;
       }

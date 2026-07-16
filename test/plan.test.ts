@@ -21,9 +21,9 @@ describe("Phase 4 — planning core (plan.ts)", () => {
       expect(plan.steps[0]!.agent).toBe("coder"); // lower-cased
     });
 
-    it("drops dependency references that point outside the plan", () => {
-      const plan = normalizePlan({ summary: "x", steps: [{ title: "only", agent: "coder", dependsOn: [5] }] });
-      expect(plan.steps[0]!.dependsOn).toEqual([]);
+    it("preserves an unresolvable dependency reference so the validator can flag it (not silently dropped)", () => {
+      const plan = normalizePlan({ summary: "x", steps: [{ title: "only", agent: "coder", dependsOn: [5, "the schema"] }] });
+      expect(plan.steps[0]!.dependsOn).toEqual(["s5", "the schema"]); // kept as dangling refs, not dropped
     });
   });
 
@@ -73,11 +73,34 @@ describe("Phase 4 — planning core (plan.ts)", () => {
       const plan = normalizePlan({
         summary: "x",
         steps: [
-          { title: "schema", agent: "coder", layer: "schema", files: [{ path: "src/db.ts", status: "existing" }] },
-          { title: "api", agent: "coder", layer: "api", dependsOn: [1], files: [{ path: "src/api.ts", status: "new" }] },
+          { title: "schema", agent: "coder", layer: "schema", acceptance: "tables + migration exist", files: [{ path: "src/db.ts", status: "existing" }] },
+          { title: "api", agent: "coder", layer: "api", dependsOn: [1], acceptance: "endpoints return 200/404", files: [{ path: "src/api.ts", status: "new" }] },
         ],
       });
       expect(validatePlan(plan, { agents, cwd: dir })).toEqual([]);
+    });
+
+    it("flags a step with no acceptance criterion", () => {
+      const plan = normalizePlan({ summary: "x", steps: [{ title: "t", agent: "coder", acceptance: "" }] });
+      expect(validatePlan(plan, { agents, cwd: dir }).some((i) => i.kind === "missing-acceptance")).toBe(true);
+    });
+
+    it("flags a new file that already exists (mislabel/clobber guard)", () => {
+      mkdirSync(join(dir, "src"));
+      writeFileSync(join(dir, "src", "exists.ts"), "export {}");
+      const plan = normalizePlan({ summary: "x", steps: [{ title: "t", agent: "coder", acceptance: "done", files: [{ path: "src/exists.ts", status: "new" }] }] });
+      expect(validatePlan(plan, { agents, cwd: dir }).some((i) => i.kind === "new-file-exists")).toBe(true);
+    });
+
+    it("does NOT flag reversed order when the catch-all 'other' layer is involved", () => {
+      const plan = normalizePlan({
+        summary: "x",
+        steps: [
+          { title: "docs", agent: "scribe", layer: "docs", acceptance: "a" },
+          { title: "misc", agent: "coder", layer: "other", acceptance: "b", dependsOn: [1] }, // other→docs would be "reversed" numerically
+        ],
+      });
+      expect(validatePlan(plan, { agents, cwd: dir }).some((i) => i.kind === "ordering")).toBe(false);
     });
 
     it("flags an unknown specialist", () => {
@@ -147,6 +170,16 @@ describe("Phase 4 — planning core (plan.ts)", () => {
 
     it("returns null when there are no recognizable steps", () => {
       expect(parsePlan("just some prose with no steps at all")).toBeNull();
+    });
+
+    it("does not force a design decision just because a title contains 'design'", () => {
+      const plan = parsePlan("1. [coder] Design the login screen (ui)\n   accept: it renders")!;
+      expect(plan.steps[0]!.designDecision).toBe(false); // ordinary build work
+    });
+
+    it("marks a genuine design decision (a technical choice)", () => {
+      const plan = parsePlan("1. [coder] Choose between REST and GraphQL (api)\n   accept: decided")!;
+      expect(plan.steps[0]!.designDecision).toBe(true);
     });
   });
 });
