@@ -1,6 +1,13 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
-import { resolve, dirname, join } from "node:path";
+import { resolve, dirname, join, extname } from "node:path";
 import { resolveInside, SKIP_DIRS } from "../tools/permissions.js";
+
+// Binary/rendered documents can't be scanned as text — their content is verified by
+// round-trip tools/benchmarks, not the text-oriented groundedness check.
+const BINARY_SKIP = new Set([
+  ".pdf", ".docx", ".doc", ".xlsx", ".xlsm", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".odp",
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".ico", ".zip", ".gz", ".tar",
+]);
 
 /**
  * Groundedness check (anti-hallucination) for doc-writing agents like the scribe.
@@ -108,6 +115,7 @@ export function checkGroundedness(files: string[], cwd: string): MissingRef[] {
   let corpus: string | null = null; // lazily built only if symbols are referenced
   const scripts = scriptsOf(cwd);
   for (const f of files) {
+    if (BINARY_SKIP.has(extname(f).toLowerCase())) continue; // binary docs aren't text-scannable
     let abs: string;
     let content: string | null;
     try {
@@ -190,6 +198,7 @@ export interface DroppedFact {
 export function checkFactsPreserved(originals: Map<string, string>, cwd: string): DroppedFact[] {
   const dropped: DroppedFact[] = [];
   for (const [f, before] of originals) {
+    if (BINARY_SKIP.has(extname(f).toLowerCase())) continue;
     let after: string | null;
     try {
       after = readSafe(resolveInside(cwd, f));

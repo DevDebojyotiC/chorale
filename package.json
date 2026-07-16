@@ -18,7 +18,8 @@
     "node": ">=22"
   },
   "overrides": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "uuid": "^11.1.0"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.14",
@@ -28,16 +29,23 @@
     "better-sqlite3": "^12.11.1",
     "dotenv": "^17.4.2",
     "esbuild": "^0.28.1",
+    "exceljs": "^4.4.0",
     "gray-matter": "^4.0.3",
+    "html-to-docx": "^1.8.0",
     "ink": "^7.1.0",
     "ink-text-input": "^6.0.0",
     "json5": "^2.2.3",
+    "mammoth": "^1.12.0",
+    "marked": "^18.0.6",
+    "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.19.1",
     "react": "^19.2.7",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^26.1.1",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^19.2.17",
     "jsdom": "^29.1.1",
     "tsup": "^8.5.1",

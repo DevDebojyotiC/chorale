@@ -116,6 +116,17 @@ describe("Phase 4 — scribe groundedness check (anti-hallucination)", () => {
     }
   });
 
+  it("skips binary documents (pdf/docx/xlsx) — they can't be scanned as text", () => {
+    const dir = mkdtempSync(join(tmpdir(), "chorale-bin-"));
+    try {
+      // Binary-ish bytes that would otherwise look like a bogus path reference.
+      writeFileSync(join(dir, "report.pdf"), "%PDF-1.4 garbage/that.looks like a `path/ref.ts`");
+      expect(checkGroundedness(["report.pdf"], dir)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("extractFacts captures numbers, backticked tokens, and urls", () => {
     const facts = extractFacts("Set `PORT` to 8080; see https://x.com/y for 3 examples.");
     expect(facts.has("8080")).toBe(true);

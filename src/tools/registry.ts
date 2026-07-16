@@ -1,6 +1,7 @@
 import type { ToolSet } from "ai";
 import { webSearch, webFetch, webResearch } from "./web.js";
 import { createFileTools, READ_ONLY_FILE_TOOLS, WRITE_FILE_TOOLS } from "./fs.js";
+import { createDocumentTools, READ_ONLY_DOC_TOOLS, WRITE_DOC_TOOLS } from "./documents.js";
 import { createShellTools } from "./shell.js";
 import type { ToolContext } from "./permissions.js";
 
@@ -21,6 +22,7 @@ const RUNTIME_TOOLS = new Set(["delegate", "skill_view"]);
  */
 export function buildToolSet(names: string[], ctx: ToolContext): ToolSet {
   const fileTools = createFileTools(ctx);
+  const docTools = createDocumentTools(ctx);
   const shellTools = createShellTools(ctx);
   const out: ToolSet = {};
 
@@ -33,6 +35,10 @@ export function buildToolSet(names: string[], ctx: ToolContext): ToolSet {
       out[name] = fileTools[name]!;
     } else if (WRITE_FILE_TOOLS.has(name)) {
       if (ctx.mode !== "read-only") out[name] = fileTools[name]!;
+    } else if (READ_ONLY_DOC_TOOLS.has(name)) {
+      out[name] = docTools[name]!;
+    } else if (WRITE_DOC_TOOLS.has(name)) {
+      if (ctx.mode !== "read-only") out[name] = docTools[name]!;
     } else if (name === "bash") {
       if (ctx.mode !== "read-only") out[name] = shellTools[name]!;
     } else {
