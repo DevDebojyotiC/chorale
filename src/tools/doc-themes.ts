@@ -5,19 +5,23 @@
  * (presentation-grade: gradient cover title, design-token colors, styled tables, callouts).
  */
 
-export type ThemeName = "minimal" | "docs" | "report";
-export const THEME_NAMES: ThemeName[] = ["minimal", "docs", "report"];
+export type ThemeName = "minimal" | "docs" | "report" | "dark";
+export const THEME_NAMES: ThemeName[] = ["minimal", "docs", "report", "dark"];
 export function isTheme(s: string): s is ThemeName {
   return (THEME_NAMES as string[]).includes(s);
 }
 
-const MINIMAL = `body{font-family:system-ui,Arial,sans-serif;line-height:1.5;max-width:52rem;margin:2rem auto;padding:0 1rem}
+const MINIMAL = `body{font-family:system-ui,Arial,sans-serif;line-height:1.5;max-width:52rem;margin:2rem auto;padding:0 1rem;color:#111;background:#fff}
 pre{background:#f4f4f4;padding:.75rem;overflow:auto}code{font-family:ui-monospace,monospace}
 table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.3rem .6rem}`;
 
+// Default palette is LIGHT + print-friendly (white background, dark text). No auto dark-mode:
+// documents must not flip to a dark background on a dark-mode system / when printed.
 const TOKENS = `:root{--accent:#4f46e5;--accent-2:#7c3aed;--fg:#1f2937;--muted:#6b7280;--bg:#ffffff;--panel:#f7f8fa;--border:#e5e7eb;--radius:10px;
---mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-@media (prefers-color-scheme:dark){:root{--fg:#e5e7eb;--muted:#9ca3af;--bg:#0f1117;--panel:#171a21;--border:#2a2f3a}}`;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}`;
+// Dark palette is opt-in only (theme: "dark").
+const TOKENS_DARK = `:root{--accent:#818cf8;--accent-2:#a78bfa;--fg:#e5e7eb;--muted:#9ca3af;--bg:#0f1117;--panel:#171a21;--border:#2a2f3a;--radius:10px;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}`;
 
 const BASE = `*{box-sizing:border-box}
 body{font-family:var(--sans);color:var(--fg);background:var(--bg);line-height:1.65;max-width:56rem;margin:0 auto;padding:2.5rem 1.5rem;font-size:16px}
@@ -46,16 +50,19 @@ figure.chart .bar-fill{display:block;background:linear-gradient(90deg,var(--acce
 figure.chart .bar-val{flex:0 0 auto;min-width:3rem;color:var(--fg);font-variant-numeric:tabular-nums}
 @media print{body{padding:0;max-width:none}thead th,figure.chart .bar-fill{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`;
 
-// `docs` = tokens + base with a plain title. `report` adds a gradient cover title + accent H2.
-const DOCS = `${TOKENS}\n${BASE}\nh1{font-size:2rem;margin:0 0 1rem}`;
-
-const REPORT = `${TOKENS}\n${BASE}
+// Presentation extras shared by `report` (light) and `dark`: gradient cover title + accent H2.
+const REPORT_EXTRAS = `
 body>h1:first-child{font-size:2.4rem;margin:0 0 1.5rem;padding:2rem;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2));border-radius:var(--radius)}
 h1{font-size:1.9rem;margin-top:2.5rem}
 h2{color:var(--accent)}
 @media print{body>h1:first-child{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`;
 
-const THEMES: Record<ThemeName, string> = { minimal: MINIMAL, docs: DOCS, report: REPORT };
+// `docs` = plain light title. `report` = light presentation. `dark` = same layout, dark palette (opt-in).
+const DOCS = `${TOKENS}\n${BASE}\nh1{font-size:2rem;margin:0 0 1rem}`;
+const REPORT = `${TOKENS}\n${BASE}${REPORT_EXTRAS}`;
+const DARK = `${TOKENS_DARK}\n${BASE}${REPORT_EXTRAS}`;
+
+const THEMES: Record<ThemeName, string> = { minimal: MINIMAL, docs: DOCS, report: REPORT, dark: DARK };
 
 const stripTags = (s: string): string => s.replace(/<[^>]+>/g, "").trim();
 /** First number in a cell, tolerant of $, %, commas, and ratios like "9/10" (takes 9). */

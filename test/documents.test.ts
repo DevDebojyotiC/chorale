@@ -115,12 +115,25 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
     expect(r).toMatch(/nth-child\(even\)/); // zebra striping
     expect(r).toMatch(/blockquote\{[^}]*border-left/); // callout box
     expect(r).toMatch(/@media print/); // print styles
-    expect(r).toMatch(/prefers-color-scheme:dark/); // dark mode
+    // Firm rule: light + print-friendly by default — a white background and NO auto dark-mode.
+    expect(r).toMatch(/--bg:#ffffff/);
+    expect(r).not.toMatch(/prefers-color-scheme:dark/);
 
     await exec(tools.write_doc)({ path: "m.html", content: md, theme: "minimal" });
     const m = readFileSync(join(dir, "m.html"), "utf8");
     expect(m).not.toMatch(/linear-gradient/);
     expect(m).not.toMatch(/--accent/);
+    expect(m).not.toMatch(/prefers-color-scheme:dark/);
+  });
+
+  it("dark theme is opt-in only (explicit theme: 'dark')", async () => {
+    const md = "# Title\n\ntext\n";
+    await exec(tools.write_doc)({ path: "dk.html", content: md, theme: "dark" });
+    const d = readFileSync(join(dir, "dk.html"), "utf8");
+    expect(d).toMatch(/--bg:#0f1117/); // dark background, but only because it was requested
+    // default (docs) stays light
+    await exec(tools.write_doc)({ path: "lt.html", content: md });
+    expect(readFileSync(join(dir, "lt.html"), "utf8")).toMatch(/--bg:#ffffff/);
   });
 
   it("charts: numeric tables become bar charts grounded to the real values", async () => {

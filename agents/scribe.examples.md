@@ -55,7 +55,6 @@ After reading a source that says *"Gemma scored 9/10, gpt-oss 10/10 across 3 tri
 <!doctype html><html lang="en"><head><meta charset="utf-8"><style>
 :root{--ink:#0f172a;--body:#334155;--muted:#64748b;--line:#e2e8f0;--bg:#fff;--panel:#f8fafc;
 --accent:#0f766e;--good:#16a34a;--good-bg:#dcfce7;--bad:#dc2626;--bad-bg:#fee2e2;--gold-bg:#fef9c3;--gold:#b45309}
-@media(prefers-color-scheme:dark){:root{--body:#cbd5e1;--ink:#f1f5f9;--bg:#0f1117;--panel:#171a21;--line:#2a2f3a}}
 *{box-sizing:border-box}body{font-family:"Segoe UI",system-ui,sans-serif;color:var(--body);background:var(--bg);max-width:60rem;margin:0 auto;padding:1.5rem;font-size:14px;line-height:1.55}
 @page{size:A4;margin:14mm}.section{page-break-inside:avoid;margin:1.4em 0}
 .cover{background:linear-gradient(120deg,#0f766e,#0891b2 55%,#2563eb);color:#fff;border-radius:14px;padding:28px 30px}

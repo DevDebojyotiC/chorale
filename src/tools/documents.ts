@@ -262,7 +262,7 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
     inputSchema: z.object({
       path: z.string(),
       content: z.string().describe("Markdown source for the document"),
-      theme: z.enum(["minimal", "docs", "report"]).optional().describe("Visual theme for HTML/PDF/DOCX output (default: docs)"),
+      theme: z.enum(["minimal", "docs", "report", "dark"]).optional().describe("Visual theme for HTML/PDF/DOCX output (default: docs)"),
       charts: z.boolean().optional().describe("Render numeric Markdown tables as inline bar charts (default: false)"),
     }),
     execute: async ({ path, content, theme, charts }) => {
@@ -326,7 +326,7 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
     inputSchema: z.object({
       from: z.string(),
       to: z.string(),
-      theme: z.enum(["minimal", "docs", "report"]).optional().describe("Visual theme when producing HTML/PDF/DOCX from Markdown"),
+      theme: z.enum(["minimal", "docs", "report", "dark"]).optional().describe("Visual theme when producing HTML/PDF/DOCX from Markdown"),
       charts: z.boolean().optional().describe("Render numeric Markdown tables as inline bar charts (default: false)"),
     }),
     execute: async ({ from, to, theme, charts }) => {

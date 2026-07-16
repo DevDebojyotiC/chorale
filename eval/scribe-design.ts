@@ -14,12 +14,12 @@ export interface DesignScore {
   cover: boolean; // gradient cover / hero
   tableHeader: boolean; // colored table header
   zebra: boolean; // striped rows
-  callout: boolean; // styled blockquote/callout
+  callout: boolean; // styled blockquote/callout/verdict box
   chart: boolean; // data visualization (bar chart)
-  print: boolean; // @media print
-  dark: boolean; // dark-mode support
+  print: boolean; // @media print / @page (print-friendly)
   cssChars: number;
-  score: number; // features present / 8
+  score: number; // features present / 7
+  lightSafe: boolean; // no auto dark-mode background (report docs must stay light)
 }
 
 export function scoreDesign(html: string): DesignScore {
@@ -30,13 +30,14 @@ export function scoreDesign(html: string): DesignScore {
     cover: has(/linear-gradient|radial-gradient|class="[^"]*cover|class="[^"]*hero/i),
     tableHeader: has(/thead[\s\S]{0,80}?(background|--accent)/i) || has(/th\s*\{[^}]*background/i),
     zebra: has(/nth-child\(\s*even|nth-child\(\s*odd|:nth-child\(2n/i),
-    callout: has(/blockquote[\s\S]{0,90}?border-left|class="[^"]*(callout|note|highlight)/i),
-    chart: has(/class="[^"]*(bar-fill|bar-row)|class="[^"]*chart/i),
-    print: has(/@media\s+print/i),
-    dark: has(/prefers-color-scheme\s*:\s*dark|data-theme|class="[^"]*dark/i),
+    callout: has(/blockquote[\s\S]{0,90}?border-left|class="[^"]*(callout|note|highlight|verdict|tldr)/i),
+    chart: has(/class="[^"]*(bar-fill|bar-row|brow|chart)/i),
+    print: has(/@media\s+print|@page/i),
   };
   const score = Object.values(f).filter(Boolean).length;
-  return { ...f, cssChars: css.length, score };
+  // Print-friendly means no automatic dark background.
+  const lightSafe = !has(/prefers-color-scheme\s*:\s*dark/i);
+  return { ...f, cssChars: css.length, score, lightSafe };
 }
 
 const SAMPLE = `# Chorale Benchmark Report
@@ -68,9 +69,8 @@ const row = (label: string, s: DesignScore): string => {
     s.callout ? "callout" : "",
     s.chart ? "chart" : "",
     s.print ? "print" : "",
-    s.dark ? "dark" : "",
   ].filter(Boolean).join(" ");
-  return `  ${label.padEnd(24)} ${s.score}/8  css=${String(s.cssChars).padStart(5)}  [${flags}]`;
+  return `  ${label.padEnd(24)} ${s.score}/7  css=${String(s.cssChars).padStart(5)}  ${s.lightSafe ? "light✓" : "DARK✗"}  [${flags}]`;
 };
 
 const body = marked.parse(SAMPLE) as string;

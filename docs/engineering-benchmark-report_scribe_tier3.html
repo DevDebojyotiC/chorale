@@ -3,431 +3,549 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Engineering Benchmark Report | Chorale Coder</title>
+    <title>Chorale Coder — Engineering Benchmark Report</title>
     <style>
         :root {
-            --accent: #4f46e5;
-            --accent-light: #818cf8;
-            --success: #10b981;
-            --warn: #f59e0b;
-            --danger: #ef4444;
-            --fg: #1f2937;
-            --bg: #ffffff;
-            --panel: #f9fafb;
-            --border: #e5e7eb;
-            --text-muted: #6b7280;
-            --gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            --primary: #0f172a;
+            --accent: #2563eb;
+            --accent-soft: #dbeafe;
+            --text-main: #334155;
+            --text-muted: #64748b;
+            --bg-white: #ffffff;
+            --bg-alt: #f8fafc;
+            --border: #e2e8f0;
+            --success: #16a34a;
+            --success-bg: #dcfce7;
+            --danger: #dc2626;
+            --danger-bg: #fee2e2;
+            --gold: #b45309;
+            --gold-bg: #fef9c3;
         }
 
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --fg: #f3f4f6;
-                --bg: #111827;
-                --panel: #1f2937;
-                --border: #374151;
-                --text-muted: #9ca3af;
-            }
-        }
-
+        * { box-sizing: border-box; }
         body {
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            color: var(--fg);
-            background-color: var(--bg);
+            font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+            color: var(--text-main);
+            background-color: var(--bg-white);
             line-height: 1.6;
             margin: 0;
             padding: 0;
-            max-width: 1000px;
-            margin: 0 auto;
+        }
+
+        @page { size: A4; margin: 20mm; }
+        @media print {
+            .no-print { display: none; }
+            body { font-size: 12px; }
+            .section { page-break-inside: avoid; }
+            .cover { background: linear-gradient(135deg, #0f172a, #1e293b) !important; -webkit-print-color-adjust: exact; }
         }
 
         .cover {
-            background: var(--gradient);
+            background: linear-gradient(135deg, #0f172a, #1e293b);
             color: white;
-            padding: 4rem 2rem;
+            padding: 80px 40px;
             text-align: center;
-            border-bottom-left-radius: 2rem;
-            border-bottom-right-radius: 2rem;
-            box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+            border-bottom: 8px solid var(--accent);
         }
-
+        .cover .kicker {
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            font-size: 13px;
+            font-weight: 600;
+            opacity: 0.8;
+            margin-bottom: 1rem;
+        }
         .cover h1 {
-            font-size: 3rem;
-            margin: 0;
+            font-size: 48px;
+            margin: 0 0 1.5rem 0;
             font-weight: 800;
-            letter-spacing: -0.025em;
+            line-height: 1.1;
         }
-
-        .cover p {
-            font-size: 1.25rem;
-            opacity: 0.9;
+        .cover .subtitle {
+            font-size: 18px;
             max-width: 700px;
-            margin: 1.5rem auto 0;
+            margin: 0 auto 2.5rem;
+            opacity: 0.9;
+        }
+        .meta-chips {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .chip {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
         }
 
-        .content {
-            padding: 3rem 2rem;
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 60px 40px;
         }
 
-        section {
-            margin-bottom: 4rem;
+        .section {
+            margin-bottom: 80px;
+            page-break-inside: avoid;
         }
 
-        h2 {
-            font-size: 2rem;
-            border-left: 5px solid var(--accent);
-            padding-left: 1rem;
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
             margin-bottom: 1.5rem;
+        }
+        .section-number {
+            background: var(--accent);
+            color: white;
+            font-weight: 700;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        h2 {
+            font-size: 24px;
+            color: var(--primary);
+            margin: 0;
             font-weight: 700;
         }
 
-        .tldr-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
+        .tldr-box {
+            background: var(--bg-alt);
+            border-left: 4px solid var(--accent);
+            padding: 30px;
+            border-radius: 0 12px 12px 0;
+            margin-bottom: 60px;
         }
-
-        .card {
-            background: var(--panel);
-            border: 1px solid var(--border);
-            padding: 1.5rem;
-            border-radius: 1rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-
-        .card h3 {
+        .tldr-box h3 {
             margin-top: 0;
-            color: var(--accent);
-            font-size: 1.1rem;
+            font-size: 18px;
+            color: var(--primary);
             text-transform: uppercase;
             letter-spacing: 0.05em;
+        }
+        .tldr-box ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .tldr-box li { margin-bottom: 12px; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .stat-card {
+            background: var(--bg-alt);
+            border: 1px solid var(--border);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--accent);
+            display: block;
+        }
+        .stat-card .label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            margin: 1.5rem 0;
-            background: var(--panel);
-            border-radius: 0.5rem;
-            overflow: hidden;
+            margin: 20px 0;
+            font-size: 14px;
         }
-
-        th, td {
-            padding: 1rem;
+        th {
+            background: var(--primary);
+            color: white;
             text-align: left;
+            padding: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.05em;
+        }
+        td {
+            padding: 12px;
             border-bottom: 1px solid var(--border);
         }
+        tr:nth-child(even) { background-color: var(--bg-alt); }
 
-        th {
-            background-color: var(--accent);
-            color: white;
-            font-weight: 600;
-        }
-
-        tr:nth-child(even) {
-            background-color: rgba(0,0,0,0.02);
-        }
-
-        .score-pill {
+        .text-center { text-align: center; }
+        .font-bold { font-weight: 700; }
+        .badge {
             display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
         }
-
-        .bg-success { background-color: var(--success); }
-        .bg-warn { background-color: var(--warn); }
-        .bg-danger { background-color: var(--danger); }
+        .badge-success { background: var(--success-bg); color: var(--success); }
+        .badge-danger { background: var(--danger-bg); color: var(--danger); }
+        .badge-gold { background: var(--gold-bg); color: var(--gold); }
 
         .chart-container {
-            margin: 2rem 0;
+            margin: 30px 0;
+            background: var(--bg-alt);
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
         }
-
         .chart-row {
             display: flex;
             align-items: center;
-            margin-bottom: 1rem;
-            gap: 1rem;
+            gap: 15px;
+            margin-bottom: 12px;
         }
-
         .chart-label {
-            width: 150px;
-            font-weight: 600;
+            width: 140px;
             text-align: right;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-main);
         }
-
-        .bar-bg {
-            flex-grow: 1;
-            background: var(--border);
-            height: 1.5rem;
-            border-radius: 0.75rem;
+        .chart-track {
+            flex: 1;
+            background: #e2e8f0;
+            height: 20px;
+            border-radius: 10px;
             overflow: hidden;
-            position: relative;
         }
-
-        .bar-fill {
+        .chart-fill {
             height: 100%;
-            background: var(--gradient);
-            border-radius: 0.75rem;
-            transition: width 1s ease-out;
+            background: linear-gradient(90deg, #2563eb, #60a5fa);
+            transition: width 0.5s ease;
         }
-
-        .bar-value {
-            margin-left: 1rem;
-            font-weight: 700;
+        .chart-value {
             width: 60px;
-        }
-
-        .highlight {
-            color: var(--accent);
+            text-align: left;
+            font-family: monospace;
+            font-size: 13px;
             font-weight: 700;
         }
 
-        .callout {
-            background: var(--panel);
-            border-left: 4px solid var(--accent);
-            padding: 1.5rem;
-            font-style: italic;
-            margin: 2rem 0;
-            font-size: 1.1rem;
+        .verdict-box {
+            background: var(--primary);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 40px 0;
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.3);
         }
 
-        @media print {
-            .cover { background: var(--gradient) !important; -webkit-print-color-adjust: exact; }
-            body { max-width: 100%; }
+        .highlight-row {
+            background-color: var(--gold-bg) !important;
+            font-weight: 600;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 100px;
+            padding-bottom: 40px;
+            border-top: 1px solid var(--border);
+            padding-top: 40px;
+        }
+
+        code {
+            background: var(--bg-alt);
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: \"JetBrains Mono\", \"Fira Code\", monospace;
+            font-size: 0.9em;
         }
     </style>
 </head>
 <body>
 
     <div class="cover">
-        <h1>Engineering Benchmark Report</h1>
-        <p>A tiered, execution-graded evaluation of frontier models on real-world software engineering tasks.</p>
-    </div>
+        <div class="kicker">Engineering Benchmark Report</div>
+        <h1>Chorale Coder</h1>
+        <div class="subtitle">A tiered, execution-graded analysis of software engineering capability across three frontier models.</div>
+        <div class="meta-chips">
+            <span class="chip">Tier 1 N=1</span>
+            <span class="chip">Tier 2 N=3</span>
+            <span class="chip">Execution Graded</span>
+            <span class="chip">Full-Stack Verified</span>
+        </div
+    </div
 
-    <div class="content">
-        <section>
-            <h2>Executive Summary (TL;DR)</h2>
-            <div class="tldr-grid">
-                <div class="card">
-                    <h3>The Reliability Champ</h3>
-                    <p><strong>gpt-oss-120B</strong> achieved a <span class="highlight">perfect score (72/72)</span> on every Tier-2 task across all trials.</p>
-                </div>
-                <div class="card">
-                    <h3>The Value King</h3>
-                    <p><strong>Gemma-4-31B</strong> is fastest and free, dominating Tier 1 with <span class="highlight">100% accuracy</span>.</p>
-                </div>
-                <div class="card">
-                    <h3>The Crossover</h3>
-                    <p>Reliability separates models on multi-layered work. Default to Gemma, escalate to GPT-OSS for critical builds.</p>
-                </div>
-            </div>
-        </section>
+    <div class="container">
+        
+        <div class="tldr-box">
+            <h3>Executive Summary (TL;DR)</h3>
+            <ul>
+                <li><strong>Performance Crossover:</strong> All models excel at Tier 1 (routine work), but reliability diverges sharply at Tier 2 (complex apps).</li>
+                <li><strong>The Champion:</strong> <code>gpt-oss-120B</code> is the reliability leader, achieving a perfect 100% across all Tier-2 tasks and trials.</li>
+                <li><strong>The Value King:</strong> <code>Gemma-4-31B</code> is fastest and free, perfect at Tier 1, but inconsistent on the Full-Stack task (1/3 success rate initially).</li>
+                <li><strong>Strategic Verdict:</strong> Default to Gemma-4-31B for routine work; escalate to gpt-oss-120B for complex, multi-layered builds.</li>
+            </ul>
+        </div
 
-        <section>
-            <h2>Tier 1: Everyday Engineering (N=1)</h2>
-            <p>Focus: Libraries, Debugging, Async, and CLI integration.</p>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-number">1</div>
+                <h2>Methodology & Tasks</h2>
+            </div
+            <p>Every task is executed by the production coder agent with a full toolset (including <code>bash</code>). Grading is based on <strong>actual code execution</strong> against hidden checks.</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tier</th>
+                        <th>Project</th>
+                        <th>Primary Skill</th>
+                        <th class="text-center">Checks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>KV Store (TTL + LRU)</td><td>Build a library</td><td class="text-center">8</td></tr>
+                    <tr><td>1</td><td>Fix Broken <code>lib/</code></td><td>Debug a codebase</td><td class="text-center">7</td></tr>
+                    <tr><td>1</td><td>Bounded-concurrency Pool</td><td>Async correctness</td><td class="text-center">5</td></tr>
+                    <tr><td>1</td><td>Todo CLI (JSON)</td><td>Integration / I·O</td><td class="text-center">6</td></tr>
+                    <tr><td>2</td><td>Mini web framework</td><td>Framework design</td><td class="text-center">7</td></tr>
+                    <tr><td>2</td><td>Redux-like store</td><td>State architecture</td><td class="text-center">7</td></tr>
+                    <tr><td>2</td><td><strong>Full-stack task app</strong></td><td>Full-stack</td><td class="text-center">10</td></tr>
+                </tbody>
+            </table>
+        </div
+
+        <div class="section">
+            <div class="section-header">
+                <div class="section-number">2</div>
+                <h2>Tier 1 — Everyday Engineering (N=1)</h2>
+            </div
+            <p>On routine tasks, speed and cost are the primary differentiators as all top models reach near-perfect correctness.</p>
+            
             <table>
                 <thead>
                     <tr>
                         <th>Model</th>
-                        <th>KV Store</th>
-                        <th>Debug</th>
-                        <th>Async</th>
-                        <th>CLI</th>
-                        <th>Overall</th>
-                        <th>Time</th>
-                        <th>Cost</th>
+                        <th class="text-center">KV</th>
+                        <th class="text-center">Debug</th>
+                        <th class="text-center">Async</th>
+                        <th class="text-center">CLI</th>
+                        <th class="text-center">Overall</th>
+                        <th class="text-center">Time</th>
+                        <th class="text-center">Cost</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
+                    <tr class="highlight-row">
                         <td><strong>Gemma-4-31B</strong></td>
-                        <td>8/8</td>
-                        <td>7/7</td>
-                        <td>5/5</td>
-                        <td>6/6</td>
-                        <td><span class="score-pill bg-success">26/26 (100%)</span></td>
-                        <td>32s</td>
-                        <td>≈$0.00</td>
+                        <td class="text-center">8/8</td>
+                        <td class="text-center">7/7</td>
+                        <td class="text-center">5/5</td>
+                        <td class="text-center">6/6</td>
+                        <td class="text-center"><span class="badge badge-success">100% (26/26)</span></td>
+                        <td class="text-center"><strong>32s</strong></td>
+                        <td class="text-center"><strong>≈$0.00</strong></td>
                     </tr>
                     <tr>
                         <td>MiniMax-M2.7</td>
-                        <td>8/8</td>
-                        <td>7/7</td>
-                        <td>5/5</td>
-                        <td>6/6</td>
-                        <td><span class="score-pill bg-success">26/26 (100%)</span></td>
-                        <td>73s</td>
-                        <td>$0.0246</td>
+                        <td class="text-center">8/8</td>
+                        <td class="text-center">7/7</td>
+                        <td class="text-center">5/5</td>
+                        <td class="text-center">6/6</td>
+                        <td class="text-center">100% (26/26)</td>
+                        <td class="text-center">73s</td>
+                        <td class="text-center">$0.0246</td>
                     </tr>
                     <tr>
                         <td>gpt-oss-120B</td>
-                        <td>8/8</td>
-                        <td>7/7</td>
-                        <td>4/5</td>
-                        <td>6/6</td>
-                        <td><span class="score-pill bg-warn">25/26 (96%)</span></td>
-                        <td>68s</td>
-                        <td>$0.0071</td>
+                        <td class="text-center">8/8</td>
+                        <td class="text-center">7/7</td>
+                        <td class="text-center">4/5</td>
+                        <td class="text-center">6/6</td>
+                        <td class="text-center">96% (25/26)</td>
+                        <td class="text-center">68s</td>
+                        <td class="text-center">$0.0071</td>
                     </tr>
                 </tbody>
             </table>
-        </section>
+        </div
 
-        <section>
-            <h2>Tier 2: Advanced Engineering (N=3)</h2>
-            <p>Focus: Web frameworks, State architecture, and Full-stack applications.</p>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-number">3</div>
+                <h2>Tier 2 — Advanced Engineering (N=3)</h2>
+            </div
+            <p>Aggregated results across three independent trials to expose variance in complex tasks.</p>
             
-            <div class="chart-container">
-                <h3>Overall Tier 2 Performance (Aggregated)</h3>
-                <div class="chart-row">
-                    <div class="chart-label">gpt-oss-120B</div>
-                    <div class="bar-bg"><div class="bar-fill" style="width: 100%"></div></div>
-                    <div class="bar-value">100%</div>
-                </div>
-                <div class="chart-row">
-                    <div class="chart-label">MiniMax-M2.7</div>
-                    <div class="bar-bg"><div class="bar-fill" style="width: 94%"></div></div>
-                    <div class="bar-value">94%</div>
-                </div>
-                <div class="chart-row">
-                    <div class="chart-label">Gemma-4-31B</div>
-                    <div class="bar-bg"><div class="bar-fill" style="width: 71%"></div></div>
-                    <div class="bar-value">71%</div>
-                </div>
-            </div>
-
             <table>
                 <thead>
                     <tr>
                         <th>Model</th>
-                        <th>Framework</th>
-                        <th>Store</th>
-                        <th>Full-stack</th>
-                        <th>Overall</th>
-                        <th>Avg Time</th>
-                        <th>Avg Cost</th>
+                        <th class="text-center">Framework</th>
+                        <th class="text-center">Store</th>
+                        <th class="text-center">Full-stack</th>
+                        <th class="text-center">Overall</th>
+                        <th class="text-center">Avg Time</th>
+                        <th class="text-center">Avg Cost</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
+                    <tr class="highlight-row">
                         <td><strong>gpt-oss-120B</strong></td>
-                        <td>21/21</td>
-                        <td>21/21</td>
-                        <td>30/30</td>
-                        <td><span class="score-pill bg-success">72/72 (100%)</span></td>
-                        <td>117s</td>
-                        <td>$0.0096</td>
+                        <td class="text-center">21/21</td>
+                        <td class="text-center">21/21</td>
+                        <td class="text-center"><strong>30/30</strong></td>
+                        <td class="text-center"><span class="badge badge-success">100% (72/72)</span></td>
+                        <td class="text-center">117s</td>
+                        <td class="text-center">$0.0096</td>
                     </tr>
                     <tr>
                         <td>MiniMax-M2.7</td>
-                        <td>17/21</td>
-                        <td>21/21</td>
-                        <td>30/30</td>
-                        <td><span class="score-pill bg-success">68/72 (94%)</span></td>
-                        <td>99s</td>
-                        <td>$0.0380</td>
+                        <td class="text-center">17/21</td>
+                        <td class="text-center">21/21</td>
+                        <td class="text-center">30/30</td>
+                        <td class="text-center">94% (68/72)</td>
+                        <td class="text-center">99s</td>
+                        <td class="text-center">$0.0380</td>
                     </tr>
                     <tr>
                         <td>Gemma-4-31B</td>
-                        <td>20/21</td>
-                        <td>21/21</td>
-                        <td>10/30</td>
-                        <td><span class="score-pill bg-danger">51/72 (71%)</span></td>
-                        <td>25s</td>
-                        <td>≈$0.00</td>
+                        <td class="text-center">20/21</td>
+                        <td class="text-center">21/21</td>
+                        <td class="text-center"><strong>10/30</strong></td>
+                        <td class="text-center">71% (51/72)</td>
+                        <td class="text-center"><strong>25s</strong></td>
+                        <td class="text-center"><strong>≈$0.00</strong></td>
                     </tr>
                 </tbody>
             </table>
 
-            <h3>Reliability (Pass Rate per Trial)</h3>
+            <div class="chart-container">
+                <div style="margin-bottom: 15px; font-weight: 700; font-size: 14px;">Overall Tier 2 Score (%)</div>
+                <div class="chart-row">
+                    <div class="chart-label">gpt-oss-120B</div>
+                    <div class="chart-track"><div class="chart-fill" style="width: 100%;"></div></div>
+                    <div class="chart-value">100%</div>
+                </div
+                <div class="chart-row">
+                    <div class="chart-label">MiniMax-M2.7</div>
+                    <div class="chart-track"><div class="chart-fill" style="width: 94%;"></div></div>
+                    <div class="chart-value">94%</div>
+                </div
+                <div class="chart-row">
+                    <div class="chart-label">Gemma-4-31B</div>
+                    <div class="chart-track"><div class="chart-fill" style="width: 71%;"></div></div>
+                    <div class="chart-value">71%</div>
+                </div
+            </div
+
+            <h3>Task Reliability (Full Pass Rate)</h3>
             <table>
                 <thead>
                     <tr>
-                        <th>Task</th>
-                        <th>gpt-oss-120B</th>
-                        <th>MiniMax-M2.7</th>
-                        <th>Gemma-4-31B</th>
+                        <th>Task (Max Score)</th>
+                        <th class="text-center">gpt-oss-120B</th>
+                        <th class="text-center">MiniMax-M2.7</th>
+                        <th class="text-center">Gemma-4-31B</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td>Framework (7/7)</td>
-                        <td>3/3</td>
-                        <td>2/3</td>
-                        <td>2/3</td>
+                        <td class="text-center"><span class="badge badge-success">3/3</span></td>
+                        <td class="text-center">2/3</td>
+                        <td class="text-center">2/3</td>
                     </tr>
                     <tr>
                         <td>Store (7/7)</td>
-                        <td>3/3</td>
-                        <td>3/3</td>
-                        <td>3/3</td>
+                        <td class="text-center"><span class="badge badge-success">3/3</span></td>
+                        <td class="text-center"><span class="badge badge-success">3/3</span></td>
+                        <td class="text-center"><span class="badge badge-success">3/3</span></td>
                     </tr>
                     <tr>
                         <td><strong>Full-stack (10/10)</strong></td>
-                        <td><strong>3/3</strong></td>
-                        <td><strong>3/3</strong></td>
-                        <td><strong>1/3</strong></td>
+                        <td class="text-center"><span class="badge badge-success">3/3</span></td>
+                        <td class="text-center"><span class="badge badge-success">3/3</span></td>
+                        <td class="text-center"><span class="badge badge-danger">1/3</span></td>
                     </tr>
                 </tbody>
             </table>
-        </section>
+        </div
 
-        <section>
-            <h2>Deep Dive: Full-Stack Failure & Fix</h2>
-            <p>Gemma-4-31B initially failed the full-stack task in 2/3 trials due to hardcoded ports and template-literal syntax errors.</p>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-number">4</div>
+                <h2>Deep Dive: The Full-Stack Gap</h2>
+            </div
+            <p>The Full-Stack application is the critical differentiator. It requires a REST API, JSON persistence, and a served frontend, all coordinated via an operational contract (e.g., honoring <code>process.env.PORT</code>).</p>
             
-            <div class="card">
-                <h3>The Diagnosis</h3>
-                <p>Failures were caused by nested backticks in large inline HTML strings, creating <strong>Syntax Error</strong> crashes before the server could bind to <code>process.env.PORT</code>.</p>
-            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                <div style="padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-alt);">
+                    <div class="badge badge-success" style="margin-bottom: 10px;">Success Mode</div>
+                    <p style="font-size: 14px;"><strong>gpt-oss & MiniMax:</strong> Delivered fully working apps in 100% of trials. Routing, REST semantics, and integration were flawless.</p>
+                </div
+                <div style="padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-alt);">
+                    <div class="badge badge-danger" style="margin-bottom: 10px;">Failure Mode</div>
+                    <p style="font-size: 14px;"><strong>Gemma:</strong> Logic was often correct, but failed the operational contract by hardcoding port <code>3000</code>, causing 2/3 trials to fail to start.</p>
+                </div
+            </div
+        </div
 
-            <h3>Measured Compensation Results (Gemma-4-31B)</h3>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-number">5</div>
+                <h2>The Solution: Targeted Compensation</h2>
+            </div
+            <p>Rather than relying solely on escalation, Chorale implemented targeted engineering to fix Gemma's full-stack failure mode (Syntax errors in large template literals).</p>
+            
             <table>
                 <thead>
                     <tr>
                         <th>Condition</th>
-                        <th>Full-pass</th>
-                        <th>Mean</th>
+                        <th class="text-center">Full-pass Rate</th>
+                        <th class="text-center">Mean Score</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td>Baseline</td>
-                        <td>7/10</td>
-                        <td>70%</td>
-                    </tr>
-                    <tr>
-                        <td>+ Operational Rule</td>
-                        <td>8/10</td>
-                        <td>80%</td>
-                    </tr>
-                    <tr>
-                        <td>+ Few-shot Examples</td>
-                        <td>8/10</td>
-                        <td>80%</td>
-                    </tr>
-                    <tr>
+                    <tr><td>Baseline (Current Prompt)</td><td class="text-center">7/10</td><td class="text-center">70%</td></tr>
+                    <tr><td>+ Operational-correctness Rule</td><td class="text-center">8/10</td><td class="text-center">80%</td></tr>
+                    <tr><td>+ Few-shot Examples</td><td class="text-center">8/10</td><td class="text-center">80%</td></tr>
+                    <tr class="highlight-row">
                         <td><strong>+ Targeted Compensation</strong></td>
-                        <td><strong>20/20</strong></td>
-                        <td><strong>100%</strong></td>
+                        <td class="text-center"><span class="badge badge-success">20/20</span></td>
+                        <td class="text-center"><strong>100%</strong></td>
                     </tr>
                 </tbody>
             </table>
-            <p><small><em>Targeted Compensation includes structural steering (separate .html files), detailed repair diagnostics, and increased budget (5 rounds).</em></small></p>
-        </section>
+            <p style="font-size: 13px; color: var(--text-muted); margin-top: 10px;">*Targeted compensation includes structural steer to separate HTML files, specialized repair diagnostics for template literals, and increased repair budget.</p>
+        </div
 
-        <section>
-            <h2>The Final Verdict</h2>
-            <div class="callout">
-                "Default: <strong>Gemma-4-31B</strong> &rarr; Escalate: <strong>gpt-oss-120B</strong>"
-            </div>
-            <p>This tiered routing strategy leverages the speed and cost of Gemma-4-31B for routine engineering while ensuring absolute reliability via gpt-oss-120B for complex, multi-layered builds.</p>
-        </section>
-    </div>
+        <div class="verdict-box">
+            Strategic Routing Policy:<br>
+            <span style="font-size: 24px; color: #fff;">Default: Gemma-4-31B &rarr; Escalate: gpt-oss-120B</span>
+        </div
 
-</body>
+        <div class="footer">
+            Chorale Coder — Model-Agnostic Multi-Agent System. <br>
+            Measurements taken through production coder pipeline. Data grounded in <code>eval/coder-projects.ts</code>.
+        </div
+
+    </div
+
+</body
 </html>
