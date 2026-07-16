@@ -1,9 +1,10 @@
 import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
-import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, renameSync, statSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { marked } from "marked";
 import mammoth from "mammoth";
@@ -77,16 +78,22 @@ function findBrowser(): string | null {
   return candidates.find((p) => existsSync(p)) ?? null;
 }
 
+/** Monotonic suffix so concurrent/repeated renders never share a temp filename. */
+let renderSeq = 0;
+
 /** Print an HTML string to a PDF via a headless browser. Returns true on success. */
 function printHtmlToPdf(html: string, absOut: string): boolean {
   const browser = findBrowser();
   if (!browser) return false;
-  const tmp = join(tmpdir(), `chorale-pdf-${process.pid}-${Buffer.byteLength(html)}.html`);
+  // Unique temp file per render (pid + time + counter) so concurrent renders can't clobber each other.
+  const tmp = join(tmpdir(), `chorale-pdf-${process.pid}-${Date.now()}-${renderSeq++}.html`);
   writeFileSync(tmp, html, "utf8");
   try {
     const r = spawnSync(
       browser,
-      ["--headless", "--disable-gpu", "--no-sandbox", `--print-to-pdf=${absOut}`, "--no-pdf-header-footer", `file://${tmp.replace(/\\/g, "/")}`],
+      // pathToFileURL gives a CANONICAL file URL (file:///C:/… on Windows) — a bare `file://${path}`
+      // makes Chrome read the drive letter as a host and intermittently returns ERR_FILE_NOT_FOUND.
+      ["--headless", "--disable-gpu", "--no-sandbox", `--print-to-pdf=${absOut}`, "--no-pdf-header-footer", pathToFileURL(tmp).href],
       { timeout: 60000, stdio: "ignore" },
     );
     return existsSync(absOut) && !r.error;
@@ -143,18 +150,41 @@ async function pdfRenderedOk(absOut: string, sourceHtml: string): Promise<boolea
   }
 }
 
+/**
+ * Browser-render `html` to a UNIQUE temp PDF beside `absOut`, verify it's a real document (not a
+ * browser error page / empty), and only then atomically rename it into place. Rendering to a temp
+ * and moving a validated file means `absOut` never receives a raw error-page render — even if two
+ * renders race on the same output path. Returns true if a good PDF landed at `absOut`.
+ */
+async function renderPdfValidated(html: string, absOut: string): Promise<boolean> {
+  const tmpOut = join(dirname(absOut), `.chorale-out-${process.pid}-${Date.now()}-${renderSeq++}.pdf`);
+  try {
+    if (printHtmlToPdf(html, tmpOut) && (await pdfRenderedOk(tmpOut, html))) {
+      renameSync(tmpOut, absOut); // same dir → atomic move of a validated PDF
+      return true;
+    }
+    return false;
+  } finally {
+    try {
+      if (existsSync(tmpOut)) unlinkSync(tmpOut);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Render Markdown to a PDF with a theme: headless Chrome/Edge (fidelity) or pdfkit fallback.
  *  Falls back to pdfkit if the browser render produced a broken/empty PDF (verified, not assumed). */
 async function mdToPdf(md: string, absOut: string, theme: ThemeName = "docs", charts = false): Promise<{ engine: string }> {
   const html = await mdToHtml(md, theme, charts);
-  if (printHtmlToPdf(html, absOut) && (await pdfRenderedOk(absOut, html))) return { engine: "browser" };
+  if (await renderPdfValidated(html, absOut)) return { engine: "browser" };
   await pdfkitLines(md.split("\n"), absOut, true);
   return { engine: "pdfkit" };
 }
 
 /** Render a raw HTML string to a PDF, preserving its structure/CSS (browser), else text (fallback). */
 async function htmlToPdf(html: string, absOut: string): Promise<{ engine: string }> {
-  if (printHtmlToPdf(html, absOut) && (await pdfRenderedOk(absOut, html))) return { engine: "browser" };
+  if (await renderPdfValidated(html, absOut)) return { engine: "browser" };
   await pdfkitLines(htmlToText(html).split("\n"), absOut, false);
   return { engine: "pdfkit" };
 }
@@ -468,7 +498,7 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
         if (ext === ".pdf") {
           pageCount = await countPdfPages(abs);
         } else if (ext === ".html" || ext === ".htm" || ext === ".md" || ext === ".markdown" || ext === ".txt") {
-          const tmpPdf = join(tmpdir(), `chorale-len-${process.pid}-${basename(abs)}.pdf`);
+          const tmpPdf = join(tmpdir(), `chorale-len-${process.pid}-${Date.now()}-${renderSeq++}-${basename(abs)}.pdf`);
           if (ext === ".html" || ext === ".htm") {
             html = readFileSync(abs, "utf8");
             engine = (await htmlToPdf(html, tmpPdf)).engine;

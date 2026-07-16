@@ -232,6 +232,17 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
     expect(ro).not.toContain("write_doc");
   });
 
+  it("concurrent PDF renders keep their own content and never ship an error page", async () => {
+    const { PDFParse } = await import("pdf-parse");
+    // Same output dir, at once — the atomic/unique-temp render must not let them clobber each other.
+    await Promise.all([0, 1, 2].map((i) => exec(tools.write_doc)({ path: `c${i}.pdf`, content: `# Doc ${i}\n\nUnique body marker ${i}${i}${i}.`, theme: "report" })));
+    for (const i of [0, 1, 2]) {
+      const { text } = await new PDFParse({ data: new Uint8Array(readFileSync(join(dir, `c${i}.pdf`))) }).getText();
+      expect(isBrowserErrorText(text), `c${i} not an error page`).toBe(false);
+      expect(text.replace(/\s+/g, " "), `c${i} kept its content`).toContain(`Unique body marker ${i}${i}${i}`);
+    }
+  });
+
   it("detects a browser error-page render (so a broken PDF falls back, not ships)", () => {
     // the exact text the grand-tour's broken summary.pdf contained:
     expect(isBrowserErrorText("Your file couldn't be accessed\nERR_FILE_NOT_FOUND")).toBe(true);
