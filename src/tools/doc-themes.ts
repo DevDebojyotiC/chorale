@@ -37,7 +37,14 @@ pre code{background:none;padding:0}
 blockquote{margin:1.25rem 0;padding:.8rem 1.1rem;background:var(--panel);border-left:4px solid var(--accent);border-radius:0 var(--radius) var(--radius) 0}
 blockquote p{margin:.3rem 0}
 img{max-width:100%}
-@media print{body{padding:0;max-width:none}thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`;
+figure.chart{margin:1rem 0 1.5rem}
+figure.chart figcaption{font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.5rem}
+figure.chart .bar-row{display:flex;align-items:center;gap:.6rem;margin:.28rem 0;font-size:.9rem}
+figure.chart .bar-label{flex:0 0 10rem;text-align:right;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+figure.chart .bar-track{flex:1;background:var(--panel);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+figure.chart .bar-fill{display:block;background:linear-gradient(90deg,var(--accent),var(--accent-2));height:1.15rem;border-radius:6px}
+figure.chart .bar-val{flex:0 0 auto;min-width:3rem;color:var(--fg);font-variant-numeric:tabular-nums}
+@media print{body{padding:0;max-width:none}thead th,figure.chart .bar-fill{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`;
 
 // `docs` = tokens + base with a plain title. `report` adds a gradient cover title + accent H2.
 const DOCS = `${TOKENS}\n${BASE}\nh1{font-size:2rem;margin:0 0 1rem}`;
@@ -49,6 +56,55 @@ h2{color:var(--accent)}
 @media print{body>h1:first-child{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`;
 
 const THEMES: Record<ThemeName, string> = { minimal: MINIMAL, docs: DOCS, report: REPORT };
+
+const stripTags = (s: string): string => s.replace(/<[^>]+>/g, "").trim();
+/** First number in a cell, tolerant of $, %, commas, and ratios like "9/10" (takes 9). */
+function firstNumber(s: string): number | null {
+  const m = stripTags(s).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  return m ? parseFloat(m[0]) : null;
+}
+
+/**
+ * Turn numeric Markdown tables into inline CSS bar charts (grounded — the bars are the
+ * real cell values). Appends a <figure class="chart"> after each table that has a clear
+ * numeric column; leaves non-numeric tables untouched.
+ */
+export function injectCharts(html: string): string {
+  return html.replace(/<table>[\s\S]*?<\/table>/gi, (table) => {
+    const headMatch = table.match(/<thead>[\s\S]*?<\/thead>/i);
+    const headers = headMatch ? [...headMatch[0].matchAll(/<th[^>]*>([\s\S]*?)<\/th>/gi)].map((m) => stripTags(m[1]!)) : [];
+    const bodyMatch = table.match(/<tbody>([\s\S]*?)<\/tbody>/i);
+    const rows = [...(bodyMatch ? bodyMatch[1]! : table).matchAll(/<tr>([\s\S]*?)<\/tr>/gi)].map((r) =>
+      [...r[1]!.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => stripTags(c[1]!)),
+    );
+    if (rows.length < 2) return table;
+    const ncols = Math.max(...rows.map((r) => r.length));
+    // A column is chartable if ≥60% of its body cells are numeric.
+    let chartCol = -1;
+    for (let c = 0; c < ncols; c++) {
+      const numeric = rows.filter((r) => firstNumber(r[c] ?? "") !== null).length;
+      if (numeric >= Math.ceil(rows.length * 0.6)) {
+        chartCol = c;
+        break;
+      }
+    }
+    if (chartCol === -1) return table;
+    const labelCol = [...Array(ncols).keys()].find((c) => c !== chartCol) ?? -1;
+    const data = rows
+      .map((r, i) => ({ label: (labelCol >= 0 ? r[labelCol] : "") || `Row ${i + 1}`, raw: r[chartCol] ?? "", val: firstNumber(r[chartCol] ?? "") }))
+      .filter((d): d is { label: string; raw: string; val: number } => d.val !== null);
+    if (data.length < 2) return table;
+    const max = Math.max(...data.map((d) => Math.abs(d.val))) || 1;
+    const title = headers[chartCol] || "value";
+    const bars = data
+      .map(
+        (d) =>
+          `<div class="bar-row"><span class="bar-label">${d.label}</span><span class="bar-track"><span class="bar-fill" style="width:${Math.max(2, Math.round((Math.abs(d.val) / max) * 100))}%"></span></span><span class="bar-val">${d.raw}</span></div>`,
+      )
+      .join("");
+    return `${table}\n<figure class="chart" aria-label="chart of ${title}"><figcaption>${title}</figcaption>${bars}</figure>`;
+  });
+}
 
 /** Wrap rendered body HTML in a full, self-contained HTML document with the chosen theme. */
 export function buildHtmlDoc(bodyHtml: string, theme: ThemeName = "docs"): string {

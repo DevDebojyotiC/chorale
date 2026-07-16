@@ -123,6 +123,19 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
     expect(m).not.toMatch(/--accent/);
   });
 
+  it("charts: numeric tables become bar charts grounded to the real values", async () => {
+    const md = "# Data\n\n| Model | Score |\n|-------|------:|\n| A | 5 |\n| B | 10 |\n\n| Note | Text |\n|------|------|\n| x | hi |\n";
+    await exec(tools.write_doc)({ path: "d.html", content: md, theme: "report", charts: true });
+    const h = readFileSync(join(dir, "d.html"), "utf8");
+    expect(h).toMatch(/figure class="chart"/); // a chart was produced
+    expect(h).toMatch(/width:100%/); // the max value (10) is a full bar
+    expect(h).toMatch(/width:50%/); // 5 is half of 10
+    expect((h.match(/figure class="chart"/g) || []).length).toBe(1); // only the numeric table, not the text one
+    // without charts, no figure
+    await exec(tools.write_doc)({ path: "d0.html", content: md, theme: "report" });
+    expect(readFileSync(join(dir, "d0.html"), "utf8")).not.toMatch(/figure class="chart"/);
+  });
+
   it("themes carry through convert (md → styled pdf uses the browser engine)", async () => {
     writeFileSync(join(dir, "n.md"), "# Big Report\n\nRevenue 5000.\n");
     const res = await exec(tools.convert)({ from: "n.md", to: "n.pdf", theme: "report" });

@@ -11,7 +11,7 @@ import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import htmlToDocx from "html-to-docx";
 import { PDFParse } from "pdf-parse";
-import { buildHtmlDoc, isTheme, type ThemeName } from "./doc-themes.js";
+import { buildHtmlDoc, injectCharts, isTheme, type ThemeName } from "./doc-themes.js";
 import { resolveInside, rel, type ToolContext } from "./permissions.js";
 
 const MAX_BYTES = 25 * 1024 * 1024; // don't parse absurdly large binaries
@@ -31,8 +31,10 @@ export const SHEET_EXT = new Set([".xlsx", ".csv", ".tsv"]);
 /** Binary doc formats (skipped by the text-oriented groundedness check). */
 export const BINARY_DOC_EXT = new Set([".pdf", ".docx", ".xlsx", ".xlsm", ".pptx"]);
 
-async function mdToHtml(md: string, theme: ThemeName = "docs"): Promise<string> {
-  return buildHtmlDoc(await marked.parse(md), theme);
+async function mdToHtml(md: string, theme: ThemeName = "docs", charts = false): Promise<string> {
+  let body = await marked.parse(md);
+  if (charts) body = injectCharts(body);
+  return buildHtmlDoc(body, theme);
 }
 function resolveTheme(t: string | undefined): ThemeName {
   return t && isTheme(t) ? t : "docs";
@@ -120,8 +122,8 @@ async function pdfkitLines(lines: string[], absOut: string, markdown: boolean): 
 }
 
 /** Render Markdown to a PDF with a theme: headless Chrome/Edge (fidelity) or pdfkit fallback. */
-async function mdToPdf(md: string, absOut: string, theme: ThemeName = "docs"): Promise<{ engine: string }> {
-  if (printHtmlToPdf(await mdToHtml(md, theme), absOut)) return { engine: "browser" };
+async function mdToPdf(md: string, absOut: string, theme: ThemeName = "docs", charts = false): Promise<{ engine: string }> {
+  if (printHtmlToPdf(await mdToHtml(md, theme, charts), absOut)) return { engine: "browser" };
   await pdfkitLines(md.split("\n"), absOut, true);
   return { engine: "pdfkit" };
 }
@@ -260,21 +262,23 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
       path: z.string(),
       content: z.string().describe("Markdown source for the document"),
       theme: z.enum(["minimal", "docs", "report"]).optional().describe("Visual theme for HTML/PDF/DOCX output (default: docs)"),
+      charts: z.boolean().optional().describe("Render numeric Markdown tables as inline bar charts (default: false)"),
     }),
-    execute: async ({ path, content, theme }) => {
+    execute: async ({ path, content, theme, charts }) => {
       try {
         const abs = resolveInside(cwd, path);
         const ext = extname(abs).toLowerCase();
         if (!WRITABLE_DOC_EXT.has(ext)) return { error: `unsupported write format "${ext}" — use .pdf, .docx, .html, or .md` };
         mkdirSync(dirname(abs), { recursive: true });
         const th = resolveTheme(theme);
+        const ch = charts === true;
         let engine = ext.slice(1);
-        if (ext === ".pdf") engine = (await mdToPdf(content, abs, th)).engine;
+        if (ext === ".pdf") engine = (await mdToPdf(content, abs, th, ch)).engine;
         else if (ext === ".docx") {
-          const buf = await htmlToDocx(await mdToHtml(content, th));
+          const buf = await htmlToDocx(await mdToHtml(content, th, ch));
           writeFileSync(abs, Buffer.isBuffer(buf) ? buf : Buffer.from(buf as ArrayBuffer));
         } else if (ext === ".pptx") await mdToPptx(content, abs);
-        else if (ext === ".html" || ext === ".htm") writeFileSync(abs, await mdToHtml(content, th), "utf8");
+        else if (ext === ".html" || ext === ".htm") writeFileSync(abs, await mdToHtml(content, th, ch), "utf8");
         else writeFileSync(abs, content, "utf8");
         ctx.touched?.add(rel(cwd, abs));
         return { path: rel(cwd, abs), format: ext.slice(1), theme: th, engine };
@@ -322,8 +326,9 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
       from: z.string(),
       to: z.string(),
       theme: z.enum(["minimal", "docs", "report"]).optional().describe("Visual theme when producing HTML/PDF/DOCX from Markdown"),
+      charts: z.boolean().optional().describe("Render numeric Markdown tables as inline bar charts (default: false)"),
     }),
-    execute: async ({ from, to, theme }) => {
+    execute: async ({ from, to, theme, charts }) => {
       try {
         const src = resolveInside(cwd, from);
         const dst = resolveInside(cwd, to);
@@ -372,12 +377,13 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
         else md = readFileSync(src, "utf8");
 
         const th = resolveTheme(theme);
+        const ch = charts === true;
         let engine = toExt.slice(1);
-        if (toExt === ".pdf") engine = (await mdToPdf(md, dst, th)).engine;
+        if (toExt === ".pdf") engine = (await mdToPdf(md, dst, th, ch)).engine;
         else if (toExt === ".docx") {
-          const buf = await htmlToDocx(await mdToHtml(md, th));
+          const buf = await htmlToDocx(await mdToHtml(md, th, ch));
           writeFileSync(dst, Buffer.isBuffer(buf) ? buf : Buffer.from(buf as ArrayBuffer));
-        } else if (toExt === ".html" || toExt === ".htm") writeFileSync(dst, await mdToHtml(md, th), "utf8");
+        } else if (toExt === ".html" || toExt === ".htm") writeFileSync(dst, await mdToHtml(md, th, ch), "utf8");
         else if (WRITABLE_DOC_EXT.has(toExt)) writeFileSync(dst, md, "utf8");
         else return { error: `unsupported conversion target "${toExt}"` };
         ctx.touched?.add(rel(cwd, dst));
