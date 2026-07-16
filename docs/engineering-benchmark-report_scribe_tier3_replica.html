@@ -1,0 +1,521 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
+:root {
+  --ink: #0f172a;
+  --body: #334155;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --bg: #ffff;
+  --panel: #f8fafc;
+  --accent: #0f766e;
+  --good: #16a34a;
+  --good-bg: #dcfce7;
+  --bad: #dc2626;
+  --bad-bg: #fee2e2;
+  --gold-bg: #fef9c3;
+  --gold: #b45309;
+  --border-radius: 12px;
+}
+
+@media(prefers-color-scheme:dark) {
+  :root {
+    --body: #cbd5e1;
+    --ink: #f1f5f9;
+    --bg: #0f1117;
+    --panel: #171a21;
+    --line: #2a2f3a;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--body);
+  background: var(--bg);
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 2rem;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+@page { size: A4; margin: 14mm; }
+.section { page-break-inside: avoid; margin: 2rem 0; }
+
+/* Cover */
+.cover {
+  background: linear-gradient(135deg, #0f766e, #0891b2 40%, #2563eb);
+  color: #fff;
+  border-radius: var(--border-radius);
+  padding: 3rem;
+  margin-bottom: 2.5rem;
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+}
+.cover .kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.9;
+  margin-bottom: 0.5rem;
+}
+.cover h1 {
+  margin: 0 0 1rem 0;
+  font-size: 32px;
+  line-height: 1.2;
+}
+.cover .subtitle {
+  font-size: 16px;
+  opacity: 0.9;
+  max-width: 50ch;
+  margin-bottom: 1.5rem;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  backdrop-filter: blur(4px);
+}
+
+/* Stat Cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+.stat-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--border-radius);
+  padding: 1.25rem;
+  text-align: center;
+  transition: transform 0.2s ease;
+}
+.stat-card:hover { transform: translateY(-2px); }
+.stat-card .val {
+  display: block;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.stat-card .lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+/* Sections */
+h2 {
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 22px;
+  border-bottom: 2px solid var(--line);
+  padding-bottom: 0.5rem;
+  margin-top: 0;
+}
+h2 .badge-n {
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+/* Tables */
+.table-container { overflow-x: auto; margin: 1rem 0; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  text-align: left;
+}
+th, td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+thead th {
+  background: var(--ink);
+  color: #fff;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+tbody tr:nth-child(even) { background: var(--panel); }
+.c { text-align: center; }
+.pass { color: var(--good); font-weight: 700; }
+.fail { color: var(--bad); font-weight: 700; }
+.row-best { background: var(--gold-bg) !important; }
+.row-best td:first-child { border-left: 4px solid var(--gold); }
+.status-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  background: var(--good-bg);
+  color: var(--good);
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+/* Trial Grid */
+.trial-grid {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+.t-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.t-ok { background: var(--good); }
+.t-no { background: var(--bad); }
+
+/* Simple Bar Chart */
+.chart-container {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+.chart-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.chart-label { width: 140px; text-align: right; font-size: 13px; font-weight: 500; }
+.chart-track {
+  flex: 1;
+  background: var(--line);
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.chart-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #0891b2);
+  border-radius: 6px;
+}
+.chart-val { width: 50px; text-align: left; font-size: 13px; font-weight: 700; }
+
+/* Verdict Box */
+.verdict {
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ink);
+  margin: 2rem 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+code {
+  background: var(--panel);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 13px;
+  color: var(--accent);
+}
+pre {
+  background: var(--ink);
+  color: #e2e8f0;
+  padding: 1rem;
+  border-radius: var(--border-radius);
+  overflow-x: auto;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+@media print {
+  .cover, thead th, .t-box, .chart-fill { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style></head><body>
+
+<div class="cover">
+  <div class="kicker">Chorale · Engineering Benchmark</div>
+  <h1>Chorale Coder — Engineering Benchmark Report</h1>
+  <div class="subtitle">A tiered, execution-graded benchmark of three models on real software engineering — from multi-file libraries to full-stack applications.</div>
+  <div class="chips">
+    <span class="chip">Gemma-4-31B (HF)</span>
+    <span class="chip">gpt-oss-120B (Fireworks)</span>
+    <span class="chip">MiniMax-M2.7 (Fireworks)</span>
+    <span class="chip">Tier 1 N=1</span>
+    <span class="chip">Tier 2 N=3</span>
+  </div>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card"><span class="val">7</span><span class="lbl">Projects / 2 Tiers</span></div>
+  <div class="stat-card"><span class="val">10</span><span class="lbl">Full-stack Checks</span></div>
+  <div class="stat-card"><span class="val">3×</span><span class="lbl">Hard-Tier Trials</span></div>
+  <div class="stat-card"><span class="val">1 / 3</span><span class="lbl">Gemma Full-stack OK</span></div>
+  <div class="stat-card"><span class="val">3 / 3</span><span class="lbl">gpt-oss Full-stack OK</span></div>
+</div>
+
+<div class="section">
+  <h2><span class="badge-n">1</span> Executive Summary</h2>
+  <p>
+    On easy-to-moderate work, all three are excellent and <strong>Gemma-4-31B wins on value</strong> — perfect Tier-1 score, ~2× faster, and free. However, on hard, multi-layered work, reliability separates the frontier models from the rest.
+  </p>
+  <p>
+    <strong>gpt-oss-120B is the reliability champion:</strong> it achieved a perfect score on every Tier-2 task across all three trials, including the full-stack app (3/3). 
+    <strong>Gemma-4-31B</strong> is fast but inconsistent on the most complex tasks — its server failed to start in 2 of 3 trials due to hardcoding the port instead of honoring <code>PORT</code>.
+  </p>
+  <div class="verdict">
+    Default: Gemma-4-31B &rarr; Escalate: gpt-oss-120B
+  </div>
+</div>
+
+<div class="section">
+  <h2><span class="badge-n">2</span> Methodology</h2>
+  <p>
+    The benchmark is <strong>execution-graded</strong> with partial credit. Each project is scored by running the result against hidden checks. For the full-stack app, the server is actually spawned and hit over real HTTP (GET/POST/PATCH/DELETE, status codes, content types, persistence).
+  </p>
+  <p>
+    <strong>Tier 1 (N=1):</strong> Everyday tasks (KV store, Debugging, Async, CLI). 
+    <strong>Tier 2 (N=3):</strong> Advanced tasks (Web Framework, State Store, Full-stack App). Tier 2 used three trials to capture run-to-run variance.
+  </p>
+</div>
+
+<div class="section">
+  <h2><span class="badge-n">3</span> Tier 1 — Everyday Engineering (N=1)</h2>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th class="c">KV</th>
+          <th class="c">Debug</th>
+          <th class="c">Async</th>
+          <th class="c">CLI</th>
+          <th class="c">Overall</th>
+          <th class="c">Time</th>
+          <th class="c">Cost</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-best">
+          <td><strong>Gemma-4-31B</strong></td>
+          <td class="c">8/8</td><td class="c">7/7</td><td class="c">5/5</td><td class="c">6/6</td>
+          <td class="c pass">26/26 &middot; 100%</td>
+          <td class="c">32s</td><td class="c">≈$0.00</td>
+        </tr>
+        <tr>
+          <td>MiniMax-M2.7</td>
+          <td class="c">8/8</td><td class="c">7/7</td><td class="c">5/5</td><td class="c">6/6</td>
+          <td class="c pass">26/26 &middot; 100%</td>
+          <td class="c">73s</td><td class="c">$0.0246</td>
+        </tr>
+        <tr>
+          <td>gpt-oss-120B</td>
+          <td class="c">8/8</td><td class="c">7/7</td><td class="c">4/5</td><td class="c">6/6</td>
+          <td class="c">25/26 &middot; 96%</td>
+          <td class="c">68s</td><td class="c">$0.0071</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>On routine engineering, cheaper-and-faster wins. Gemma-4-31B is perfect and ~2× faster than the frontier models.</p>
+</div>
+
+<div class="section">
+  <h2><span class="badge-n">4</span> Tier 2 — Advanced Engineering (N=3 trials)</h2>
+  <p>Aggregated over three independent trials (checks passed / attempted):</p>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th class="c">Framework</th>
+          <th class="c">Store</th>
+          <th class="c">Full-stack</th>
+          <th class="c">Overall</th>
+          <th class="c">Avg Time</th>
+          <th class="c">Avg Cost</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-best">
+          <td><strong>gpt-oss-120B</strong> <span class="status-badge">MOST RELIABLE</span></td>
+          <td class="c">21/21</td><td class="c">21/21</td><td class="c">30/30</td>
+          <td class="c pass">72/72 &middot; 100%</td>
+          <td class="c">117s</td><td class="c">$0.0096</td>
+        </tr>
+        <tr>
+          <td>MiniMax-M2.7</td>
+          <td class="c">17/21</td><td class="c">21/21</td><td class="c">30/30</td>
+          <td class="c">68/72 &middot; 94%</td>
+          <td class="c">99s</td><td class="c">$0.0380</td>
+        </tr>
+        <tr>
+          <td>Gemma-4-31B</td>
+          <td class="c">20/21</td><td class="c">21/21</td><td class="c fail">10/30</td>
+          <td class="c fail">51/72 &middot; 71%</td>
+          <td class="c">25s</td><td class="c">≈$0.00</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Reliability — full task passed, per trial:</strong></p>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Task</th>
+          <th class="c">gpt-oss-120B</th>
+          <th class="c">MiniMax-M2.7</th>
+          <th class="c">Gemma-4-31B</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Framework (7/7)</td>
+          <td class="c"><div class="trial-grid"><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div></div></td>
+          <td class="c"><div class="trial-grid"><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div><div class="t-box t-no">✗</div></div></td>
+          <td class="c"><div class="trial-grid"><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div><div class="t-box t-no">✗</div></div></td>
+        </tr>
+        <tr>
+          <td>Store (7/7)</td>
+          <td class="c"><div class="trial-grid"><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div></div></td>
+          <td class="c"><div class="trial-grid"><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div></div></td>
+          <td class="c"><div class="trial-grid"><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div></div></td>
+        </tr>
+        <tr class="row-best">
+          <td><strong>Full-stack (10/10)</strong></td>
+          <td class="c"><div class="trial-grid"><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div></div></td>
+          <td class="c"><div class="trial-grid"><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div><div class="t-box t-ok">✓</div></div></td>
+          <td class="c"><div class="trial-grid"><div class="t-box t-ok">✓</div><div class="t-box t-no">✗</div><div class="t-box t-no">✗</div></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Overall Score by Tier — the Difficulty Crossover</strong></p>
+  <div class="chart-container">
+    <div class="chart-row">
+      <div class="chart-label">Gemma · Tier 1</div>
+      <div class="chart-track"><div class="chart-fill" style="width: 100%"></div></div>
+      <div class="chart-val">100%</div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-label">Gemma · Tier 2</div>
+      <div class="chart-track"><div class="chart-fill" style="width: 71%"></div></div>
+      <div class="chart-val">71%</div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-label">gpt-oss · Tier 1</div>
+      <div class="chart-track"><div class="chart-fill" style="width: 96%"></div></div>
+      <div class="chart-val">96%</div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-label">gpt-oss · Tier 2</div>
+      <div class="chart-track"><div class="chart-fill" style="width: 100%"></div></div>
+      <div class="chart-val">100%</div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-label">MiniMax · Tier 1</div>
+      <div class="chart-track"><div class="chart-fill" style="width: 100%"></div></div>
+      <div class="chart-val">100%</div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-label">MiniMax · Tier 2</div>
+      <div class="chart-track"><div class="chart-fill" style="width: 94%"></div></div>
+      <div class="chart-val">94%</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2><span class="badge-n">5</span> Deep-Dive — the Full-Stack Application</h2>
+  <p>
+    The centerpiece task asks for a complete web app in Node built-ins only: a REST API, a <code>tasks.json</code> persistence layer, and an HTML+JS frontend. The grader spawns the server on a fresh port and drives all ten behaviors over real HTTP.
+  </p>
+  <p>
+    <strong>gpt-oss-120B and MiniMax-M2.7</strong> delivered correct, fully working apps in every trial. 
+    <strong>Gemma-4-31B</strong> produced correct-looking code, but the server only ran when the port matched its hardcoded default. This operational gap (ignoring the injected port) is where fast, cheap models typically slip.
+  </p>
+</div>
+
+<div class="section">
+  <h2><span class="badge-n">6</span> Limitations & Caveats</h2>
+  <div class="stats-grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="stat-card" style="text-align: left;">
+      <span class="val" style="font-size: 16px;">N=3 for Tier 2</span>
+      <span class="lbl" style="display:block; margin-top:8px; text-transform:none; font-weight:normal;">Directional reliability, not precise probabilities.</span>
+    </div>
+    <div class="stat-card" style="text-align: left;">
+      <span class="val" style="font-size: 16px;">Bounded Projects</span>
+      <span class="lbl" style="display:block; margin-top:8px; text-transform:none; font-weight:normal;">Small self-contained tasks, not thousand-line codebases.</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2><span class="badge-n">7</span> Reproducibility</h2>
+  <pre># Validate ogni grader
+npx tsx eval/projects-selftest.ts
+
+# Tier 1 (Everyday tasks)
+npx tsx eval/coder-projects.ts --only=kvstore,debug,asyncpool,cli
+
+# Tier 2 (Advanced tasks)
+npx tsx eval/coder-projects.ts --only=framework,store,fullstack</pre>
+</div>
+
+<div class="section">
+  <h2><span class="badge-n">8</span> Appendix — Compensation & Mitigation</h2>
+  <p>
+    Gemma's failures were caused by nested backticks in large HTML strings. By introducing <strong>targeted compensation</strong> (serving HTML from separate files, improved repair diagnostics, and a budget increase from 3 to 5 repair rounds), Gemma was brought to a consistent 100%.
+  </p>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Condition</th>
+          <th class="c">Full-pass</th>
+          <th class="c">Mean</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Baseline (no measures)</td><td class="c">7/10</td><td class="c">70%</td></tr>
+        <tr><td>+ operational rule</td><td class="c">8/10</td><td class="c">80%</td></tr>
+        <tr><td>+ few-shot examples</td><td class="c">8/10</td><td class="c">80%</td></tr>
+        <tr class="row-best">
+          <td><strong>+ targeted compensation</strong></td>
+          <td class="c pass">20/20</td>
+          <td class="c pass">100%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<footer style="text-align: center; padding: 2rem 0; font-size: 12px; color: var(--muted);">
+  Chorale is an open-source, model-agnostic multi-agent system. <br>
+  Generated from <code>docs/engineering-benchmark-report.md</code>.
+</footer>
+
+</body></html>
