@@ -17,7 +17,7 @@ import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 import { verifyFiles, verifyFeedback } from "./verify.js";
 import { smokeTest, smokeFeedback } from "./smoke.js";
-import { checkGroundedness, groundednessFeedback } from "./ground.js";
+import { checkGroundedness, groundednessFeedback, checkFactsPreserved, meaningFeedback } from "./ground.js";
 import { matchDiagnoses } from "./diagnose.js";
 import { getLessonStore } from "./lessons.js";
 import { log } from "./log.js";
@@ -259,8 +259,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const cwd = process.cwd();
   // Files the agent writes this run — fed to the verify-repair loop.
   const touched = new Set<string>();
+  // Original content of edited files (for the scribe's meaning-preservation check).
+  const originals = new Map<string, string>();
   const tools: ToolSet = {
-    ...buildToolSet(agent.tools, { mode: permissionMode, cwd, touched }),
+    ...buildToolSet(agent.tools, { mode: permissionMode, cwd, touched, originals }),
     ...mcp.tools,
   };
   if (agentSkills.length > 0) tools.skill_view = createSkillViewTool(agentSkills);
@@ -491,21 +493,31 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       // (1.5) Groundedness check — for doc agents (e.g. scribe). The anti-hallucination
       // pass: verify the paths the written docs reference actually exist; fix invented ones.
       if (agent.groundCheck && process.env.CHORALE_NO_GROUND !== "1") {
-        if (touched.size === 0) break; // a plain answer, nothing written
-        const missing = checkGroundedness([...touched], cwd);
-        if (missing.length === 0) {
-          log.info(round > 0 ? `\n[chorale] ✓ docs grounded after ${round} fix round(s)\n` : `\n[chorale] ✓ docs grounded (all referenced paths exist)\n`);
+        if (touched.size === 0 && originals.size === 0) break; // a plain answer, nothing written
+        const missing = checkGroundedness([...touched], cwd); // invented paths/symbols/scripts
+        const dropped = checkFactsPreserved(originals, cwd); // facts removed by an edit
+        if (missing.length === 0 && dropped.length === 0) {
+          log.info(round > 0 ? `\n[chorale] ✓ docs grounded after ${round} fix round(s)\n` : `\n[chorale] ✓ docs grounded (references exist, facts preserved)\n`);
           break;
         }
         if (isLast) {
-          log.info(`\n[chorale] ⚠ ${missing.length} unresolved path reference(s) remain after ${maxRounds} rounds\n`);
+          log.info(`\n[chorale] ⚠ ${missing.length} invented ref(s) + ${dropped.length} dropped fact(s) remain after ${maxRounds} rounds\n`);
           break;
         }
-        log.info(`\n[chorale] ⚠ groundedness: ${missing.length} invented path reference(s) — asking to fix…\n`);
-        for (const m of missing.slice(0, 6)) log.info(`    ${m.file}: ${m.ref}\n`);
-        opts.onEvent?.({ type: "verify", text: `groundedness: ${missing.length} invented ref(s) — fixing` });
+        const parts: string[] = [];
+        if (missing.length) {
+          log.info(`\n[chorale] ⚠ groundedness: ${missing.length} invented reference(s) — asking to fix…\n`);
+          for (const m of missing.slice(0, 6)) log.info(`    ${m.file}: ${m.ref} (${m.kind})\n`);
+          parts.push(groundednessFeedback(missing));
+        }
+        if (dropped.length) {
+          log.info(`\n[chorale] ⚠ meaning: ${dropped.length} technical fact(s) dropped by an edit — asking to restore…\n`);
+          for (const d of dropped.slice(0, 6)) log.info(`    ${d.file}: ${d.fact}\n`);
+          parts.push(meaningFeedback(dropped));
+        }
+        opts.onEvent?.({ type: "verify", text: `docs: ${missing.length + dropped.length} issue(s) — fixing` });
         messages.push({ role: "assistant", content: result.text || "(wrote docs)" });
-        messages.push({ role: "user", content: groundednessFeedback(missing) });
+        messages.push({ role: "user", content: parts.join("\n\n") });
         result = await attempt(repairTemp(round));
         continue;
       }

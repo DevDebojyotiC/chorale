@@ -17,6 +17,9 @@ export interface ToolContext {
   cwd: string;
   /** If provided, write/edit tools record the (workspace-relative) files they touch here. */
   touched?: Set<string>;
+  /** If provided, edit tools snapshot a file's ORIGINAL content here the first time they change it
+   * (for the meaning-preservation check — facts present before an edit must survive it). */
+  originals?: Map<string, string>;
 }
 
 /** Resolve `p` against the workspace root and refuse if it escapes it. */

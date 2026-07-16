@@ -122,6 +122,10 @@ export function createFileTools(ctx: ToolContext): ToolSet {
       try {
         const abs = resolveInside(cwd, path);
         const normalized = normalizeCodeContent(path, content);
+        if (ctx.originals && existsSync(abs) && !ctx.originals.has(rel(cwd, abs))) {
+          const prev = readFileSync(abs, "utf8");
+          ctx.originals.set(rel(cwd, abs), prev);
+        }
         mkdirSync(dirname(abs), { recursive: true });
         writeFileSync(abs, normalized, "utf8");
         ctx.touched?.add(rel(cwd, abs));
@@ -132,8 +136,14 @@ export function createFileTools(ctx: ToolContext): ToolSet {
     },
   });
 
+  const snapshotOriginal = (abs: string, before: string): void => {
+    const r = rel(cwd, abs);
+    if (ctx.originals && !ctx.originals.has(r)) ctx.originals.set(r, before);
+  };
+
   const applyEdits = (abs: string, edits: Array<{ old_string: string; new_string: string; replace_all?: boolean }>) => {
     let text = readFileSync(abs, "utf8");
+    snapshotOriginal(abs, text);
     for (const ed of edits) {
       if (ed.old_string === ed.new_string) throw new Error("old_string and new_string are identical");
       const count = text.split(ed.old_string).length - 1;
