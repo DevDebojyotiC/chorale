@@ -11,7 +11,7 @@ Three mechanisms, exposed as **customizable per-agent tick-boxes** (agent.md fro
 | `selfLearn` | ✅ Shipped (Phase 3) | Learns fixes from its own successful repairs and injects them proactively next run. See [`self-learning.md`](self-learning.md). |
 | `selfCritique` | ✅ Shipped (Phase 4) | The reviewer's form of self-healing: a second pass that validates each finding (drops false alarms) and re-scans for misses, never dropping a security finding. Default-on for the `reviewer`; `CHORALE_NO_CRITIQUE=1` to disable. |
 | `reviewGate` | ✅ Shipped (Phase 4) | After a coding agent's code verifies clean, the `reviewer` gives a semantic second opinion; BLOCKER/MAJOR findings loop back for a fix (catches security/logic/async bugs syntax+smoke miss). **On by default** (tick-box) — fires only for agents that write+verify code, so effectively on for the `coder`; the `reviewer` opts out. Set `reviewGate: false` or `CHORALE_NO_REVIEW_GATE=1` to disable. |
-| `groundCheck` | ✅ Shipped (Phase 4) | The scribe's anti-hallucination pass: after it writes docs, verify every path they reference exists, and loop back to fix invented ones. Default-on for the `scribe`; `CHORALE_NO_GROUND=1` to disable. |
+| `groundCheck` | ✅ Shipped (Phase 4) | The scribe's anti-hallucination pass: after it writes docs, verify every referenced **path, code symbol, and npm script** exists, and loop back to fix invented ones. Paired with an intent-aware **meaning-preservation** check on edits (a dropped fact is flagged, once). Default-on for the `scribe`; `CHORALE_NO_GROUND=1` to disable. |
 
 ### Phase 3 — `selfLearn` (self-learning agents) ✅ v1 shipped
 Capture fixes from successful diagnosed repairs → per-agent `data/lessons.sqlite` → inject top proven
@@ -54,7 +54,7 @@ benchmark** (an agent you can't measure, you can't trust). Proposed lineup, orde
 | Task | Agent | Why here |
 |------|-------|----------|
 | 1 ✅ | **Reviewer / Verifier** | Reviews code & output (correctness / security / style) → structured findings. Compounds the quality of every other agent, so it comes first. **Shipped + hardened with the four mechanisms** (per-model compensation, few-shot, self-heal via a self-critique pass, self-learn): ramp 10/10 · precision 9/9 · multi 8/8 · polyglot 3/3 · expert-security 3/3 (gemma). See [`eval/REVIEWER-SUITES.md`](../eval/REVIEWER-SUITES.md). |
-| 2 ✅ | **Files / Docs specialist** (`scribe`) | Grounded doc generation, summarization, meaning-preserving edits, staleness detection, and reference-safe file moves. Signature `groundCheck` anti-hallucination pass. gemma: 0 invented refs · recall 2/2 · staleness 3/3 · edit ✓. See [`eval/SCRIBE-RESULTS.md`](../eval/SCRIBE-RESULTS.md). |
+| 2 ✅ | **Files / Docs specialist** (`scribe`) | **Full-scope, all 22 capability checks benchmark-green on gemma** — grounded gen (README/API/CHANGELOG/docstrings/architecture/scaffolding), summarize/extract/synthesize, proofread/format/TOC/tone edits, staleness detect + sync-apply + consistency, reference-safe move + reorganize + inventory + naming, grounded Q&A. `groundCheck` (paths+symbols+scripts) + intent-aware meaning-preservation. See [`eval/SCRIBE-RESULTS.md`](../eval/SCRIBE-RESULTS.md). |
 | 3 | **Planner / Architect** | Decomposes a complex request into a plan and delegates it; strengthens the orchestrator. |
 | 4 | **Test-writer** | Generates and runs tests — pulls the long-noted "test-execution verification" lever and compounds the coder. |
 | 5 | **Productivity** | Email / calendar / notes via MCP — the Claude-Desktop-replacement pillar. |

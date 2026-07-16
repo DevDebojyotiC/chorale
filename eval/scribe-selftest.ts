@@ -2,7 +2,7 @@
  * Validate the scribe graders with synthetic inputs — no model calls.
  * Run: npx tsx eval/scribe-selftest.ts
  */
-import { GROUND, STALE, EDIT, gradeGroundRecall, gradeStaleness, gradeEdit } from "./scribe-fixtures.js";
+import { GROUND, STALE, EDIT, GEN, TEXT, gradeGroundRecall, gradeStaleness, gradeEdit, gradeContent } from "./scribe-fixtures.js";
 
 let ok = true;
 const expect = (label: string, got: string | number | boolean, want: string | number | boolean): void => {
@@ -31,6 +31,16 @@ for (const e of EDIT) {
   expect(`edit ${e.id}: clean fix ok`, gradeEdit(fixed, e).ok, true);
   expect(`edit ${e.id}: dropped fact fails`, gradeEdit(fixed.replace("8080", "9090"), e).ok, false);
   expect(`edit ${e.id}: surviving typo fails`, gradeEdit(e.content, e).ok, false);
+}
+
+// gradeContent: recall + must-absent + structure, over every GEN/TEXT fixture.
+// A snippet that satisfies every structure regex used by the fixtures.
+const STRUCT = "\n# Heading text\n## Development\n### Added\n- item\n| a | b | c |\n/** doc */\n[x](#y)\n";
+for (const f of [...GEN, ...TEXT]) {
+  const perfect = f.expectTerms.join(" ") + STRUCT;
+  expect(`content ${f.id}: perfect ok`, gradeContent(perfect, f).ok, true);
+  expect(`content ${f.id}: missing term fails`, gradeContent("nothing relevant", f).ok, false);
+  if (f.mustAbsent?.length) expect(`content ${f.id}: leaked term fails`, gradeContent(perfect + " " + f.mustAbsent[0], f).ok, false);
 }
 
 process.stdout.write(ok ? "\n✅ scribe graders validated\n" : "\n❌ scribe grader validation FAILED\n");

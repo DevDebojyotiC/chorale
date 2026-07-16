@@ -14,7 +14,10 @@ import { buildRegistry } from "../src/core/model-registry.js";
 import { loadAgent } from "../src/agents/loader.js";
 import { runAgent } from "../src/core/runtime.js";
 import { checkGroundedness } from "../src/core/ground.js";
-import { GROUND, STALE, EDIT, gradeGroundRecall, gradeStaleness, gradeEdit, type FileMap } from "./scribe-fixtures.js";
+import {
+  GROUND, STALE, EDIT, GEN, TEXT, REORG,
+  gradeGroundRecall, gradeStaleness, gradeEdit, gradeContent, type FileMap,
+} from "./scribe-fixtures.js";
 
 process.env.CHORALE_NO_LEARN = "1";
 
@@ -97,10 +100,61 @@ async function edit(model: string): Promise<void> {
   }
 }
 
+async function gen(model: string): Promise<void> {
+  for (const f of GEN) {
+    const dir = makeWorkspace(f.files);
+    try {
+      await runIn(dir, f.prompt, model, f.mode);
+      const out = existsSync(join(dir, f.outFile)) ? readFileSync(join(dir, f.outFile), "utf8") : "";
+      const g = gradeContent(out, f);
+      const invented = out ? checkGroundedness([f.outFile], dir).length : 0;
+      const ok = g.ok && invented === 0 && !!out;
+      process.stdout.write(
+        `  GEN  ${f.cap.padEnd(26)} ${ok ? "✓" : "✗"}${!out ? " (no file)" : ""}${g.missed.length ? ` missed:${g.missed.join(",")}` : ""}${g.leaked.length ? ` leaked:${g.leaked.join(",")}` : ""}${!g.structureOk ? " bad-structure" : ""}${invented ? ` invented:${invented}` : ""}\n`,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+
+async function text(model: string): Promise<void> {
+  for (const f of TEXT) {
+    const dir = makeWorkspace(f.files);
+    try {
+      const out = await runIn(dir, f.prompt, model, f.mode);
+      const g = gradeContent(out, f);
+      process.stdout.write(
+        `  TEXT ${f.cap.padEnd(26)} ${g.ok ? "✓" : "✗"}${g.missed.length ? ` missed:${g.missed.join(",")}` : ""}${g.leaked.length ? ` leaked:${g.leaked.join(",")}` : ""}${!g.structureOk ? " bad-structure" : ""}\n`,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+
+async function reorg(model: string): Promise<void> {
+  for (const f of REORG) {
+    const dir = makeWorkspace(f.files);
+    try {
+      await runIn(dir, f.prompt, model, "full-auto");
+      const exists = (p: string) => existsSync(join(dir, p));
+      const existOk = f.expectExists.every(exists) && f.expectGone.every((p) => !exists(p));
+      const linkOk = f.linkStillResolves.every((l) => exists(l.file) && readFileSync(join(dir, l.file), "utf8").includes(l.mustContain));
+      process.stdout.write(`  ORG  ${f.cap.padEnd(26)} ${existOk && linkOk ? "✓" : "✗"}${!existOk ? " layout✗" : ""}${!linkOk ? " links✗" : ""}\n`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+
 for (const model of models) {
   process.stdout.write(`\n===== scribe · ${model} =====\n`);
   if (which === "all" || which === "ground") await ground(model);
   if (which === "all" || which === "stale") await stale(model);
   if (which === "all" || which === "edit") await edit(model);
+  if (which === "all" || which === "gen") await gen(model);
+  if (which === "all" || which === "text") await text(model);
+  if (which === "all" || which === "reorg") await reorg(model);
 }
 process.exit(0);

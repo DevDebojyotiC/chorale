@@ -214,9 +214,10 @@ export function meaningFeedback(dropped: DroppedFact[]): string {
   }
   const lines = [...byFile.entries()].map(([f, facts]) => `- in ${f}: ${[...new Set(facts)].join(", ")}`);
   return (
-    "Meaning-preservation check: your edit dropped these technical facts that were in the original:\n" +
+    "Meaning-preservation check: your edit removed or changed these technical facts from the original:\n" +
     lines.join("\n") +
-    "\nRestore each one — an edit may change wording and structure, but must NEVER remove or alter a technical fact " +
-    "(a number, name, path, command, or URL) unless the task explicitly asked you to."
+    "\nFor EACH: if the task asked you to change it (e.g. updating a version or a renamed symbol), keep your change. " +
+    "Otherwise it was an accidental loss while editing — restore the original fact verbatim. An edit may change " +
+    "wording, tone, and structure, but must never *accidentally* drop a number, name, path, command, or URL."
   );
 }

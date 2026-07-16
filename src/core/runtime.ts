@@ -468,6 +468,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     // Self-learning: the diagnoses shown last round, pending a win/loss verdict this round.
     let pending: { key: string; lesson: string }[] = [];
     const learnStore = learn ? getLessonStore() : null;
+    let meaningWarned = false; // the meaning-preservation nudge fires at most once (it's intent-sensitive)
     for (let round = 0; round < maxRounds; round++) {
       const isLast = round === maxRounds - 1;
 
@@ -494,8 +495,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       // pass: verify the paths the written docs reference actually exist; fix invented ones.
       if (agent.groundCheck && process.env.CHORALE_NO_GROUND !== "1") {
         if (touched.size === 0 && originals.size === 0) break; // a plain answer, nothing written
-        const missing = checkGroundedness([...touched], cwd); // invented paths/symbols/scripts
-        const dropped = checkFactsPreserved(originals, cwd); // facts removed by an edit
+        const missing = checkGroundedness([...touched], cwd); // invented paths/symbols/scripts — always wrong, loop until fixed
+        // Meaning-preservation is intent-sensitive (an intended edit legitimately changes a fact),
+        // so nudge at most ONCE and let the model decide, rather than fighting an intentional change.
+        const dropped = meaningWarned ? [] : checkFactsPreserved(originals, cwd);
         if (missing.length === 0 && dropped.length === 0) {
           log.info(round > 0 ? `\n[chorale] ✓ docs grounded after ${round} fix round(s)\n` : `\n[chorale] ✓ docs grounded (references exist, facts preserved)\n`);
           break;
@@ -511,9 +514,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           parts.push(groundednessFeedback(missing));
         }
         if (dropped.length) {
-          log.info(`\n[chorale] ⚠ meaning: ${dropped.length} technical fact(s) dropped by an edit — asking to restore…\n`);
+          log.info(`\n[chorale] ⚠ meaning: ${dropped.length} technical fact(s) changed by an edit — one-time check…\n`);
           for (const d of dropped.slice(0, 6)) log.info(`    ${d.file}: ${d.fact}\n`);
           parts.push(meaningFeedback(dropped));
+          meaningWarned = true; // nudge once; don't re-fight an intentional change
         }
         opts.onEvent?.({ type: "verify", text: `docs: ${missing.length + dropped.length} issue(s) — fixing` });
         messages.push({ role: "assistant", content: result.text || "(wrote docs)" });

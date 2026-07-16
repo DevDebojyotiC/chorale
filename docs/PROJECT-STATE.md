@@ -2,7 +2,7 @@
 
 A snapshot of what exists and works right now. Refreshed at the completion of every phase, before shipping.
 
-> **Version:** 0.2.0 (Phase 3 shipped) · **Phase:** 4 in progress (Core Agents) · **Tests:** 119 passing · **Last updated:** Phase 4 Task 2 (scribe / files-docs agent landed).
+> **Version:** 0.2.0 (Phase 3 shipped) · **Phase:** 4 in progress (Core Agents) · **Tests:** 122 passing · **Last updated:** Phase 4 Task 2 (scribe / files-docs agent landed).
 
 ## Status at a glance
 - **Runtime:** model-agnostic, production coder pipeline (salvage + verify + self-heal + diagnose-and-compensate + a **reviewer review-gate**), fallback chain with per-request timeout + retry/backoff.
@@ -31,11 +31,11 @@ Full evidence: [`model-evaluation-report.md`](model-evaluation-report.md), [`eng
 - Benchmarks are self-contained projects (up to a full-stack app), **not thousand-line codebases**; N is small on the hardest tiers.
 - **TUI shipped** (`chorale tui` — Ink streaming chat REPL); the React/Ink TSX is excluded from `npm run typecheck` (native TS7 crashes on React types) but is type-transpiled by `npm run build`.
 - **Reviewer agent shipped** (Phase 4, Task 1): read-only structured code review, hardened with the **four mechanisms** (per-model compensation, few-shot, self-heal via a self-critique pass, self-learn). Benchmarked across 5 suites — ramp **10/10**, precision **9/9**, multi **8/8**, polyglot **3/3**, expert security **3/3** (gemma, single-pass; see [`eval/REVIEWER-SUITES.md`](../eval/REVIEWER-SUITES.md)). Self-critique is a guarded recall safety net (recovered gpt-oss 2→3, never drops a security finding). Also does **diff review** (`chorale review`), **multi-file cross-contract** review (reads files via tools, 3/3), and is **auto-wired into the coder as a review gate** (semantic second opinion after verify — live demo caught SQLi + a missing `await` and drove the fix). Files/docs, planner, test-writer, productivity agents still to come.
-- **Scribe agent shipped** (Phase 4, Task 2): files/docs specialist — grounded generation (README/API/CHANGELOG), summarize/extract, meaning-preserving edits, staleness detection, and **applied file ops** (a reference-safe `move` tool that reports links to update). Signature `groundCheck` anti-hallucination pass. On gemma: groundedness **0 invented refs · recall 2/2**, staleness **3/3**, edit-safety **✓** ([`eval/SCRIBE-RESULTS.md`](../eval/SCRIBE-RESULTS.md)). gpt-oss is flappier at *creating* files. Summarization-fidelity suite is future work.
+- **Scribe agent shipped** (Phase 4, Task 2): files/docs specialist — **every capability in the spec is benchmark-verified green on gemma** (22 checks: README/API/CHANGELOG/docstrings/architecture/scaffolding gen; summarize/extract/structured/synthesis; proofread/format/TOC/tone edits; staleness detect + sync-apply + consistency + example-validation; reference-safe move + reorganize + inventory + naming; grounded Q&A). Verification layer: `groundCheck` (paths **+ symbols + scripts**), intent-aware **meaning-preservation** on edits, `selfCritique`. See [`eval/SCRIBE-RESULTS.md`](../eval/SCRIBE-RESULTS.md). gpt-oss (escalation) is flappier at *creating* new files.
 - Research falls back to brittle DuckDuckGo scraping without a Tavily key (degrades gracefully, but Tavily recommended).
 
 ## Quality gates
-- `npm run typecheck` (tsc, strict; `src/tui` excluded — native TS7 crashes on React types) · `npm test` (vitest, 119) · CI on push (`.github/workflows/ci.yml`).
+- `npm run typecheck` (tsc, strict; `src/tui` excluded — native TS7 crashes on React types) · `npm test` (vitest, 122) · CI on push (`.github/workflows/ci.yml`).
 - Graders self-validated against known-good/bad reference solutions before any benchmark run.
 - **Security:** no secrets/absolute paths/`.env`/`data/` in tracked files; SQL is parameterized; shell has a catastrophic-command denylist; logs are secret-redacted. `npm audit` reports **0 vulnerabilities** (an `esbuild` override forces the patched version) and runs in CI. `selfHeal` runs model-written code — see [`SECURITY.md`](../SECURITY.md).
 
