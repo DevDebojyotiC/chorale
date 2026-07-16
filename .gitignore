@@ -21,3 +21,6 @@ demo-todo/
 
 # Grand-tour runner build output
 grand-tour-output/
+
+# Fullstack capability experiments (build output, not source)
+experiments/
