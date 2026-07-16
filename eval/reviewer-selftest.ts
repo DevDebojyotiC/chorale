@@ -4,7 +4,7 @@
  * empty one 0%; a clean control must flag a false BLOCKER as a false positive.
  * Run: npx tsx eval/reviewer-selftest.ts
  */
-import { FIXTURES, gradeReview } from "./reviewer-fixtures.js";
+import { FIXTURES, RAMP, gradeReview } from "./reviewer-fixtures.js";
 
 let ok = true;
 const expect = (label: string, got: string | number, want: string | number): void => {
@@ -50,6 +50,18 @@ for (const f of defectFixtures) {
 {
   const g = gradeReview(defectFixtures[0]!, "stuff\nVERDICT: REQUEST CHANGES — fix the query.");
   expect("verdict parsed", g.verdict ?? "null", "REQUEST CHANGES");
+}
+
+// 6) Ramp: 10 levels, contiguous 1..10; a perfect review catches each, an empty one none.
+{
+  const levelsSorted = [...RAMP].map((f) => f.level).sort((a, b) => a! - b!);
+  expect("ramp has 10 levels", RAMP.length, 10);
+  expect("ramp levels 1..10", levelsSorted.join(","), "1,2,3,4,5,6,7,8,9,10");
+  for (const f of RAMP) {
+    const perfect = `- [MAJOR] ${f.id}.js:${f.defects[0]!.line} — ${f.defects[0]!.terms[0]} here.`;
+    expect(`ramp perfect catches ${f.id}`, gradeReview(f, perfect).caught.length, 1);
+    expect(`ramp empty misses ${f.id}`, gradeReview(f, "Looks fine to me.").caught.length, 0);
+  }
 }
 
 process.stdout.write(ok ? "\n✅ reviewer grader validated\n" : "\n❌ reviewer grader validation FAILED\n");

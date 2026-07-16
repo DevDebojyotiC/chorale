@@ -30,7 +30,7 @@ Full evidence: [`model-evaluation-report.md`](model-evaluation-report.md), [`eng
 - **`selfLearn`** v1 is **live** (Phase 3, Task 1): learns fixes from successful repairs, injects them proactively; `chorale lessons` to inspect. v2 (LLM reflection for novel failures) is future work.
 - Benchmarks are self-contained projects (up to a full-stack app), **not thousand-line codebases**; N is small on the hardest tiers.
 - **TUI shipped** (`chorale tui` — Ink streaming chat REPL); the React/Ink TSX is excluded from `npm run typecheck` (native TS7 crashes on React types) but is type-transpiled by `npm run build`.
-- **Reviewer agent shipped** (Phase 4, Task 1): read-only static review → structured findings, recall 5/5 · precision 1/1 on the planted-defect bench. Not yet auto-wired into the coder loop (delegate to it manually / via orchestrator). Files/docs, planner, test-writer, productivity agents still to come.
+- **Reviewer agent shipped** (Phase 4, Task 1): read-only static review → structured findings; recall 5/5 · precision 1/1 on the planted-defect bench, and **10/10 on the L1→L10 subtlety ramp** (gemma-4-31B, stable ×3) after a security vuln-class checklist closed a real gap — out-consistenting gpt-oss-120B. Not yet auto-wired into the coder loop (delegate manually / via orchestrator). Files/docs, planner, test-writer, productivity agents still to come.
 - Research falls back to brittle DuckDuckGo scraping without a Tavily key (degrades gracefully, but Tavily recommended).
 
 ## Quality gates

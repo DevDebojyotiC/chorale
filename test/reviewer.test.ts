@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { resolve } from "node:path";
 import { loadAgent } from "../src/agents/loader";
-import { FIXTURES, gradeReview, numberedCode } from "../eval/reviewer-fixtures";
+import { FIXTURES, RAMP, gradeReview, numberedCode } from "../eval/reviewer-fixtures";
 
 describe("Phase 4 — reviewer agent", () => {
   it("loads with a read-only inspection toolset and is delegable", () => {
@@ -47,5 +47,25 @@ describe("Phase 4 — reviewer grader", () => {
 
   it("parses the verdict token", () => {
     expect(gradeReview(defectFixtures[0]!, "VERDICT: REQUEST CHANGES — fix it.").verdict).toBe("REQUEST CHANGES");
+  });
+});
+
+describe("Phase 4 — reviewer difficulty ramp", () => {
+  it("has 10 contiguous levels, each with one defect keyed to signature terms", () => {
+    expect(RAMP).toHaveLength(10);
+    const levels = RAMP.map((f) => f.level).sort((a, b) => a! - b!);
+    expect(levels).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    for (const f of RAMP) {
+      expect(f.defects).toHaveLength(1);
+      expect(f.defects[0]!.terms.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("a perfect review catches every ramp level; an empty one none", () => {
+    for (const f of RAMP) {
+      const perfect = `- [MAJOR] ${f.id}:${f.defects[0]!.line} — ${f.defects[0]!.terms[0]}.`;
+      expect(gradeReview(f, perfect).caught).toHaveLength(1);
+      expect(gradeReview(f, "Looks correct.").caught).toHaveLength(0);
+    }
   });
 });

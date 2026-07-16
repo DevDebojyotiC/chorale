@@ -50,7 +50,7 @@ benchmark** (an agent you can't measure, you can't trust). Proposed lineup, orde
 
 | Task | Agent | Why here |
 |------|-------|----------|
-| 1 ✅ | **Reviewer / Verifier** | Reviews code & output (correctness / security / style) → structured findings. Compounds the quality of every other agent, so it comes first. **Shipped:** read-only static review, recall 5/5 · precision 1/1 on the planted-defect bench (`eval/REVIEWER-RESULTS.md`); a calibration fix cured false MAJORs on clean code, from our end. |
+| 1 ✅ | **Reviewer / Verifier** | Reviews code & output (correctness / security / style) → structured findings. Compounds the quality of every other agent, so it comes first. **Shipped:** read-only static review, recall 5/5 · precision 1/1 on the planted-defect bench + **10/10 on the L1→L10 subtlety ramp** (`eval/REVIEWER-RAMP.md`); a calibration fix cured false MAJORs and a security vuln-class checklist closed a real gap — both from our end. |
 | 2 | **Files / Docs specialist** | File & document work — summarize, generate/refresh docs, organize, edit prose. One of the four product pillars. |
 | 3 | **Planner / Architect** | Decomposes a complex request into a plan and delegates it; strengthens the orchestrator. |
 | 4 | **Test-writer** | Generates and runs tests — pulls the long-noted "test-execution verification" lever and compounds the coder. |
