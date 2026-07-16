@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+:root{--fg:#243040;--ink:#0f172a;--muted:#64748b;--accent:#0f766e;--bg:#ffffff;--panel:#f6f8f8;--border:#e2e8f0;--body-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--measure:52rem}
+*{box-sizing:border-box}
+body{color:var(--fg);background:var(--bg);line-height:1.6;margin:0 auto;max-width:var(--measure,58rem);padding:2.4rem 1.6rem;font-size:15px;font-family:var(--body-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif)}
+h1,h2,h3,h4{color:var(--ink,var(--fg));line-height:1.25;font-family:var(--head-font,inherit)}
+h1{font-size:1.9rem;margin:0 0 .6rem}h2{font-size:1.35rem;margin:1.8rem 0 .6rem}h3{font-size:1.1rem;margin:1.3rem 0 .4rem}
+p{margin:.6em 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+hr{border:none;border-top:1px solid var(--border);margin:1.6rem 0}
+ul,ol{padding-left:1.2rem}li{margin:.25em 0}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92rem;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+th,td{padding:.5rem .75rem;text-align:left;border-bottom:1px solid var(--border)}
+thead th{background:var(--panel);color:var(--ink,var(--fg));font-weight:700}
+tbody tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,"Cascadia Code",Consolas,Menlo,monospace;background:var(--panel);padding:.1rem .35rem;border-radius:4px;font-size:.9em}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow:auto;font-size:.85rem}
+pre code{background:none;padding:0}
+.muted{color:var(--muted)}.right{text-align:right}.center{text-align:center}
+@page{size:A4;margin:16mm}@media print{body{max-width:none;padding:0}thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.inv-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--accent);padding-bottom:1rem;margin-bottom:1.4rem}
+.inv-head .co{font-size:1.15rem;font-weight:800;color:var(--ink)}.inv-head .lbl{text-align:right}.inv-head .lbl h1{color:var(--accent);letter-spacing:.05em;font-size:1.6rem}
+.meta-grid{display:flex;gap:2.5rem;margin:1rem 0}.meta-grid .b{font-size:.9rem}.meta-grid .b .h{text-transform:uppercase;font-size:.72rem;color:var(--muted);letter-spacing:.05em;margin-bottom:.2rem}
+table td.num,table th.num{text-align:right;font-variant-numeric:tabular-nums}
+thead th{background:var(--ink);color:#fff;text-transform:uppercase;font-size:.75rem;letter-spacing:.03em}
+.totals{margin-left:auto;width:16rem;margin-top:1rem}.totals .row{display:flex;justify-content:space-between;padding:.35rem 0;font-variant-numeric:tabular-nums}
+.totals .grand{border-top:2px solid var(--accent);margin-top:.3rem;padding-top:.5rem;font-weight:800;font-size:1.15rem;color:var(--accent)}
+.terms{margin-top:1.6rem;font-size:.85rem;color:var(--muted);border-top:1px solid var(--border);padding-top:.8rem}
+.due{display:inline-block;background:var(--panel);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:.2rem .7rem;font-weight:700;font-size:.85rem}
+</style></head><body>
+
+<div class="inv-head"><div><div class="co">Chorale Labs</div><div class="muted">hello@chorale.dev · Remote</div></div>
+<div class="lbl"><h1>INVOICE</h1><div class="muted">#INV-2026-014</div><div class="due">Due 30 Jul 2026</div></div></div>
+<div class="meta-grid"><div class="b"><div class="h">Bill To</div>Acme Corp<br>123 Market St<br>Berlin</div><div class="b"><div class="h">Issued</div>16 Jul 2026</div></div>
+<table><thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+<tbody><tr><td>Design system implementation</td><td class="num">40</td><td class="num">$120.00</td><td class="num">$4,800.00</td></tr>
+<tr><td>Report automation</td><td class="num">12</td><td class="num">$120.00</td><td class="num">$1,440.00</td></tr></tbody></table>
+<div class="totals"><div class="row"><span>Subtotal</span><span>$6,240.00</span></div><div class="row"><span>Tax (19%)</span><span>$1,185.60</span></div>
+<div class="row grand"><span>Total</span><span>$7,425.60</span></div></div>
+<div class="terms">Payment due within 30 days by bank transfer. Thank you for your business.</div>
+</body></html>

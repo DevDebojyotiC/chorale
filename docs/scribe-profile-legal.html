@@ -1,0 +1,38 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+:root{--fg:#1a1a1a;--ink:#000;--muted:#555;--accent:#1a1a1a;--bg:#ffffff;--panel:#f5f5f5;--border:#cccccc;--body-font:Georgia,"Times New Roman",Cambria,serif;--head-font:Georgia,"Times New Roman",Cambria,serif;--measure:50rem}
+*{box-sizing:border-box}
+body{color:var(--fg);background:var(--bg);line-height:1.6;margin:0 auto;max-width:var(--measure,58rem);padding:2.4rem 1.6rem;font-size:15px;font-family:var(--body-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif)}
+h1,h2,h3,h4{color:var(--ink,var(--fg));line-height:1.25;font-family:var(--head-font,inherit)}
+h1{font-size:1.9rem;margin:0 0 .6rem}h2{font-size:1.35rem;margin:1.8rem 0 .6rem}h3{font-size:1.1rem;margin:1.3rem 0 .4rem}
+p{margin:.6em 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+hr{border:none;border-top:1px solid var(--border);margin:1.6rem 0}
+ul,ol{padding-left:1.2rem}li{margin:.25em 0}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92rem;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+th,td{padding:.5rem .75rem;text-align:left;border-bottom:1px solid var(--border)}
+thead th{background:var(--panel);color:var(--ink,var(--fg));font-weight:700}
+tbody tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,"Cascadia Code",Consolas,Menlo,monospace;background:var(--panel);padding:.1rem .35rem;border-radius:4px;font-size:.9em}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow:auto;font-size:.85rem}
+pre code{background:none;padding:0}
+.muted{color:var(--muted)}.right{text-align:right}.center{text-align:center}
+@page{size:A4;margin:16mm}@media print{body{max-width:none;padding:0}thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+body{line-height:1.7}h1{text-align:center;font-size:1.4rem;text-transform:uppercase;letter-spacing:.03em}
+.parties{margin:1rem 0;font-size:.95rem}.parties strong{text-transform:uppercase}
+.recital{font-style:italic;color:var(--muted);margin:.8rem 0}
+ol.clauses{counter-reset:c;padding-left:0;list-style:none}ol.clauses>li{counter-increment:c;margin:.9rem 0;padding-left:2.4rem;position:relative}
+ol.clauses>li::before{content:counter(c) ".";position:absolute;left:0;font-weight:700}
+ol.clauses ol{counter-reset:s;list-style:none;padding-left:0}ol.clauses ol>li{counter-increment:s;padding-left:2.6rem}ol.clauses ol>li::before{content:counter(c) "." counter(s)}
+.defterm{font-weight:700}.defs dt{font-weight:700;margin-top:.5rem}.defs dd{margin:.1rem 0 0 1.4rem}
+.sig{display:flex;gap:3rem;margin-top:2.4rem;break-inside:avoid}.sig .block{flex:1}.sig .line{border-top:1px solid #000;margin-top:2.2rem;padding-top:.3rem;font-size:.82rem;color:var(--muted)}
+.confidential{text-align:center;letter-spacing:.2em;font-size:.75rem;color:var(--muted);text-transform:uppercase;margin-bottom:1rem}
+</style></head><body>
+
+<div class="confidential">Confidential</div><h1>Mutual Non-Disclosure Agreement</h1>
+<p class="parties">This Agreement is entered into by and between <strong>Chorale Labs</strong> ("Disclosing Party") and <strong>the Counterparty</strong> ("Receiving Party") as of the Effective Date.</p>
+<p class="recital">WHEREAS the parties wish to explore a potential business relationship and may disclose confidential information for that purpose;</p>
+<ol class="clauses"><li><span class="defterm">Definitions.</span> <dl class="defs"><dt>Confidential Information</dt><dd>means any non-public information disclosed by a party, in any form.</dd></dl></li>
+<li>Obligations.<ol><li>The Receiving Party shall use Confidential Information solely to evaluate the relationship.</li><li>The Receiving Party shall not disclose it to third parties without prior written consent.</li></ol></li>
+<li>Term. This Agreement remains in effect for two (2) years from the Effective Date.</li>
+<li>Governing Law. This Agreement is governed by the laws of the applicable jurisdiction.</li></ol>
+<div class="sig"><div class="block"><div class="line">Disclosing Party — signature &amp; date</div></div><div class="block"><div class="line">Receiving Party — signature &amp; date</div></div></div>
+</body></html>

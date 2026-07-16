@@ -1,0 +1,42 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+:root{--fg:#334155;--ink:#0f172a;--muted:#64748b;--accent:#4f46e5;--bg:#ffffff;--panel:#f8fafc;--border:#e2e8f0;--body-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--measure:56rem}
+*{box-sizing:border-box}
+body{color:var(--fg);background:var(--bg);line-height:1.6;margin:0 auto;max-width:var(--measure,58rem);padding:2.4rem 1.6rem;font-size:15px;font-family:var(--body-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif)}
+h1,h2,h3,h4{color:var(--ink,var(--fg));line-height:1.25;font-family:var(--head-font,inherit)}
+h1{font-size:1.9rem;margin:0 0 .6rem}h2{font-size:1.35rem;margin:1.8rem 0 .6rem}h3{font-size:1.1rem;margin:1.3rem 0 .4rem}
+p{margin:.6em 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+hr{border:none;border-top:1px solid var(--border);margin:1.6rem 0}
+ul,ol{padding-left:1.2rem}li{margin:.25em 0}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92rem;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+th,td{padding:.5rem .75rem;text-align:left;border-bottom:1px solid var(--border)}
+thead th{background:var(--panel);color:var(--ink,var(--fg));font-weight:700}
+tbody tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,"Cascadia Code",Consolas,Menlo,monospace;background:var(--panel);padding:.1rem .35rem;border-radius:4px;font-size:.9em}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow:auto;font-size:.85rem}
+pre code{background:none;padding:0}
+.muted{color:var(--muted)}.right{text-align:right}.center{text-align:center}
+@page{size:A4;margin:16mm}@media print{body{max-width:none;padding:0}thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+h2{border-bottom:1px solid var(--border);padding-bottom:.3rem}h2,h3{scroll-margin-top:1rem}
+.toc{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:.9rem 1.2rem;margin:1rem 0}.toc h3{margin:.1rem 0 .4rem;font-size:.82rem;text-transform:uppercase;color:var(--muted)}.toc a{display:block;padding:.12rem 0;font-size:.9rem}
+pre{background:#0f172a;color:#e2e8f0;border:none}pre code{color:inherit}
+code{color:#3730a3}
+.adm{border-radius:8px;padding:.8rem 1.1rem;margin:1rem 0;border-left:4px solid}.adm .t{font-weight:700;text-transform:uppercase;font-size:.75rem;letter-spacing:.04em}
+.adm.info{background:#eff6ff;border-color:#3b82f6}.adm.info .t{color:#1d4ed8}.adm.warn{background:#fffbeb;border-color:#f59e0b}.adm.warn .t{color:#b45309}.adm.tip{background:#f0fdf4;border-color:#22c55e}.adm.tip .t{color:#15803d}
+.method{display:inline-block;border-radius:5px;padding:.1rem .55rem;font-weight:800;font-size:.75rem;color:#fff;font-family:ui-monospace,"Cascadia Code",Consolas,Menlo,monospace}.m-get{background:#16a34a}.m-post{background:#2563eb}.m-put{background:#d97706}.m-del{background:#dc2626}
+kbd{font-family:ui-monospace,"Cascadia Code",Consolas,Menlo,monospace;background:#fff;border:1px solid #cbd5e1;border-bottom-width:2px;border-radius:4px;padding:.05rem .4rem;font-size:.82rem}
+table td code{background:var(--panel)}.tag-dep{color:#dc2626;border:1px solid #fecaca;border-radius:4px;padding:0 .4rem;font-size:.72rem}
+</style></head><body>
+
+<h1>Documents API</h1>
+<div class="toc"><h3>On this page</h3><a href="#read">Reading documents</a><a href="#write">Writing documents</a><a href="#convert">Converting</a></div>
+<h2 id="read">Reading documents</h2><p>Use <code>read_doc</code> to extract text from any supported format.</p>
+<div class="adm info"><div class="t">Info</div>Spreadsheets are returned as Markdown tables.</div>
+<pre><code>const { content } = await read_doc({ path: "report.pdf" });</code></pre>
+<h2 id="write">Writing documents</h2><p><span class="method m-post">POST</span> <code>write_doc(path, content, theme?)</code></p>
+<table><thead><tr><th>Param</th><th>Type</th><th>Notes</th></tr></thead>
+<tbody><tr><td><code>path</code></td><td><code>string</code></td><td>Output path; format from the extension</td></tr>
+<tr><td><code>theme</code></td><td><code>string</code></td><td>Design profile <span class="tag-dep">optional</span></td></tr></tbody></table>
+<div class="adm warn"><div class="t">Warning</div>Binary output can't be edited afterward — regenerate from source.</div>
+<h2 id="convert">Converting</h2><div class="adm tip"><div class="t">Tip</div>Press <kbd>Ctrl</kbd> + <kbd>P</kbd> to print any generated HTML to PDF.</div>
+<pre><code>await convert({ from: "notes.md", to: "notes.pdf", theme: "report" });</code></pre>
+</body></html>

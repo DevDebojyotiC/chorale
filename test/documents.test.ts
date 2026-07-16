@@ -126,6 +126,23 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
     expect(m).not.toMatch(/prefers-color-scheme:dark/);
   });
 
+  it("every topic profile renders light + carries its signature component", async () => {
+    const md = "# Sample\n\n| A | B |\n|---|---|\n| 1 | 2 |\n";
+    const sig: Record<string, RegExp> = {
+      executive: /\.exsum\{|\.bottomline\{/, academic: /\.twocol\{|\.abstract\{/, legal: /ol\.clauses\{|\.sig /,
+      invoice: /\.totals\{|\.inv-head\{/, resume: /\.cvgrid\{|\.xp /, clinical: /\.flag-h\{|\.pt-head\{/,
+      marketing: /\.hero\{|\.cta\{/, editorial: /\.masthead\{|\.pull\{/, recipe: /\.steps\{|\.ingredients\{/,
+      techdoc: /\.adm\.info\{|\.method\{/,
+    };
+    for (const [profile, re] of Object.entries(sig)) {
+      await exec(tools.write_doc)({ path: `${profile}.html`, content: md, theme: profile });
+      const h = readFileSync(join(dir, `${profile}.html`), "utf8");
+      expect(h, `${profile} signature`).toMatch(re); // its distinctive component CSS is present
+      expect(h, `${profile} light`).not.toMatch(/prefers-color-scheme:dark/); // print-friendly rule holds
+      expect(h.length, `${profile} nonempty`).toBeGreaterThan(500);
+    }
+  });
+
   it("dark theme is opt-in only (explicit theme: 'dark')", async () => {
     const md = "# Title\n\ntext\n";
     await exec(tools.write_doc)({ path: "dk.html", content: md, theme: "dark" });

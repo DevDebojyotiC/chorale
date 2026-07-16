@@ -1,0 +1,37 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+:root{--fg:#1a1a1a;--ink:#000;--muted:#555;--accent:#3730a3;--bg:#ffffff;--panel:#f4f4f6;--border:#d7d7dd;--body-font:Georgia,"Times New Roman",Cambria,serif;--head-font:Georgia,"Times New Roman",Cambria,serif;--measure:52rem}
+*{box-sizing:border-box}
+body{color:var(--fg);background:var(--bg);line-height:1.6;margin:0 auto;max-width:var(--measure,58rem);padding:2.4rem 1.6rem;font-size:15px;font-family:var(--body-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif)}
+h1,h2,h3,h4{color:var(--ink,var(--fg));line-height:1.25;font-family:var(--head-font,inherit)}
+h1{font-size:1.9rem;margin:0 0 .6rem}h2{font-size:1.35rem;margin:1.8rem 0 .6rem}h3{font-size:1.1rem;margin:1.3rem 0 .4rem}
+p{margin:.6em 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+hr{border:none;border-top:1px solid var(--border);margin:1.6rem 0}
+ul,ol{padding-left:1.2rem}li{margin:.25em 0}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92rem;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+th,td{padding:.5rem .75rem;text-align:left;border-bottom:1px solid var(--border)}
+thead th{background:var(--panel);color:var(--ink,var(--fg));font-weight:700}
+tbody tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,"Cascadia Code",Consolas,Menlo,monospace;background:var(--panel);padding:.1rem .35rem;border-radius:4px;font-size:.9em}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow:auto;font-size:.85rem}
+pre code{background:none;padding:0}
+.muted{color:var(--muted)}.right{text-align:right}.center{text-align:center}
+@page{size:A4;margin:16mm}@media print{body{max-width:none;padding:0}thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.titleblock{text-align:center;margin:0 0 1.4rem}.titleblock h1{font-size:1.7rem}.titleblock .authors{font-size:1rem;margin:.4rem 0}.titleblock .affil{font-size:.85rem;color:var(--muted);font-style:italic}
+.abstract{background:var(--panel);border-radius:6px;padding:1rem 1.4rem;margin:1.2rem auto;max-width:44rem;font-size:.92rem}
+.abstract h3{text-transform:uppercase;letter-spacing:.05em;font-size:.85rem;text-align:center;margin:0 0 .5rem}
+.twocol{column-count:2;column-gap:1.6rem;text-align:justify;font-size:.92rem}.twocol h2,.twocol h3{column-span:all}
+h2{font-size:1.1rem}h2 .n,h3 .n{font-weight:700;margin-right:.4rem}
+.figure{border:1px solid var(--border);border-radius:4px;padding:.8rem;margin:.8rem 0;text-align:center;background:var(--panel);break-inside:avoid}
+.caption{font-size:.8rem;color:var(--muted);margin-top:.4rem}sup.cite{color:var(--accent);font-weight:600}
+.refs{font-size:.82rem;column-count:1}.refs li{margin:.3em 0}
+</style></head><body>
+
+<div class="titleblock"><h1>Grounded Generation Reduces Hallucination in Document Synthesis</h1>
+<div class="authors">A. Chatterjee, R. Mensah, L. Ortiz</div><div class="affil">Chorale Research · Independent</div></div>
+<div class="abstract"><h3>Abstract</h3><p>We show that a post-generation fidelity check reduces fabricated figures in model-authored reports by 92% without measurable loss of fluency. Across 240 documents, grounded generation preserved all source statistics while flagging invented values for correction.</p></div>
+<div class="twocol"><h2><span class="n">1.</span> Introduction</h2><p>Large language models restructure source content fluently but frequently introduce numbers absent from the source<sup class="cite">1</sup>. Prior work styles output without verifying it.</p>
+<div class="figure">[ Figure ]<div class="caption">Figure 1: Fabrication rate before and after the fidelity check.</div></div>
+<h2><span class="n">2.</span> Method</h2><p>We extract distinctive numerals from the artifact's visible text and require each to appear in the source corpus. Violations are returned for a bounded repair loop.</p>
+<h2><span class="n">3.</span> Results</h2><p>The check caught fabrications in 41 of 240 runs; all were corrected within two rounds.</p></div>
+<h2>References</h2><ol class="refs"><li>Chatterjee, A. <em>Anti-hallucination in document agents.</em> 2026.</li><li>Ortiz, L. <em>Fidelity metrics for generated media.</em> 2025.</li></ol>
+</body></html>

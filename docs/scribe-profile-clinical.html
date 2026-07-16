@@ -1,0 +1,37 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+:root{--fg:#1f2a37;--ink:#0b2540;--muted:#64748b;--accent:#0369a1;--good:#15803d;--bad:#b91c1c;--warn:#b45309;--good-bg:#dcfce7;--bad-bg:#fee2e2;--warn-bg:#fef3c7;--bg:#ffffff;--panel:#f1f6fb;--border:#dbe6f0;--body-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--measure:56rem}
+*{box-sizing:border-box}
+body{color:var(--fg);background:var(--bg);line-height:1.6;margin:0 auto;max-width:var(--measure,58rem);padding:2.4rem 1.6rem;font-size:15px;font-family:var(--body-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif)}
+h1,h2,h3,h4{color:var(--ink,var(--fg));line-height:1.25;font-family:var(--head-font,inherit)}
+h1{font-size:1.9rem;margin:0 0 .6rem}h2{font-size:1.35rem;margin:1.8rem 0 .6rem}h3{font-size:1.1rem;margin:1.3rem 0 .4rem}
+p{margin:.6em 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+hr{border:none;border-top:1px solid var(--border);margin:1.6rem 0}
+ul,ol{padding-left:1.2rem}li{margin:.25em 0}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92rem;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+th,td{padding:.5rem .75rem;text-align:left;border-bottom:1px solid var(--border)}
+thead th{background:var(--panel);color:var(--ink,var(--fg));font-weight:700}
+tbody tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,"Cascadia Code",Consolas,Menlo,monospace;background:var(--panel);padding:.1rem .35rem;border-radius:4px;font-size:.9em}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow:auto;font-size:.85rem}
+pre code{background:none;padding:0}
+.muted{color:var(--muted)}.right{text-align:right}.center{text-align:center}
+@page{size:A4;margin:16mm}@media print{body{max-width:none;padding:0}thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.pt-head{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:1rem 1.3rem;margin-bottom:1.2rem;display:flex;flex-wrap:wrap;gap:.4rem 2rem}
+.pt-head .f{font-size:.9rem}.pt-head .f .h{text-transform:uppercase;font-size:.68rem;color:var(--muted);letter-spacing:.05em}
+h2{color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:.25rem}
+table td.num{text-align:right;font-variant-numeric:tabular-nums}thead th{background:var(--accent);color:#fff;font-size:.78rem;text-transform:uppercase}
+.flag{font-weight:800;border-radius:4px;padding:0 .4rem;font-size:.78rem}.flag-h{color:var(--bad);background:var(--bad-bg)}.flag-l{color:var(--warn);background:var(--warn-bg)}.flag-n{color:var(--good)}
+tr.abn td{background:#fff7f6}
+.interp{background:var(--panel);border-left:4px solid var(--accent);border-radius:0 8px 8px 0;padding:.9rem 1.2rem;margin:1.2rem 0}
+.disclaimer{font-size:.78rem;color:var(--muted);border-top:1px solid var(--border);margin-top:1.6rem;padding-top:.7rem}
+</style></head><body>
+
+<div class="pt-head"><div class="f"><div class="h">Patient</div>J. Doe · 41 · M</div><div class="f"><div class="h">Specimen</div>Serum</div><div class="f"><div class="h">Collected</div>16 Jul 2026 08:20</div><div class="f"><div class="h">Accession</div>LAB-88213</div></div>
+<h2>Complete Metabolic Panel</h2>
+<table><thead><tr><th>Analyte</th><th class="num">Result</th><th>Units</th><th>Reference range</th><th>Flag</th></tr></thead>
+<tbody><tr><td>Glucose</td><td class="num">92</td><td>mg/dL</td><td>70–99</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr class="abn"><td>ALT</td><td class="num">68</td><td>U/L</td><td>7–56</td><td><span class="flag flag-h">High</span></td></tr>
+<tr class="abn"><td>Potassium</td><td class="num">3.2</td><td>mmol/L</td><td>3.5–5.1</td><td><span class="flag flag-l">Low</span></td></tr></tbody></table>
+<div class="interp"><strong>Interpretation.</strong> Mildly elevated ALT and low potassium; correlate clinically and consider repeat testing.</div>
+<div class="disclaimer">This report is for the ordering clinician. Reference ranges are method-specific. Not a diagnosis.</div>
+</body></html>

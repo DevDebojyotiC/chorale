@@ -1,0 +1,37 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+:root{--fg:#312e4a;--ink:#1e1b4b;--muted:#6b7280;--accent:#7c3aed;--accent-2:#ec4899;--bg:#ffffff;--panel:#faf5ff;--border:#ede9fe;--body-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--measure:62rem}
+*{box-sizing:border-box}
+body{color:var(--fg);background:var(--bg);line-height:1.6;margin:0 auto;max-width:var(--measure,58rem);padding:2.4rem 1.6rem;font-size:15px;font-family:var(--body-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif)}
+h1,h2,h3,h4{color:var(--ink,var(--fg));line-height:1.25;font-family:var(--head-font,inherit)}
+h1{font-size:1.9rem;margin:0 0 .6rem}h2{font-size:1.35rem;margin:1.8rem 0 .6rem}h3{font-size:1.1rem;margin:1.3rem 0 .4rem}
+p{margin:.6em 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+hr{border:none;border-top:1px solid var(--border);margin:1.6rem 0}
+ul,ol{padding-left:1.2rem}li{margin:.25em 0}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92rem;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+th,td{padding:.5rem .75rem;text-align:left;border-bottom:1px solid var(--border)}
+thead th{background:var(--panel);color:var(--ink,var(--fg));font-weight:700}
+tbody tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,"Cascadia Code",Consolas,Menlo,monospace;background:var(--panel);padding:.1rem .35rem;border-radius:4px;font-size:.9em}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow:auto;font-size:.85rem}
+pre code{background:none;padding:0}
+.muted{color:var(--muted)}.right{text-align:right}.center{text-align:center}
+@page{size:A4;margin:16mm}@media print{body{max-width:none;padding:0}thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.hero{text-align:center;background:linear-gradient(135deg,#faf5ff,#fdf2f8);border:1px solid var(--border);border-radius:18px;padding:3rem 2rem;margin-bottom:1.6rem}
+.hero h1{font-size:2.6rem;line-height:1.1;background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{font-size:1.15rem;color:var(--muted);max-width:36rem;margin:.8rem auto}
+.cta{display:inline-block;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff!important;padding:.7rem 1.6rem;border-radius:30px;font-weight:700;margin-top:.6rem}
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:1.4rem 0}.feature{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.2rem}.feature .ico{font-size:1.6rem}.feature h3{margin:.4rem 0 .2rem}
+.statsband{display:flex;justify-content:space-around;background:var(--ink);color:#fff;border-radius:14px;padding:1.4rem;margin:1.4rem 0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.statsband .s .big{font-size:1.8rem;font-weight:800}.statsband .s .l{font-size:.8rem;opacity:.8}
+.pricing{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}.tier{border:1px solid var(--border);border-radius:12px;padding:1.3rem;text-align:center}.tier.popular{border:2px solid var(--accent);box-shadow:0 8px 24px rgba(124,58,237,.15)}.tier .price{font-size:2rem;font-weight:800;color:var(--accent)}
+@media print{.features,.pricing{grid-template-columns:repeat(3,1fr)}}
+</style></head><body>
+
+<div class="hero"><h1>Ship docs that never lie.</h1><p>Scribe turns your data into polished, on-brand reports — grounded, fidelity-checked, print-ready.</p><a class="cta">Start free</a></div>
+<div class="features"><div class="feature"><div class="ico">🎨</div><h3>10 design profiles</h3><p class="muted">Report, invoice, clinical, legal, and more — each honest to its industry.</p></div>
+<div class="feature"><div class="ico">🔒</div><h3>No fabricated data</h3><p class="muted">Every number is verified against your source. Automatically.</p></div>
+<div class="feature"><div class="ico">📄</div><h3>Any format</h3><p class="muted">PDF, DOCX, XLSX, PPTX, HTML — one command.</p></div></div>
+<div class="statsband"><div class="s"><div class="big">10</div><div class="l">profiles</div></div><div class="s"><div class="big">0</div><div class="l">fabricated figures</div></div><div class="s"><div class="big">7</div><div class="l">formats</div></div></div>
+<h2 class="center">Pricing</h2><div class="pricing"><div class="tier"><h3>Free</h3><div class="price">$0</div><p class="muted">Core themes</p></div>
+<div class="tier popular"><h3>Pro</h3><div class="price">$12</div><p class="muted">All profiles + charts</p></div>
+<div class="tier"><h3>Team</h3><div class="price">$40</div><p class="muted">Shared house styles</p></div></div>
+</body></html>

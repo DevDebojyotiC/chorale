@@ -5,8 +5,12 @@
  * (presentation-grade: gradient cover title, design-token colors, styled tables, callouts).
  */
 
-export type ThemeName = "minimal" | "docs" | "report" | "dark";
-export const THEME_NAMES: ThemeName[] = ["minimal", "docs", "report", "dark"];
+import { PROFILE_CSS, PROFILE_NAMES, type ProfileName } from "./doc-profiles.js";
+
+/** Core themes plus the topic/industry profiles. */
+export type ThemeName = "minimal" | "docs" | "report" | "dark" | ProfileName;
+const CORE_THEMES: ThemeName[] = ["minimal", "docs", "report", "dark"];
+export const THEME_NAMES: ThemeName[] = [...CORE_THEMES, ...PROFILE_NAMES];
 export function isTheme(s: string): s is ThemeName {
   return (THEME_NAMES as string[]).includes(s);
 }
@@ -62,7 +66,7 @@ const DOCS = `${TOKENS}\n${BASE}\nh1{font-size:2rem;margin:0 0 1rem}`;
 const REPORT = `${TOKENS}\n${BASE}${REPORT_EXTRAS}`;
 const DARK = `${TOKENS_DARK}\n${BASE}${REPORT_EXTRAS}`;
 
-const THEMES: Record<ThemeName, string> = { minimal: MINIMAL, docs: DOCS, report: REPORT, dark: DARK };
+const THEMES: Record<ThemeName, string> = { minimal: MINIMAL, docs: DOCS, report: REPORT, dark: DARK, ...PROFILE_CSS };
 
 const stripTags = (s: string): string => s.replace(/<[^>]+>/g, "").trim();
 /** First number in a cell, tolerant of $, %, commas, and ratios like "9/10" (takes 9). */

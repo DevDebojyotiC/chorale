@@ -97,6 +97,27 @@ The positioning made concrete: a generic converter loses to a bespoke design; a 
 verified against a source of truth. Scribe does **both** — presentation polish *and* a grounded, no-fabrication
 guarantee.
 
+### Topic design profiles (visually distinct, honest to the industry)
+Beyond `report`/`docs`, scribe has **10 topic profiles** (`src/tools/doc-profiles.ts`) so a document reads honestly
+as its type — chosen by `theme:` or inferred from content. Each shares one **light, print-friendly** base (for
+consistency) but has its own palette, type, and signature components:
+
+| Profile | Palette · type · signature component |
+|---------|--------------------------------------|
+| `executive` | navy + bronze on cream · serif headings · exec-summary + exhibits + bottom-line |
+| `academic` | black-on-white · full serif · title/abstract + two-column + figure captions + refs |
+| `legal` | black-on-white · serif · hierarchical clause numbering + defined terms + signature blocks |
+| `invoice` | teal + mono numerals · sans · bill-to + right-aligned line items + totals block + due badge |
+| `resume` | teal + grayscale · sans · contact bar + two-column + skill bars + dated timeline |
+| `clinical` | clinical blue · sans · patient header + reference-range column + H/L flags (red/amber) |
+| `marketing` | vibrant purple/pink · bold sans · hero + CTA + feature cards + stats band + pricing |
+| `editorial` | warm neutral · serif · masthead + byline + drop cap + pull quotes |
+| `recipe` | terracotta/olive · serif headings · time/servings badges + ingredient checklist + numbered steps |
+| `techdoc` | indigo/slate · sans + mono · TOC + admonitions + HTTP-method badges + params + `<kbd>` |
+
+Demos: `docs/scribe-profile-*.html` (all light, all with their distinctive components). A unit test asserts every
+profile registers, renders light, and carries its signature component.
+
 ## Caveats
 Small fixtures, small N. Content graders use term coverage + structure regexes + the groundedness checker;
 they verify *correctness signals* (right facts present, nothing invented, right structure), not subjective

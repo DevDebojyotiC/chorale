@@ -1,0 +1,36 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+:root{--fg:#2b3440;--ink:#111827;--muted:#6b7280;--accent:#0e7490;--bg:#ffffff;--panel:#f3f6f7;--border:#e5e7eb;--body-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--measure:54rem}
+*{box-sizing:border-box}
+body{color:var(--fg);background:var(--bg);line-height:1.6;margin:0 auto;max-width:var(--measure,58rem);padding:2.4rem 1.6rem;font-size:15px;font-family:var(--body-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif)}
+h1,h2,h3,h4{color:var(--ink,var(--fg));line-height:1.25;font-family:var(--head-font,inherit)}
+h1{font-size:1.9rem;margin:0 0 .6rem}h2{font-size:1.35rem;margin:1.8rem 0 .6rem}h3{font-size:1.1rem;margin:1.3rem 0 .4rem}
+p{margin:.6em 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+hr{border:none;border-top:1px solid var(--border);margin:1.6rem 0}
+ul,ol{padding-left:1.2rem}li{margin:.25em 0}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92rem;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+th,td{padding:.5rem .75rem;text-align:left;border-bottom:1px solid var(--border)}
+thead th{background:var(--panel);color:var(--ink,var(--fg));font-weight:700}
+tbody tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,"Cascadia Code",Consolas,Menlo,monospace;background:var(--panel);padding:.1rem .35rem;border-radius:4px;font-size:.9em}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow:auto;font-size:.85rem}
+pre code{background:none;padding:0}
+.muted{color:var(--muted)}.right{text-align:right}.center{text-align:center}
+@page{size:A4;margin:16mm}@media print{body{max-width:none;padding:0}thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.cvhead{border-bottom:2px solid var(--accent);padding-bottom:.8rem;margin-bottom:1rem}.cvhead h1{font-size:2rem;margin:0}.cvhead .role{color:var(--accent);font-weight:600}.cvhead .contact{font-size:.85rem;color:var(--muted);margin-top:.4rem;display:flex;flex-wrap:wrap;gap:.3rem 1rem}
+.cvgrid{display:grid;grid-template-columns:1fr 2.1fr;gap:1.8rem}
+.side h3,.main h3{text-transform:uppercase;letter-spacing:.06em;font-size:.82rem;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:.2rem}
+.tag{display:inline-block;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:.15rem .7rem;font-size:.78rem;margin:.2rem .2rem 0 0}
+.bar{background:var(--panel);border-radius:4px;height:.5rem;margin:.3rem 0 .6rem;overflow:hidden}.bar>i{display:block;height:100%;background:var(--accent)}
+.xp{margin:.7rem 0}.xp .top{display:flex;justify-content:space-between;font-weight:600}.xp .top .date{color:var(--muted);font-weight:400;font-size:.85rem}.xp .org{color:var(--accent);font-size:.9rem}
+@media print{.cvgrid{grid-template-columns:1fr 2.1fr}}
+</style></head><body>
+
+<div class="cvhead"><h1>Jordan Rivera</h1><div class="role">Senior Software Engineer</div>
+<div class="contact"><span>jordan@example.com</span><span>Berlin</span><span>github.com/jrivera</span></div></div>
+<div class="cvgrid"><div class="side"><h3>Skills</h3><span class="tag">TypeScript</span><span class="tag">Node</span><span class="tag">React</span><span class="tag">Postgres</span>
+<h3 style="margin-top:1rem">Languages</h3>English<div class="bar"><i style="width:100%"></i></div>German<div class="bar"><i style="width:70%"></i></div>
+<h3 style="margin-top:1rem">Education</h3><div class="xp"><div class="top"><span>BSc Computer Science</span></div><div class="org">TU Berlin</div></div></div>
+<div class="main"><h3>Experience</h3>
+<div class="xp"><div class="top"><span>Staff Engineer</span><span class="date">2023 — now</span></div><div class="org">Chorale Labs</div><p class="muted">Led the document-agent platform; shipped grounded generation and multi-format export.</p></div>
+<div class="xp"><div class="top"><span>Senior Engineer</span><span class="date">2020 — 2023</span></div><div class="org">Acme Corp</div><p class="muted">Built the analytics pipeline serving 2M daily events.</p></div></div></div>
+</body></html>
