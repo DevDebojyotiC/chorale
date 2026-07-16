@@ -13,6 +13,8 @@ import type { PermissionMode } from "../tools/permissions.js";
 import { createSkillViewTool } from "../tools/skill.js";
 import { createDelegateTool } from "../tools/delegate.js";
 import { createGateTool } from "../tools/gate-tool.js";
+import { createPlanTool } from "../tools/plan-tool.js";
+import { parsePlan, type Plan } from "./plan.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
@@ -238,6 +240,9 @@ export interface RunResult {
   /** Gates the agent needed but couldn't run (loop-guarded/refused) — a light advisory
    * signal that bubbles up so a caller can react. Empty/absent when all gates ran. */
   unmetGates?: string[];
+  /** The structured plan a planning agent produced this turn (from the `plan` tool, or
+   * parsed from its text as a fallback). Absent for non-planning agents. */
+  plan?: Plan;
 }
 
 export interface RunOptions {
@@ -347,6 +352,13 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       "## Gates you can invoke (via the gate tool)\n" +
       onDemandGates.map((a) => `- ${a}`).join("\n") +
       "\nA gate is an advisory second opinion/plan whose result feeds back into your work. If a gate is refused (loop-guarded), proceed inline and note the unmet need.\n\n";
+  }
+
+  // Planning: an agent that lists the `plan` tool emits a structured plan; we capture it here
+  // (and fall back to parsing its text). Surfaced on RunResult.plan for a caller/gate to consume.
+  let capturedPlan: Plan | null = null;
+  if (agent.tools.includes("plan")) {
+    tools.plan = createPlanTool({ capture: (p) => (capturedPlan = p) });
   }
 
   // Few-shot: inject the agent's worked examples (<name>.examples.md) when enabled.
@@ -732,6 +744,11 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     if (unmetGates.length > 0) {
       result.unmetGates = [...new Set(unmetGates)];
       log.info(`\n[chorale] ℹ ${result.unmetGates.length} gate(s) unavailable this turn (handled inline): ${result.unmetGates.join("; ")}\n`);
+    }
+    // Surface a structured plan from a planning agent: the tool-captured one, else parse its text.
+    if (agent.tools.includes("plan")) {
+      const plan = capturedPlan ?? parsePlan(result.text);
+      if (plan) result.plan = plan;
     }
     return result;
   } finally {
