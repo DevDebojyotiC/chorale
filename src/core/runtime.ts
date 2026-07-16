@@ -49,11 +49,15 @@ export function isRetriable(e: unknown): boolean {
  * Drives a second pass that improves BOTH precision (drop unsupported severe findings) and
  * recall (re-scan for misses) before the answer is shown.
  */
+// Agent-agnostic: re-read the answer against the agent's OWN rules (already in its system
+// prompt) and against the actual files. Works for any selfCritique agent — for the reviewer
+// "claims/findings" are review findings; for the scribe they are doc claims.
 const SELF_CRITIQUE_PROMPT =
-  "Re-examine your review against the code. Change it ONLY where you are clearly right — a good draft should mostly survive.\n" +
-  "1. KEEP every finding that names a concrete input or condition triggering a real failure or security issue — do not delete or weaken a well-supported finding. NEVER remove or downgrade a security finding (injection, auth/authz, crypto/timing, SSRF, deserialization, path traversal, secrets) — security issues always stay. If a non-security BLOCKER/MAJOR has no concrete trigger, first try to DOWNGRADE its severity (to MINOR/NIT); only REMOVE it if it is plainly about correct, idiomatic, or intentional (commented) code, or a caller's own precondition.\n" +
-  "2. Add a NEW finding only if you are highly confident it is a real defect and can name its concrete trigger — especially an unhandled standard security class (injection, path traversal, prototype pollution, genuinely-ambiguous ReDoS, unsafe deserialization, SSRF, secrets/authz). When unsure, do NOT add it.\n" +
-  "Then output your FINAL review in the exact required format (findings most-severe first, then the VERDICT line). Output only the final review — no commentary about this revision.";
+  "Before finalizing, critically re-examine your answer against the actual code/files and your own rules. Change it ONLY where you are clearly right — a good draft should mostly survive.\n" +
+  "1. KEEP every claim or finding you can back with a concrete fact in the files — do not drop or weaken something you verified. (In a code review, keep every real bug — especially security issues.)\n" +
+  "2. REMOVE or CORRECT anything you cannot verify against the files: invented names, paths, numbers, commands, or an unsupported claim/finding. Never assert what you did not check.\n" +
+  "3. Make sure you fully addressed the request; add a missing point only if you are confident it is correct.\n" +
+  "Then output your FINAL, corrected answer in the exact format your instructions require. Output only the final answer — no commentary about this revision.";
 
 /**
  * Security classes a self-critiquing agent can learn to scan for: if the critique
