@@ -122,16 +122,39 @@ async function pdfkitLines(lines: string[], absOut: string, markdown: boolean): 
   });
 }
 
-/** Render Markdown to a PDF with a theme: headless Chrome/Edge (fidelity) or pdfkit fallback. */
+/** A failed browser render (e.g. a file:// that didn't load) gets printed to PDF as a browser
+ *  ERROR PAGE. Detect those signatures so we never ship one as if it were the document. */
+export function isBrowserErrorText(text: string): boolean {
+  return /ERR_FILE_NOT_FOUND|ERR_FILE_|ERR_ACCESS_DENIED|ERR_CONNECTION|ERR_NAME_NOT_RESOLVED|ERR_ABORTED|couldn.?t be accessed|can.?t be reached|This site can|refused to connect|was blocked/i.test(text);
+}
+
+/** After a browser render, confirm the PDF actually holds the intended content — not a browser
+ *  error page, and not essentially empty when the source had real text. */
+async function pdfRenderedOk(absOut: string, sourceHtml: string): Promise<boolean> {
+  try {
+    const { text } = await new PDFParse({ data: new Uint8Array(readFileSync(absOut)) }).getText();
+    if (isBrowserErrorText(text)) return false; // a Chrome/Edge error page, not the document
+    const src = htmlToText(sourceHtml).replace(/\s+/g, "").length;
+    const got = text.replace(/\s+/g, "").length;
+    if (src > 80 && got < 20) return false; // source had content but the PDF came out empty
+    return true;
+  } catch {
+    return false; // unreadable PDF → treat as a failed render
+  }
+}
+
+/** Render Markdown to a PDF with a theme: headless Chrome/Edge (fidelity) or pdfkit fallback.
+ *  Falls back to pdfkit if the browser render produced a broken/empty PDF (verified, not assumed). */
 async function mdToPdf(md: string, absOut: string, theme: ThemeName = "docs", charts = false): Promise<{ engine: string }> {
-  if (printHtmlToPdf(await mdToHtml(md, theme, charts), absOut)) return { engine: "browser" };
+  const html = await mdToHtml(md, theme, charts);
+  if (printHtmlToPdf(html, absOut) && (await pdfRenderedOk(absOut, html))) return { engine: "browser" };
   await pdfkitLines(md.split("\n"), absOut, true);
   return { engine: "pdfkit" };
 }
 
 /** Render a raw HTML string to a PDF, preserving its structure/CSS (browser), else text (fallback). */
 async function htmlToPdf(html: string, absOut: string): Promise<{ engine: string }> {
-  if (printHtmlToPdf(html, absOut)) return { engine: "browser" };
+  if (printHtmlToPdf(html, absOut) && (await pdfRenderedOk(absOut, html))) return { engine: "browser" };
   await pdfkitLines(htmlToText(html).split("\n"), absOut, false);
   return { engine: "pdfkit" };
 }

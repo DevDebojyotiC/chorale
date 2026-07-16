@@ -135,6 +135,18 @@ describe("Phase 4 — planning core (plan.ts)", () => {
       expect(validatePlan(plan, { agents, cwd: dir }).some((i) => i.kind === "ungrounded")).toBe(true);
     });
 
+    it("does NOT flag an existing-file ref when an earlier step creates it (the grand-tour false positive)", () => {
+      const plan = normalizePlan({
+        summary: "x",
+        steps: [
+          { title: "build the script", agent: "coder", layer: "api", acceptance: "runs", files: [{ path: "app.js", status: "new" }] },
+          { title: "review the script", agent: "reviewer", layer: "other", dependsOn: [1], acceptance: "reviewed", files: [{ path: "app.js", status: "existing" }] }, // exists by now
+        ],
+      });
+      // app.js doesn't exist on disk, but step 1 creates it — so step 2's `existing` ref is grounded
+      expect(validatePlan(plan, { agents, cwd: dir }).some((i) => i.kind === "ungrounded")).toBe(false);
+    });
+
     it("planFeedback lists the issues for a repair round", () => {
       const plan = normalizePlan({ summary: "x", steps: [{ title: "t", agent: "wizard" }] });
       const fb = planFeedback(validatePlan(plan, { agents, cwd: dir }));

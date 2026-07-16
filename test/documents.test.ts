@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDocumentTools, WRITE_DOC_TOOLS, READ_ONLY_DOC_TOOLS } from "../src/tools/documents";
+import { createDocumentTools, WRITE_DOC_TOOLS, READ_ONLY_DOC_TOOLS, isBrowserErrorText } from "../src/tools/documents";
 import { buildToolSet } from "../src/tools/registry";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -230,6 +230,14 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
     const ro = Object.keys(buildToolSet(["read_doc", "check_length", "write_doc"], { mode: "read-only", cwd: dir }));
     expect(ro).toContain("check_length");
     expect(ro).not.toContain("write_doc");
+  });
+
+  it("detects a browser error-page render (so a broken PDF falls back, not ships)", () => {
+    // the exact text the grand-tour's broken summary.pdf contained:
+    expect(isBrowserErrorText("Your file couldn't be accessed\nERR_FILE_NOT_FOUND")).toBe(true);
+    expect(isBrowserErrorText("This site can't be reached")).toBe(true);
+    // a real document must NOT be mistaken for an error page:
+    expect(isBrowserErrorText("Executive Summary\nRevenue grew to $4.2M in Q1 2026.")).toBe(false);
   });
 
   it("gates write tools by permission mode; read_doc always available", () => {

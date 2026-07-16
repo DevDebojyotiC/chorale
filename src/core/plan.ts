@@ -271,6 +271,9 @@ export function validatePlan(plan: Plan, opts: { agents: string[]; cwd: string }
   }
   const ids = new Set(plan.steps.map((s) => s.id));
   const known = new Set(opts.agents.map((a) => a.toLowerCase()));
+  // Files the plan itself creates: a later step may legitimately reference one of these as
+  // `existing` (it will exist by the time that step runs), so those aren't "ungrounded".
+  const createdByPlan = new Set(plan.steps.flatMap((s) => s.files.filter((f) => f.status === "new").map((f) => f.path)));
   for (const s of plan.steps) {
     if (known.size > 0 && !known.has(s.agent)) {
       issues.push({ kind: "unknown-agent", step: s.id, message: `Step ${s.id} is assigned to "${s.agent}", which is not an available specialist (${opts.agents.join(", ")}).` });
@@ -291,8 +294,8 @@ export function validatePlan(plan: Plan, opts: { agents: string[]; cwd: string }
     }
     for (const f of s.files) {
       const onDisk = existsSync(resolve(opts.cwd, f.path));
-      if (f.status === "existing" && !onDisk) {
-        issues.push({ kind: "ungrounded", step: s.id, message: `Step ${s.id} references existing file "${f.path}", which does not exist in the repo.` });
+      if (f.status === "existing" && !onDisk && !createdByPlan.has(f.path)) {
+        issues.push({ kind: "ungrounded", step: s.id, message: `Step ${s.id} references existing file "${f.path}", which does not exist in the repo (and no earlier step creates it).` });
       } else if (f.status === "new" && onDisk) {
         issues.push({ kind: "new-file-exists", step: s.id, message: `Step ${s.id} marks "${f.path}" as new, but it already exists — mark it existing, or choose a different path.` });
       }
