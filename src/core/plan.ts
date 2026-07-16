@@ -302,6 +302,19 @@ export function validatePlan(plan: Plan, opts: { agents: string[]; cwd: string }
   return issues;
 }
 
+/** Render a plan as an ordered, human/LLM-readable checklist — used to inject a `pre` gate's
+ *  plan into the executing agent's context. */
+export function formatPlan(plan: Plan): string {
+  const num = new Map(plan.steps.map((s, i) => [s.id, i + 1]));
+  const lines = plan.steps.map((s) => {
+    const deps = s.dependsOn.length ? ` (after ${s.dependsOn.map((d) => `#${num.get(d) ?? d}`).join(", ")})` : "";
+    const files = s.files.length ? ` — files: ${s.files.map((f) => `${f.path} (${f.status})`).join(", ")}` : "";
+    const acc = s.acceptance ? `\n   done when: ${s.acceptance}` : "";
+    return `${num.get(s.id)}. [${s.agent}] ${s.title} [${s.layer}]${deps}${files}${acc}`;
+  });
+  return (plan.summary ? `${plan.summary}\n\n` : "") + lines.join("\n");
+}
+
 /** Turn validation issues into a feedback message for a repair round. */
 export function planFeedback(issues: PlanIssue[]): string {
   if (issues.length === 0) return "";

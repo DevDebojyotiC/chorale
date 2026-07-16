@@ -14,7 +14,7 @@ import { createSkillViewTool } from "../tools/skill.js";
 import { createDelegateTool } from "../tools/delegate.js";
 import { createGateTool } from "../tools/gate-tool.js";
 import { createPlanTool } from "../tools/plan-tool.js";
-import { parsePlan, validatePlan, planFeedback, type Plan } from "./plan.js";
+import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./plan.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
@@ -100,7 +100,7 @@ async function runGate(opts: {
   config: ChoraleConfig;
   registry: Registry;
   permissionMode?: PermissionMode;
-}): Promise<{ ok: true; text: string } | { ok: false; reason: string }> {
+}): Promise<{ ok: true; text: string; plan?: Plan } | { ok: false; reason: string }> {
   const decision = canRunGate(opts.callerChain, opts.agentName);
   if (!decision.ok) return { ok: false, reason: decision.reason ?? "gate refused" };
   const file = resolve(opts.config.agents.dir, `${opts.agentName}.md`);
@@ -117,7 +117,7 @@ async function runGate(opts: {
     const res = await withGateChain(opts.callerChain, () =>
       runAgent({ config: opts.config, registry: opts.registry, agent: spec, prompt: opts.prompt, permissionMode: opts.permissionMode ?? "read-only", stream: false }),
     );
-    return { ok: true, text: res.text };
+    return { ok: true, text: res.text, plan: res.plan };
   } catch (err) {
     return { ok: false, reason: `gate "${opts.agentName}" errored: ${err instanceof Error ? err.message : String(err)}` };
   } finally {
@@ -389,8 +389,36 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     }
   }
 
+  // Auto `pre` gates: run a permitted agent (e.g. the planner) BEFORE this agent starts, and
+  // fold its result into the prompt so the agent works from it — the guaranteed plan-first path.
+  // A trivial decomposition injects nothing (Approach B: the task just proceeds inline). Loop-
+  // guarded and cost-degrading: a refused/failed pre-gate is recorded as an unmet need, not fatal.
+  let preGateBlock = "";
+  for (const pg of (agent.gates ?? []).filter((g) => g.mode === "auto" && g.when === "pre")) {
+    const decision = canRunGate(myGateChain, pg.agent);
+    if (!decision.ok) {
+      if (decision.reason) unmetGates.push(`${pg.agent}: ${decision.reason}`);
+      continue;
+    }
+    const r = await runGate({ agentName: pg.agent, prompt, callerChain: myGateChain, config, registry, permissionMode: "read-only" });
+    if (!r.ok) {
+      unmetGates.push(`${pg.agent}: ${r.reason}`);
+      continue;
+    }
+    if (r.plan) {
+      if (r.plan.complexity === "complex") {
+        preGateBlock += `## Plan to follow\nA ${pg.agent} decomposed this task. Execute these steps in order, respecting the dependencies; treat each step's "done when" as its acceptance criterion:\n\n${formatPlan(r.plan)}\n\n`;
+        log.info(`\n[chorale] ✓ plan-first: injected a ${r.plan.steps.length}-step plan\n`);
+      } else {
+        log.info(`\n[chorale] plan-first: task is simple — proceeding without a formal plan\n`);
+      }
+    } else if (r.text.trim()) {
+      preGateBlock += `## Input from ${pg.agent} (advisory)\n${r.text.trim()}\n\n`;
+    }
+  }
+
   const today = new Date().toISOString().slice(0, 10);
-  const system = `Current date: ${today}.\n\n${delegateBlock}${gateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}${fewShotBlock}${lessonsBlock}`;
+  const system = `Current date: ${today}.\n\n${preGateBlock}${delegateBlock}${gateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}${fewShotBlock}${lessonsBlock}`;
   const messages: ChatMessage[] = [...(opts.history ?? []), { role: "user", content: prompt }];
 
   // Self-critique (the reviewer's form of self-healing): after the main turn, feed

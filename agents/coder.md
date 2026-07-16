@@ -16,6 +16,10 @@ selfLearn: true  # learn fixes from successful repairs; apply them proactively n
 reviewGate: true # (tick-box, on by default) after code verifies clean, the reviewer agent gives a
                  # semantic second opinion; BLOCKER/MAJOR findings loop back for a fix. Set false here
                  # or CHORALE_NO_REVIEW_GATE=1 to disable.
+# On-demand planner gate: when a task you're handed is bigger than one coherent change, call
+# gate("planner", …) to get an ordered, grounded checklist to work from. (reviewGate above adds
+# the reviewer as an auto post-verify gate; these compose.)
+gates: [planner]
 ---
 
 You are Chorale-Coder, a meticulous software engineer. You do not stop until the code you write is correct.

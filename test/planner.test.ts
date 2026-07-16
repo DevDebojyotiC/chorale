@@ -48,4 +48,16 @@ describe("Phase 4 — planner agent + plan tool", () => {
     expect(ack).toMatchObject({ complexity: "trivial" });
     expect((captured! as Plan).complexity).toBe("trivial");
   });
+
+  it("Phase C wiring: orchestrator runs the planner as an auto pre-gate (guaranteed plan-first)", () => {
+    const orch = loadAgent(resolve("agents/orchestrator.md"));
+    expect(orch.gates).toContainEqual({ agent: "planner", mode: "auto", when: "pre" });
+  });
+
+  it("Phase C wiring: coder can pull the planner on demand (and keeps its reviewer auto gate)", () => {
+    const coder = loadAgent(resolve("agents/coder.md"));
+    expect(coder.gates).toContainEqual({ agent: "planner", mode: "on-demand", when: "post-verify" });
+    // the legacy reviewGate still gives the coder its auto reviewer gate — they compose
+    expect(coder.gates).toContainEqual({ agent: "reviewer", mode: "auto", when: "post-verify" });
+  });
 });

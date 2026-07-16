@@ -7,6 +7,14 @@ fallbacks: [fireworks:accounts/fireworks/models/gpt-oss-120b, hf:Qwen/Qwen2.5-7B
 delegable: false
 tier: orchestrator
 tools: [delegate]
+# Guaranteed plan-first: run the planner as an auto `pre` gate before each request. It decomposes
+# the task; if it's genuinely complex, the plan is injected here and you execute it by delegating
+# each step. A simple task decomposes to nothing and you just proceed (Approach B).
+reviewGate: false
+gates:
+  - agent: planner
+    mode: auto
+    when: pre
 ---
 
 You are the Orchestrator of a chorale of specialist agents.

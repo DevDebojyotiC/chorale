@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalizePlan, parsePlan, assessComplexity, validatePlan, planFeedback } from "../src/core/plan";
+import { normalizePlan, parsePlan, assessComplexity, validatePlan, planFeedback, formatPlan } from "../src/core/plan";
 
 describe("Phase 4 — planning core (plan.ts)", () => {
   describe("normalizePlan (structured tool path)", () => {
@@ -180,6 +180,24 @@ describe("Phase 4 — planning core (plan.ts)", () => {
     it("marks a genuine design decision (a technical choice)", () => {
       const plan = parsePlan("1. [coder] Choose between REST and GraphQL (api)\n   accept: decided")!;
       expect(plan.steps[0]!.designDecision).toBe(true);
+    });
+  });
+
+  describe("formatPlan (pre-gate injection)", () => {
+    it("renders an ordered checklist with agents, deps, files, and acceptance", () => {
+      const plan = normalizePlan({
+        summary: "Build it",
+        steps: [
+          { title: "schema", agent: "coder", layer: "schema", acceptance: "tables exist", files: [{ path: "db.ts", status: "new" }] },
+          { title: "api", agent: "coder", layer: "api", dependsOn: [1], acceptance: "returns 200" },
+        ],
+      });
+      const out = formatPlan(plan);
+      expect(out).toMatch(/Build it/); // summary
+      expect(out).toMatch(/1\. \[coder\] schema \[schema\]/);
+      expect(out).toMatch(/db\.ts \(new\)/);
+      expect(out).toMatch(/2\. \[coder\] api \[api\] \(after #1\)/); // dependency rendered as step number
+      expect(out).toMatch(/done when: returns 200/);
     });
   });
 });
