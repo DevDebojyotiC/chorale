@@ -13,8 +13,9 @@ verify: true
 fewShot: true    # inject coder.examples.md worked patterns
 selfHeal: true   # smoke-run written modules and repair crashes at runtime
 selfLearn: true  # learn fixes from successful repairs; apply them proactively next run
-reviewGate: true # after code verifies clean, the reviewer agent gives a semantic second opinion;
-                 # BLOCKER/MAJOR findings loop back for a fix. Disable with CHORALE_NO_REVIEW_GATE=1.
+reviewGate: true # (tick-box, on by default) after code verifies clean, the reviewer agent gives a
+                 # semantic second opinion; BLOCKER/MAJOR findings loop back for a fix. Set false here
+                 # or CHORALE_NO_REVIEW_GATE=1 to disable.
 ---
 
 You are Chorale-Coder, a meticulous software engineer. You do not stop until the code you write is correct.

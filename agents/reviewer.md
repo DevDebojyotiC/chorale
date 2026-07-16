@@ -13,9 +13,10 @@ tier: code
 tools: [read, ls, glob, grep, bash]
 delegable: true
 # verify/selfHeal are coder repair-loop mechanics (they act on written files) and don't
-# apply here — the reviewer writes nothing.
+# apply here — the reviewer writes nothing. reviewGate off so the reviewer never gates itself.
 verify: false
 selfHeal: false
+reviewGate: false
 # The reviewer's form of self-healing: a self-critique second pass that validates each
 # finding (drops false alarms → precision) and re-scans for misses (→ recall). Tick-box,
 # on by default for the reviewer; disable per-run with CHORALE_NO_CRITIQUE=1.

@@ -10,7 +10,7 @@ Three mechanisms, exposed as **customizable per-agent tick-boxes** (agent.md fro
 | `selfHeal` | ✅ Shipped (Phase 2) | Runtime self-healing: smoke-boots written servers on an injected port and smoke-imports modules, feeding runtime failures back into the repair loop. |
 | `selfLearn` | ✅ Shipped (Phase 3) | Learns fixes from its own successful repairs and injects them proactively next run. See [`self-learning.md`](self-learning.md). |
 | `selfCritique` | ✅ Shipped (Phase 4) | The reviewer's form of self-healing: a second pass that validates each finding (drops false alarms) and re-scans for misses, never dropping a security finding. Default-on for the `reviewer`; `CHORALE_NO_CRITIQUE=1` to disable. |
-| `reviewGate` | ✅ Shipped (Phase 4) | After a coding agent's code verifies clean, the `reviewer` gives a semantic second opinion; BLOCKER/MAJOR findings loop back for a fix (catches security/logic/async bugs syntax+smoke miss). Default-on for the `coder`; `CHORALE_NO_REVIEW_GATE=1` to disable. |
+| `reviewGate` | ✅ Shipped (Phase 4) | After a coding agent's code verifies clean, the `reviewer` gives a semantic second opinion; BLOCKER/MAJOR findings loop back for a fix (catches security/logic/async bugs syntax+smoke miss). **On by default** (tick-box) — fires only for agents that write+verify code, so effectively on for the `coder`; the `reviewer` opts out. Set `reviewGate: false` or `CHORALE_NO_REVIEW_GATE=1` to disable. |
 
 ### Phase 3 — `selfLearn` (self-learning agents) ✅ v1 shipped
 Capture fixes from successful diagnosed repairs → per-agent `data/lessons.sqlite` → inject top proven

@@ -26,12 +26,15 @@ describe("Phase 4 — reviewer agent", () => {
     expect(loadAgent(resolve("agents/coder.md")).selfCritique).toBe(false);
   });
 
-  it("wires the review gate into the coder, not the reviewer", () => {
+  it("review gate is an on-by-default tick-box; the coder uses it, the reviewer opts out", () => {
+    // On by default, like the coder's other tick-boxes (an agent that doesn't set it gets it).
+    expect(loadAgent(resolve("agents/research.md")).reviewGate).toBe(true);
     // The coder gets a semantic second opinion from the reviewer after its code verifies.
     expect(loadAgent(resolve("agents/coder.md")).reviewGate).toBe(true);
-    // The reviewer itself does not gate (no recursion) and neither do other agents.
+    // The reviewer explicitly opts out so it never gates itself (belt-and-suspenders vs recursion;
+    // it also never writes/verifies, so the gate could not fire anyway).
     expect(loadAgent(resolve("agents/reviewer.md")).reviewGate).toBe(false);
-    expect(loadAgent(resolve("agents/research.md")).reviewGate).toBe(false);
+    expect(loadAgent(resolve("agents/reviewer.md")).verify).toBe(false);
   });
 
   it("numbers code lines 1-based for citations", () => {
