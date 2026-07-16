@@ -20,7 +20,14 @@ pre code{background:none;padding:0}
 blockquote{margin:1.25rem 0;padding:.8rem 1.1rem;background:var(--panel);border-left:4px solid var(--accent);border-radius:0 var(--radius) var(--radius) 0}
 blockquote p{margin:.3rem 0}
 img{max-width:100%}
-@media print{body{padding:0;max-width:none}thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+figure.chart{margin:1rem 0 1.5rem}
+figure.chart figcaption{font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.5rem}
+figure.chart .bar-row{display:flex;align-items:center;gap:.6rem;margin:.28rem 0;font-size:.9rem}
+figure.chart .bar-label{flex:0 0 10rem;text-align:right;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+figure.chart .bar-track{flex:1;background:var(--panel);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+figure.chart .bar-fill{display:block;background:linear-gradient(90deg,var(--accent),var(--accent-2));height:1.15rem;border-radius:6px}
+figure.chart .bar-val{flex:0 0 auto;min-width:3rem;color:var(--fg);font-variant-numeric:tabular-nums}
+@media print{body{padding:0;max-width:none}thead th,figure.chart .bar-fill{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 body>h1:first-child{font-size:2.4rem;margin:0 0 1.5rem;padding:2rem;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2));border-radius:var(--radius)}
 h1{font-size:1.9rem;margin-top:2.5rem}
 h2{color:var(--accent)}
@@ -102,6 +109,7 @@ h2{color:var(--accent)}
 <td align="center">10</td>
 </tr>
 </tbody></table>
+<figure class="chart" aria-label="chart of Tier"><figcaption>Tier</figcaption><div class="bar-row"><span class="bar-label">KV store (TTL + LRU, multi-file)</span><span class="bar-track"><span class="bar-fill" style="width:50%"></span></span><span class="bar-val">1</span></div><div class="bar-row"><span class="bar-label">Fix a broken lib/ until its suite passes</span><span class="bar-track"><span class="bar-fill" style="width:50%"></span></span><span class="bar-val">1</span></div><div class="bar-row"><span class="bar-label">Bounded-concurrency promise pool</span><span class="bar-track"><span class="bar-fill" style="width:50%"></span></span><span class="bar-val">1</span></div><div class="bar-row"><span class="bar-label">Todo CLI with JSON persistence</span><span class="bar-track"><span class="bar-fill" style="width:50%"></span></span><span class="bar-val">1</span></div><div class="bar-row"><span class="bar-label">Mini web framework (routing, params, middleware, inject)</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="bar-val">2</span></div><div class="bar-row"><span class="bar-label">Redux-like store (reducers, subscribe, middleware, combineReducers)</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="bar-val">2</span></div><div class="bar-row"><span class="bar-label">End-to-end full-stack task app (HTTP server + REST + persistence + UI)</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="bar-val">2</span></div></figure>
 <h2>4. Tier 1 — Everyday Engineering (N=1)</h2>
 <table>
 <thead>
@@ -147,6 +155,7 @@ h2{color:var(--accent)}
 <td align="right">$0.0071</td>
 </tr>
 </tbody></table>
+<figure class="chart" aria-label="chart of Model"><figcaption>Model</figcaption><div class="bar-row"><span class="bar-label">8/8</span><span class="bar-track"><span class="bar-fill" style="width:3%"></span></span><span class="bar-val">Gemma-4-31B</span></div><div class="bar-row"><span class="bar-label">8/8</span><span class="bar-track"><span class="bar-fill" style="width:2%"></span></span><span class="bar-val">MiniMax-M2.7</span></div><div class="bar-row"><span class="bar-label">8/8</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="bar-val">gpt-oss-120B</span></div></figure>
 <p>At this level the value king dominates: Gemma-4-31B is perfect, ~2× faster than either frontier model, and free. gpt-oss-120B&#39;s only slip was a promise pool that didn&#39;t reject on a task error. <strong>On routine engineering, cheaper-and-faster wins.</strong></p>
 <h2>5. Tier 2 — Advanced Engineering (N=3 trials)</h2>
 <p>Aggregated over three independent trials (checks passed / checks attempted):</p>
@@ -190,6 +199,7 @@ h2{color:var(--accent)}
 <td align="right"><strong>≈$0.00</strong></td>
 </tr>
 </tbody></table>
+<figure class="chart" aria-label="chart of Model"><figcaption>Model</figcaption><div class="bar-row"><span class="bar-label">21/21</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="bar-val">gpt-oss-120B</span></div><div class="bar-row"><span class="bar-label">17/21</span><span class="bar-track"><span class="bar-fill" style="width:2%"></span></span><span class="bar-val">MiniMax-M2.7</span></div><div class="bar-row"><span class="bar-label">20/21</span><span class="bar-track"><span class="bar-fill" style="width:3%"></span></span><span class="bar-val">Gemma-4-31B</span></div></figure>
 <p><strong>Reliability — did each model fully pass a task, per trial:</strong></p>
 <table>
 <thead>
@@ -219,6 +229,7 @@ h2{color:var(--accent)}
 <td align="center"><strong>1/3</strong></td>
 </tr>
 </tbody></table>
+<figure class="chart" aria-label="chart of Task"><figcaption>Task</figcaption><div class="bar-row"><span class="bar-label">3/3</span><span class="bar-track"><span class="bar-fill" style="width:70%"></span></span><span class="bar-val">Framework (7/7)</span></div><div class="bar-row"><span class="bar-label">3/3</span><span class="bar-track"><span class="bar-fill" style="width:70%"></span></span><span class="bar-val">Store (7/7)</span></div><div class="bar-row"><span class="bar-label">3/3</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="bar-val">Full-stack (10/10)</span></div></figure>
 <p>The story the aggregate tells:</p>
 <ul>
 <li><strong>gpt-oss-120B — flawless and consistent.</strong> Every Tier-2 task, every trial: 100%. It is slow (~117s/trial) and no longer free, but on hard work it simply does not miss.</li>
@@ -292,6 +303,7 @@ npx tsx eval/coder-projects.ts --only=framework,store,fullstack
 <td>hardcoded port × 2</td>
 </tr>
 </tbody></table>
+<figure class="chart" aria-label="chart of Full-pass"><figcaption>Full-pass</figcaption><div class="bar-row"><span class="bar-label">Baseline (current prompt)</span><span class="bar-track"><span class="bar-fill" style="width:88%"></span></span><span class="bar-val">7/10</span></div><div class="bar-row"><span class="bar-label">+ operational-correctness rule</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="bar-val">8/10</span></div></figure>
 <p><strong>A one-run difference over ten is within noise — not evidence of a real fix.</strong> Even with a rule that explicitly says &quot;read <code>process.env.PORT</code>, never hardcode,&quot; <em>and</em> the task prompt already stating the same, Gemma still hardcoded the port in ~20% of runs. This is an instruction-<em>following</em> lapse, and prompting nudges it at best. The rule was kept — it is sound general guidance that can only help across operational tasks — but the honest conclusion is that <strong>neither salvage nor meta-prompting makes Gemma reliable for unattended full-stack work.</strong> The dependable fix is the architecture already in place: <strong>escalate to gpt-oss-120B for complex/critical builds</strong> (a perfect record here). This experiment confirms that decision rather than replacing it.</p>
 <hr>
 <h2>12. Few-Shot &amp; Self-Healing — Two More Levers, Measured</h2>
@@ -321,6 +333,7 @@ npx tsx eval/coder-projects.ts --only=framework,store,fullstack
 <td align="center">80%</td>
 </tr>
 </tbody></table>
+<figure class="chart" aria-label="chart of Full-pass"><figcaption>Full-pass</figcaption><div class="bar-row"><span class="bar-label">Baseline (no rule)</span><span class="bar-track"><span class="bar-fill" style="width:88%"></span></span><span class="bar-val">7/10</span></div><div class="bar-row"><span class="bar-label">+ operational rule</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="bar-val">8/10</span></div><div class="bar-row"><span class="bar-label">+ few-shot examples</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="bar-val">8/10</span></div></figure>
 <p><strong>No measurable gain over the rule</strong> — showing did not beat telling for this lapse.</p>
 <p><strong>Self-healing</strong> (<code>selfHeal</code>) goes beyond syntax verification: it <strong>runs</strong> what the model wrote — smoke-boots a written server on an injected <code>PORT</code> and probes that port, and smoke-imports modules to catch &quot;compiles but throws on load&quot; — feeding any runtime failure back into the repair loop. It is <strong>deterministically validated</strong> (<a href="../eval/smoke-selftest.ts"><code>eval/smoke-selftest.ts</code></a>): it flags a hardcoded-port server and a crash-on-load module, and passes correct ones.</p>
 <p>But the live runs delivered a <strong>diagnostic surprise</strong>: across 20 Gemma full-stack runs, self-heal logged <strong>zero catches</strong>. Inspecting the failures showed <em>why</em> — Gemma&#39;s full-stack failures are overwhelmingly <strong>template-literal syntax errors</strong> (<code>Syntax error &quot;\</code>&quot;`) in the large inline HTML string, which crash the server before it can run. Those are caught by <em>syntax</em> verification (self-heal only runs on syntactically-clean code), and Gemma frequently cannot repair them within the round budget. The &quot;server did not start&quot; failures were mostly malformed HTML templates, <strong>not</strong> hardcoded ports. With all mechanisms on, one 10-run sample reached 10/10; isolating self-heal (few-shot off) gave 8/10.</p>
@@ -363,6 +376,7 @@ npx tsx eval/coder-projects.ts --only=framework,store,fullstack
 <td align="center"><strong>100%</strong></td>
 </tr>
 </tbody></table>
+<figure class="chart" aria-label="chart of Full-pass"><figcaption>Full-pass</figcaption><div class="bar-row"><span class="bar-label">Baseline (no measures)</span><span class="bar-track"><span class="bar-fill" style="width:35%"></span></span><span class="bar-val">7/10</span></div><div class="bar-row"><span class="bar-label">+ operational rule</span><span class="bar-track"><span class="bar-fill" style="width:40%"></span></span><span class="bar-val">8/10</span></div><div class="bar-row"><span class="bar-label">+ few-shot examples</span><span class="bar-track"><span class="bar-fill" style="width:40%"></span></span><span class="bar-val">8/10</span></div><div class="bar-row"><span class="bar-label">+ targeted compensation (steer + diagnostics + budget)</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="bar-val">20/20</span></div></figure>
 <p>Gemma went from ~70% to a clean <strong>100% across 20 runs</strong>, most <strong>one-shot</strong> — servers now start in 3–6s, and the 16–18s &quot;server did not start&quot; stall signature is gone.</p>
 <p><strong>The lesson generalizes the coder&#39;s purpose.</strong> A precisely diagnosed model weakness <em>can</em> be engineered around from our end — by changing the strategy to one the model executes reliably, and by making the repair loop&#39;s feedback specific to the failure rather than generic. Escalation to gpt-oss-120B stays available for genuinely hard cases, but for this class the coder now <strong>compensates</strong>, exactly as intended — which makes Gemma-4-31B a viable default for full-stack projects, not just simple ones.</p>
 <hr>

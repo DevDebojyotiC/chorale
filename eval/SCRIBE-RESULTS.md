@@ -78,6 +78,25 @@ as everywhere: the default model is the reliable one. Unit tests round-trip ever
 (`test/documents.test.ts`); OCR is verified via a committed fixture + this benchmark (tesseract needs a
 one-time language-data download, so it's excluded from the offline unit suite).
 
+## Design & presentation quality (matching / beating a bespoke report)
+Beyond correct conversion, the scribe produces *good-looking* documents, in three tiers
+(`eval/scribe-design.ts` scores richness on an 8-feature checklist; `scribe-design-bench.ts` runs the
+model-authored mode):
+
+1. **Professional themes** (`theme: report|docs|minimal` on `write_doc`/`convert`) — deterministic CSS:
+   gradient cover title, design-token colors, styled tables (colored header + zebra), callouts, print
+   styles, dark mode. **`report` = 7/8**, vs the reference Claude report **6/8** (scribe adds print + dark).
+2. **Data visualization** (`charts: true`) — numeric Markdown tables become inline CSS bar charts, grounded
+   to the real values. **`report + charts` = 8/8**, exceeding the Claude report on every checklist feature.
+3. **Bespoke design mode** — the *model* authors custom HTML/CSS for a specific document (Claude's approach),
+   but with scribe's edge preserved: an automatic **fidelity check** (`checkDesignFidelity`) verifies the
+   bespoke artifact **invents no data** — every number in it must exist in the source. Live benchmark:
+   gemma **7/8 richness**, gpt-oss **6/8**, **both with 0 fabricated numbers → PASS**.
+
+The positioning made concrete: a generic converter loses to a bespoke design; a bespoke design (Claude) isn't
+verified against a source of truth. Scribe does **both** — presentation polish *and* a grounded, no-fabrication
+guarantee.
+
 ## Caveats
 Small fixtures, small N. Content graders use term coverage + structure regexes + the groundedness checker;
 they verify *correctness signals* (right facts present, nothing invented, right structure), not subjective

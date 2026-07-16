@@ -2,7 +2,7 @@
 
 A snapshot of what exists and works right now. Refreshed at the completion of every phase, before shipping.
 
-> **Version:** 0.2.0 (Phase 3 shipped) · **Phase:** 4 in progress (Core Agents) · **Tests:** 133 passing · **Last updated:** Phase 4 Task 2 (scribe / files-docs agent landed).
+> **Version:** 0.2.0 (Phase 3 shipped) · **Phase:** 4 in progress (Core Agents) · **Tests:** 139 passing · **Last updated:** Phase 4 Task 2 (scribe / files-docs agent landed).
 
 ## Status at a glance
 - **Runtime:** model-agnostic, production coder pipeline (salvage + verify + self-heal + diagnose-and-compensate + a **reviewer review-gate**), fallback chain with per-request timeout + retry/backoff.
@@ -35,7 +35,7 @@ Full evidence: [`model-evaluation-report.md`](model-evaluation-report.md), [`eng
 - Research falls back to brittle DuckDuckGo scraping without a Tavily key (degrades gracefully, but Tavily recommended).
 
 ## Quality gates
-- `npm run typecheck` (tsc, strict; `src/tui` excluded — native TS7 crashes on React types) · `npm test` (vitest, 133) · CI on push (`.github/workflows/ci.yml`).
+- `npm run typecheck` (tsc, strict; `src/tui` excluded — native TS7 crashes on React types) · `npm test` (vitest, 139) · CI on push (`.github/workflows/ci.yml`).
 - Graders self-validated against known-good/bad reference solutions before any benchmark run.
 - **Security:** no secrets/absolute paths/`.env`/`data/` in tracked files; SQL is parameterized; shell has a catastrophic-command denylist; logs are secret-redacted. `npm audit` reports **0 vulnerabilities** (`overrides` pin `esbuild` and `uuid` to patched versions) and runs in CI. `selfHeal` runs model-written code — see [`SECURITY.md`](../SECURITY.md).
 
