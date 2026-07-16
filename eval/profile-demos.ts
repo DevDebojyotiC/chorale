@@ -1,7 +1,9 @@
 /**
- * Full-length (≈4–5 A4 pages) showcase content for each topic profile — realistic dummy
- * data that exercises the profile's full component vocabulary. Rendered by gen-profiles.ts.
- * All content is fictional. Kept light + print-friendly by the themes.
+ * Showcase content for each topic profile — realistic dummy data that exercises the
+ * profile's full component vocabulary, sized to a *topic-appropriate* length (see
+ * src/tools/doc-pages.ts): an invoice is ~1 page, a résumé ~2, a lab report 3–4, a
+ * research paper ~10. Rendered by gen-profiles.ts. All content is fictional. Kept light +
+ * print-friendly by the themes.
  */
 
 const executive = `
@@ -60,58 +62,144 @@ const executive = `
 
 const academic = `
 <div class="titleblock"><h1>Grounded Generation Reduces Fabrication in Model-Authored Documents</h1>
-<div class="authors">A. Chatterjee¹, R. Mensah², L. Ortiz¹</div><div class="affil">¹ Chorale Research · ² Independent</div></div>
-<div class="abstract"><h3>Abstract</h3><p>Large language models restructure source material fluently but frequently introduce numerical values absent from the source — a failure mode that undermines their use in reports, finance, and clinical settings. We introduce a lightweight, post-generation <em>fidelity check</em> that extracts distinctive numerals from a generated document's visible text and requires each to be grounded in the source corpus, returning violations for a bounded repair loop. Across 240 model-authored documents drawn from six domains, the check reduced fabricated figures by 92% while preserving all source statistics and showing no measurable degradation in a blind fluency evaluation (Δ = 0.03, n.s.). We analyze the residual failures, characterize the trade-off between recall and false positives, and release the evaluation harness.</p></div>
+<div class="authors">A. Chatterjee¹, R. Mensah², L. Ortiz¹, S. Nakamura³</div><div class="affil">¹ Chorale Research · ² Independent · ³ Institute for Applied Language Systems</div>
+<div class="affil" style="margin-top:.3rem">Preprint — under review. Correspondence: research@chorale.dev</div></div>
+<div class="abstract"><h3>Abstract</h3><p>Large language models restructure source material fluently but frequently introduce numerical values absent from the source — a failure mode that undermines their use in reports, finance, and clinical settings. We introduce a lightweight, post-generation <em>fidelity check</em> that extracts distinctive numerals from a generated document's visible text and requires each to be grounded in the source corpus, returning violations for a bounded repair loop. Across 240 model-authored documents drawn from six domains, the check reduced fabricated figures by 92% while preserving all source statistics and showing no measurable degradation in a blind fluency evaluation (Δ = 0.03, n.s.). We formalize numeral fabrication, describe a deterministic and model-agnostic checker, analyze the residual failures through a five-way error taxonomy, characterize the trade-off between recall and false positives across three matching regimes, and release the evaluation harness together with the 240-document benchmark.</p></div>
 
 <div class="twocol">
 <h2><span class="n">1.</span> Introduction</h2>
 <p>Automated document synthesis has advanced rapidly, yet adoption in high-stakes domains lags. The obstacle is not fluency but trust: a report that reads convincingly and is occasionally wrong is worse than one that is plainly rough<sup class="cite">1</sup>. Prior systems style or convert source content without verifying the output against a ground truth, so hallucinated statistics pass through unchecked<sup class="cite">2,3</sup>.</p>
-<p>We argue that the correct locus of verification is not the model but a cheap, deterministic checker applied after generation. The insight is that <em>numbers</em> are both the most consequential and the most checkable claims in a data-bearing document. If every distinctive numeral in the artifact must appear in the source, fabrication becomes detectable without any model introspection.</p>
+<p>The stakes are asymmetric. In a marketing page an invented adjective is harmless; in a financial statement an invented figure is a material misstatement, and in a clinical summary it is a safety event. Yet the generation stack treats all tokens alike, optimizing a fluency objective that is indifferent to whether "$4.2M" appeared in the source or was confabulated to fit the sentence. The result is a class of errors that are rare, plausible, and therefore expensive to catch by human review.</p>
+<p>We argue that the correct locus of verification is not the model but a cheap, deterministic checker applied after generation. The insight is that <em>numbers</em> are both the most consequential and the most checkable claims in a data-bearing document. If every distinctive numeral in the artifact must appear in the source, fabrication becomes detectable without any model introspection, without a second model, and without access to the generator's weights or logits.</p>
+<p>This paper makes four contributions. (i) We formalize numeral fabrication as a set-membership property between artifact and source (§3). (ii) We describe a deterministic checker and a bounded repair loop that together reduce fabrication by 92% (§4, §6). (iii) We give a five-way error taxonomy of residual failures and show that a normalization step resolves the largest class (§7, §8). (iv) We release the harness and a 240-document, six-domain benchmark (§9). We deliberately trade recall of exotic fabrications for near-zero false positives, on the argument that a checker teams distrust is a checker teams disable.</p>
+
 <h2><span class="n">2.</span> Related Work</h2>
-<p>Retrieval-augmented generation<sup class="cite">4</sup> grounds inputs but not outputs. Self-consistency<sup class="cite">5</sup> and self-critique<sup class="cite">6</sup> improve reasoning yet do not guarantee data fidelity. Closest is claim-verification work<sup class="cite">7</sup>, which we specialize to numerals for precision and speed.</p>
-<div class="figure">[ Figure 1 ]<div class="caption">Figure 1: Fabrication rate per domain, before (dark) and after (light) the fidelity check.</div></div>
-<h2><span class="n">3.</span> Method</h2>
-<p>Given a generated artifact and its source(s), we strip markup to visible text, extract numerals with two or more significant digits or a decimal point (skipping trivial list markers), and test membership against numerals extracted from the source. Un-grounded numerals are surfaced with a targeted instruction; the model revises within a bounded loop of at most five rounds. Dropped source numerals are permitted, reflecting the summarizing nature of reports.</p>
-<h2><span class="n">4.</span> Experiments</h2>
-<p>We sampled 240 tasks across executive reports, invoices, lab summaries, and three other domains, each with a fixed source. Two models authored each task. We measured fabrication rate, source-recall, repair rounds, and a blind fluency score (5-point Likert, three raters).</p>
+<p><em>2.1 Retrieval augmentation.</em> Retrieval-augmented generation<sup class="cite">4</sup> conditions the model on retrieved passages, grounding the <em>input</em>. It does not constrain the <em>output</em>: a model given the correct passage may still emit a number the passage does not contain. Our checker is complementary and acts after generation, on whatever text was produced.</p>
+<p><em>2.2 Self-verification.</em> Self-consistency<sup class="cite">5</sup> samples multiple chains and votes; self-critique and self-refine<sup class="cite">6</sup> ask the model to revise its own output. Both improve reasoning but rely on the same model that produced the error, and neither offers a guarantee for data fidelity. We instead use an external, deterministic oracle for the sub-class of claims that admits one.</p>
+<p><em>2.3 Fact verification.</em> Evidence-based fact-checking<sup class="cite">7</sup> classifies free-form claims as supported or refuted against a corpus. This is powerful but heavy, model-dependent, and itself fallible. We specialize the idea to numerals, trading generality for precision, speed, and determinism.</p>
+<p><em>2.4 Hallucination taxonomies.</em> Surveys<sup class="cite">8,9</sup> distinguish intrinsic (contradicting the source) from extrinsic (unverifiable) hallucination. Numeral fabrication is a sharp, measurable special case of the intrinsic variety, which is precisely why it is a good first target for a deterministic guarantee.</p>
+<div class="figure">[ Figure 1 ]<div class="caption">Figure 1: Fabrication rate per domain, before and after the fidelity check. Bars are means over three runs; whiskers show run-to-run spread.</div></div>
+
+<h2><span class="n">3.</span> Problem Formulation</h2>
+<p>Let S be a source of record and A a generated artifact. Let num(·) be an extraction function mapping a text to the multiset of its distinctive numerals — those with two or more significant digits or a decimal point, after stripping markup and excluding list ordinals and standalone years. We say A <em>fabricates</em> a numeral x if x ∈ num(A) but x ∉ num(S) under a matching relation ≈. A document is <em>faithful</em> when num(A) ⊆ num(S) up to ≈.</p>
+<p>Two design choices are implicit in this definition. First, we require containment, not equality: A may legitimately <em>drop</em> source numerals, reflecting the summarizing nature of reports. Second, the matching relation ≈ is a parameter, ranging from exact string equality to a normalized form that strips currency symbols and thousands separators (§4.4). The stricter ≈ is, the more reformatting is flagged as fabrication; the looser it is, the more genuine errors may slip through. §7 quantifies this trade-off.</p>
+
+<h2><span class="n">4.</span> Method</h2>
+<p><em>4.1 Extraction.</em> We strip the artifact to visible text (discarding tags, attributes, and script/style content), tokenize on non-numeric boundaries, and retain tokens matching a signed integer-or-decimal pattern with the two-significant-digit filter. The same function is applied to the source, so extraction asymmetries cannot themselves induce false positives.</p>
+<p><em>4.2 Grounding test.</em> Each artifact numeral is tested for membership in the source multiset under ≈. Un-grounded numerals are collected with a short surrounding context window to aid repair.</p>
+<p><em>4.3 Repair loop.</em> Violations are returned to the generator with a targeted instruction naming each offending value and its context, and a directive to either correct it to a source-grounded figure or remove the claim. The loop runs to a fixed point or a cap of five rounds. In practice all corrected runs converged within two rounds (§6).</p>
+<p><em>4.4 Normalization.</em> The optional normalized matcher canonicalizes currency and separators (so "4,000,000", "$4,000,000", and "4000000" match) but preserves magnitude and sign. It never merges distinct magnitudes, so it cannot mask a genuine fabrication of a different value.</p>
+<p>The entire procedure is deterministic and model-agnostic: it inspects only text, requires no gradients, and adds a cost dominated by the repair calls, of which there are typically zero or one.</p>
+
+<h2><span class="n">5.</span> Experimental Setup</h2>
+<p>We sampled 240 tasks across six domains — executive briefs, financial statements, clinical summaries, marketing pages, technical references, and academic abstracts — 40 each, every task paired with a fixed structured source. Two instruction-tuned models of different families authored each task under identical prompts. We measured fabrication rate (fraction of runs containing at least one un-grounded numeral), source-recall (fraction of source numerals retained where relevant), mean repair rounds, and a blind fluency score (five-point Likert, three raters, artifacts shuffled and de-identified as to condition).</p>
+<table><thead><tr><th>Setting</th><th class="right">Value</th></tr></thead>
+<tbody><tr><td>Domains × docs</td><td class="right">6 × 40 = 240</td></tr>
+<tr><td>Generators</td><td class="right">2 families</td></tr>
+<tr><td>Runs per task</td><td class="right">3</td></tr>
+<tr><td>Repair cap</td><td class="right">5 rounds</td></tr>
+<tr><td>Fluency raters</td><td class="right">3</td></tr></tbody></table>
+<div class="caption">Table 1: Experimental configuration.</div>
+
+<h2><span class="n">6.</span> Results</h2>
+<p>The check caught fabrications in 41 of 240 runs; all resolved within two rounds. Aggregate fabrication fell from 19.8% to 1.6% (a 92% relative reduction). Source-recall was unchanged, confirming that repair removed inventions rather than facts. Fluency was statistically indistinguishable between conditions (Δ = 0.03 on a five-point scale, n.s.), indicating that grounding constrains data without flattening prose.</p>
 <table><thead><tr><th>Domain</th><th class="right">Baseline fab.</th><th class="right">+ Check</th><th class="right">Rounds</th></tr></thead>
 <tbody><tr><td>Executive</td><td class="right">18%</td><td class="right">2%</td><td class="right">1.4</td></tr>
 <tr><td>Finance</td><td class="right">24%</td><td class="right">1%</td><td class="right">1.7</td></tr>
 <tr><td>Clinical</td><td class="right">11%</td><td class="right">0%</td><td class="right">1.2</td></tr>
-<tr><td>Marketing</td><td class="right">31%</td><td class="right">3%</td><td class="right">1.9</td></tr></tbody></table>
-<div class="caption">Table 1: Fabrication rate and mean repair rounds by domain.</div>
-<h2><span class="n">5.</span> Results &amp; Discussion</h2>
-<p>The check caught fabrications in 41 of 240 runs; all resolved within two rounds. Marketing showed both the highest baseline fabrication and the highest residual, consistent with a genre that rewards inflation. Fluency was statistically unchanged, indicating that grounding constrains data without flattening prose.</p>
-<p>Residual failures fell into two classes: unit reformatting (e.g., "4M" vs "4,000,000") and legitimately derived figures (a computed percentage). The former is addressable with normalization; the latter suggests a future extension to arithmetic provenance.</p>
-<h2><span class="n">6.</span> Ablations</h2>
-<p>We ablate three design choices. Removing the two-significant-digit filter raises false positives 4× as trivial list markers and years are flagged. Disabling the repair loop leaves 39 of 41 fabrications uncorrected, confirming that detection alone is insufficient. Extending membership from exact match to normalized match (stripping currency and thousands separators) recovers 6 of the 9 residual "unit reformatting" failures at no precision cost.</p>
+<tr><td>Marketing</td><td class="right">31%</td><td class="right">3%</td><td class="right">1.9</td></tr>
+<tr><td>Technical</td><td class="right">15%</td><td class="right">1%</td><td class="right">1.3</td></tr>
+<tr><td>Academic</td><td class="right">20%</td><td class="right">2%</td><td class="right">1.5</td></tr></tbody></table>
+<div class="caption">Table 2: Fabrication rate and mean repair rounds by domain.</div>
+<p>Marketing showed both the highest baseline fabrication and the highest residual, consistent with a genre that rewards inflation; clinical the lowest, consistent with terse, table-bound source material. The residual after checking is dominated not by missed fabrications but by the two benign classes discussed in §8.</p>
+
+<h2><span class="n">7.</span> Ablations</h2>
+<p>We ablate three design choices. Removing the two-significant-digit filter raises false positives roughly four-fold as trivial list markers and years are flagged. Disabling the repair loop leaves 39 of 41 fabrications uncorrected, confirming that detection alone is insufficient. Extending membership from exact match to normalized match recovers 6 of the 9 residual "unit reformatting" failures at no precision cost.</p>
 <table><thead><tr><th>Configuration</th><th class="right">Fab. caught</th><th class="right">False pos.</th></tr></thead>
 <tbody><tr><td>Full method</td><td class="right">41/41</td><td class="right">2%</td></tr>
 <tr><td>− digit filter</td><td class="right">41/41</td><td class="right">9%</td></tr>
 <tr><td>− repair loop</td><td class="right">2/41</td><td class="right">2%</td></tr>
 <tr><td>+ normalization</td><td class="right">41/41</td><td class="right">2%</td></tr></tbody></table>
-<div class="caption">Table 2: Ablation of the three design choices.</div>
-<h2><span class="n">7.</span> Limitations</h2>
-<p>The method verifies presence, not derivation: a figure computed correctly from source values but absent verbatim is flagged as a false positive. Extending to arithmetic provenance is future work. The approach also assumes a well-defined source; open-ended generative tasks without a ground truth are out of scope. Finally, our fluency evaluation used three raters on a five-point scale; a larger panel would tighten the confidence interval.</p>
-<h2><span class="n">8.</span> Conclusion</h2>
+<div class="caption">Table 3: Ablation of the three design choices.</div>
+
+<h2><span class="n">8.</span> Error Analysis</h2>
+<p>We hand-labeled every flagged numeral into five classes. <em>True fabrication</em> — a value with no source basis — is the target and the largest actionable class. <em>Unit reformatting</em> — "4M" versus "4,000,000" — is benign and resolved by normalization. <em>Derived figures</em> — a percentage correctly computed from two source values but absent verbatim — are false positives that motivate arithmetic provenance. <em>Rounding</em> — 3.14159 rendered as 3.14 — is benign and admitted by a tolerance. <em>Extraction artifacts</em> — a version string parsed as a number — are rare after the digit filter.</p>
+<table><thead><tr><th>Class</th><th class="right">Share</th><th>Disposition</th></tr></thead>
+<tbody><tr><td>True fabrication</td><td class="right">63%</td><td>repaired</td></tr>
+<tr><td>Unit reformatting</td><td class="right">18%</td><td>normalize</td></tr>
+<tr><td>Derived figure</td><td class="right">11%</td><td>future work</td></tr>
+<tr><td>Rounding</td><td class="right">6%</td><td>tolerance</td></tr>
+<tr><td>Extraction artifact</td><td class="right">2%</td><td>filter</td></tr></tbody></table>
+<div class="caption">Table 4: Error taxonomy over flagged numerals.</div>
+
+<h2><span class="n">9.</span> Discussion</h2>
+<p>The result is modest by design. We do not claim to eliminate hallucination; we claim to make one important, measurable sub-class deterministically detectable at negligible cost. The value is less the 92% headline than the shape of the guarantee: a team can adopt it without trusting a second model, and can read the source of every flag. Determinism also means the checker is itself auditable — a property a learned verifier lacks.</p>
+<p>The derived-figure class points to the natural next step: tracking arithmetic provenance so that a correctly computed percentage is accepted with its derivation rather than flagged. We leave this to future work, noting that it trades determinism for coverage and must be evaluated on the same axis of team trust.</p>
+
+<h2><span class="n">10.</span> Threats to Validity</h2>
+<p><em>Construct.</em> Fabrication rate counts runs with at least one un-grounded numeral; it does not weight by severity. <em>Internal.</em> Our fluency panel is three raters; a larger panel would tighten the interval. <em>External.</em> Sources are synthetic to avoid disclosing real data, which may understate the messiness of production corpora. <em>Generator.</em> Two model families cannot represent all systems, though the checker's determinism makes it insensitive to the generator by construction.</p>
+
+<h2><span class="n">11.</span> Limitations</h2>
+<p>The method verifies presence, not derivation: a figure computed correctly from source values but absent verbatim is flagged as a false positive. The approach also assumes a well-defined source; open-ended generative tasks without a ground truth are out of scope. It verifies numerals only — textual claims, causal assertions, dates rendered as prose, and figures inside images remain unverified and require separate scrutiny.</p>
+
+<h2><span class="n">12.</span> Conclusion</h2>
 <p>A deterministic numeral-fidelity check materially reduces fabrication in model-authored documents at negligible cost and no fluency penalty. Grounding output — not merely input — is a practical path to trustworthy document synthesis. We release the harness and the 240-document benchmark to support replication.</p>
 </div>
+
 <h2>Broader Impact &amp; Reproducibility</h2>
-<p>The technique lowers the barrier to trustworthy automation in domains where a single fabricated figure carries real cost — finance, healthcare, and law. Because the checker is deterministic and model-agnostic, it composes with any generation stack and adds no dependency on a particular provider. We caution that the method verifies numerals only; textual claims, causal assertions, and images remain unverified and require separate scrutiny.</p>
+<p>The technique lowers the barrier to trustworthy automation in domains where a single fabricated figure carries real cost — finance, healthcare, and law. Because the checker is deterministic and model-agnostic, it composes with any generation stack and adds no dependency on a particular provider. We caution that the method verifies numerals only; textual claims, causal assertions, and images remain unverified and require separate scrutiny, and a checker that catches figures must not lull teams into trusting prose.</p>
 <p>All experiments were run with fixed seeds where the model permitted, and the 240-document benchmark, grader, and extraction rules are released under a permissive licence. Reported figures are means over three runs; variance was below one percentage point on all domains except marketing, where run-to-run spread reached three points.</p>
+
 <h2>Appendix A · Extraction rules</h2>
-<p class="muted" style="font-size:.85rem">Numerals are matched with the pattern for signed integers and decimals of two or more significant digits. List ordinals, single-digit counts, and standalone years are excluded. Percentages and currency values retain their magnitude after separator normalization. Full rules and the reference implementation accompany the release.</p>
+<p class="muted" style="font-size:.85rem">Numerals are matched with the pattern for signed integers and decimals of two or more significant digits. List ordinals, single-digit counts, and standalone four-digit years are excluded. Percentages and currency values retain their magnitude after separator normalization. Markup, attribute values, and script/style content are removed before extraction so that class names and identifiers cannot be mistaken for data. The full rules and the reference implementation accompany the release.</p>
 <h2>Appendix B · Domain corpus</h2>
-<p class="muted" style="font-size:.85rem">The 240-document benchmark draws 40 documents each from six domains: executive briefs, financial statements, clinical summaries, marketing pages, technical references, and academic abstracts. Each document is paired with a structured source of record, against which fidelity is measured. Sources were synthetic to avoid disclosing real data.</p>
+<p class="muted" style="font-size:.85rem">The 240-document benchmark draws 40 documents each from six domains: executive briefs, financial statements, clinical summaries, marketing pages, technical references, and academic abstracts. Each document is paired with a structured source of record, against which fidelity is measured. Sources were synthetic to avoid disclosing real data; generation prompts, sources, and gold labels are included so results can be reproduced end to end.</p>
+<h2>Appendix C · Hyperparameters</h2>
+<table><thead><tr><th>Parameter</th><th class="right">Value</th></tr></thead>
+<tbody><tr><td>Significant-digit threshold</td><td class="right">2</td></tr>
+<tr><td>Repair-loop cap</td><td class="right">5</td></tr>
+<tr><td>Rounding tolerance</td><td class="right">0.5%</td></tr>
+<tr><td>Context window (chars)</td><td class="right">80</td></tr>
+<tr><td>Sampling temperature</td><td class="right">0.7</td></tr></tbody></table>
+<div class="caption">Table 5: Checker and generation hyperparameters.</div>
+<h2>Appendix D · Additional per-domain results</h2>
+<table><thead><tr><th>Domain</th><th class="right">Recall</th><th class="right">FP rate</th><th class="right">Fluency Δ</th></tr></thead>
+<tbody><tr><td>Executive</td><td class="right">100%</td><td class="right">2%</td><td class="right">+0.02</td></tr>
+<tr><td>Finance</td><td class="right">100%</td><td class="right">1%</td><td class="right">−0.01</td></tr>
+<tr><td>Clinical</td><td class="right">100%</td><td class="right">0%</td><td class="right">+0.04</td></tr>
+<tr><td>Marketing</td><td class="right">98%</td><td class="right">3%</td><td class="right">+0.05</td></tr>
+<tr><td>Technical</td><td class="right">100%</td><td class="right">1%</td><td class="right">+0.03</td></tr>
+<tr><td>Academic</td><td class="right">99%</td><td class="right">2%</td><td class="right">+0.02</td></tr></tbody></table>
+<div class="caption">Table 6: Source-recall, false-positive rate, and fluency change by domain.</div>
+<h2>Appendix E · Worked example</h2>
+<p class="muted" style="font-size:.9rem">Consider a source stating quarterly revenue of $4,200,000 and a prior-year figure of $3,500,000. A generator produces the sentence: "Revenue grew to $4.2M, up from $3.4M — a 20% increase." Extraction yields the artifact numerals {4.2, 3.4, 20} and the source numerals {4200000, 3500000}. Under exact matching all three artifact values are flagged. Under normalization, 4.2M reconciles with 4,200,000 and is cleared; 3.4M does not reconcile with 3,500,000 and is correctly flagged as a fabrication (the true prior-year value was 3.5M); and 20, a derived growth rate, is flagged as a false positive of the derived-figure class. The repair instruction names 3.4M and its context; the generator corrects it to 3.5M and the growth figure to 20%. The second pass clears, and the derived-figure flag is suppressed by the arithmetic-provenance extension when enabled.</p>
+<p class="muted" style="font-size:.9rem">This example illustrates the three regimes in miniature: normalization prevents a benign reformatting flag, the checker catches a genuine transposition, and the residual false positive is confined to the one class we do not yet resolve deterministically. It also shows why the repair instruction includes context: "3.4M" alone is ambiguous, but "3.4M, up from" locates the claim precisely enough for a reliable correction.</p>
+<h2>Appendix F · Extended results by generator</h2>
+<p class="muted" style="font-size:.9rem">The two generator families behaved similarly under the check, differing mainly in baseline fabrication rate. Both converged to comparable residuals after repair, consistent with the checker's determinism: the oracle is identical regardless of which model produced the text, so post-repair fidelity depends on the repair capability rather than the initial error rate.</p>
+<table><thead><tr><th>Generator</th><th class="right">Baseline fab.</th><th class="right">+ Check</th><th class="right">Rounds</th><th class="right">Fluency</th></tr></thead>
+<tbody><tr><td>Family A</td><td class="right">17%</td><td class="right">1.4%</td><td class="right">1.4</td><td class="right">4.31</td></tr>
+<tr><td>Family B</td><td class="right">22%</td><td class="right">1.8%</td><td class="right">1.6</td><td class="right">4.28</td></tr>
+<tr><td><strong>Pooled</strong></td><td class="right"><strong>19.8%</strong></td><td class="right"><strong>1.6%</strong></td><td class="right"><strong>1.5</strong></td><td class="right"><strong>4.30</strong></td></tr></tbody></table>
+<div class="caption">Table 7: Baseline and post-check fabrication, repair rounds, and mean fluency by generator family.</div>
+<p class="muted" style="font-size:.9rem">We report pooled figures throughout the main text; the per-family split is provided here for completeness. The gap between families narrows from 5 points at baseline to under half a point after repair, which we read as evidence that the checker equalizes fidelity across generators of differing base quality — a desirable property for a component intended to sit in front of an interchangeable model.</p>
 <h2>References</h2>
 <ol class="refs">
 <li>Chatterjee, A. and Ortiz, L. <em>Anti-hallucination in document agents.</em> Proc. of DocML, 2026.</li>
 <li>Mensah, R. <em>When generated reports go wrong.</em> J. Applied NLP, 2025.</li>
 <li>Ortiz, L. et al. <em>Fidelity metrics for generated media.</em> 2025.</li>
-<li>Lewis, P. et al. <em>Retrieval-augmented generation.</em> 2020.</li>
-<li>Wang, X. et al. <em>Self-consistency improves reasoning.</em> 2022.</li>
-<li>Madaan, A. et al. <em>Self-refine.</em> 2023.</li>
-<li>Thorne, J. et al. <em>Fact verification over evidence.</em> 2018.</li>
+<li>Lewis, P. et al. <em>Retrieval-augmented generation for knowledge-intensive tasks.</em> 2020.</li>
+<li>Wang, X. et al. <em>Self-consistency improves chain-of-thought reasoning.</em> 2022.</li>
+<li>Madaan, A. et al. <em>Self-refine: iterative refinement with self-feedback.</em> 2023.</li>
+<li>Thorne, J. et al. <em>FEVER: fact extraction and verification over evidence.</em> 2018.</li>
+<li>Ji, Z. et al. <em>Survey of hallucination in natural language generation.</em> 2023.</li>
+<li>Maynez, J. et al. <em>On faithfulness and factuality in abstractive summarization.</em> 2020.</li>
+<li>Gao, L. et al. <em>Program-aided language models.</em> 2023.</li>
+<li>Nakamura, S. and Mensah, R. <em>Numeral-level grounding for tabular reports.</em> 2026.</li>
+<li>Ortiz, L. <em>Deterministic checks for generative pipelines.</em> Workshop on Trustworthy NLG, 2025.</li>
+<li>Chatterjee, A. et al. <em>A six-domain benchmark for document fidelity.</em> 2026.</li>
+<li>Guo, Z. et al. <em>A survey on automated fact-checking.</em> 2022.</li>
+<li>Rashkin, H. et al. <em>Measuring attribution in generated text.</em> 2021.</li>
+<li>Honovich, O. et al. <em>Evaluating factual consistency of generation.</em> 2022.</li>
 </ol>`;
 
 const legal = `
@@ -200,64 +288,9 @@ const invoice = `
 <div class="row"><span>Tax (19% VAT)</span><span>$2,158.78</span></div>
 <div class="row grand"><span>Total due</span><span>$13,520.78</span></div></div>
 
-<div class="terms"><strong>Payment.</strong> Bank transfer to Chorale Labs — IBAN DE00 1234 5678 9012 3456 00 · BIC ABCDDEFFXXX. Please reference invoice #INV-2026-0142. A 1.5%/month late fee applies after the due date.</div>
+<div class="terms"><strong>Payment.</strong> Bank transfer to Chorale Labs — IBAN DE00 1234 5678 9012 3456 00 · BIC ABCDDEFFXXX. Please reference invoice #INV-2026-0142. Payment is due within thirty (30) days; a 1.5%/month late fee applies after the due date.</div>
 
-<h2 style="margin-top:1.8rem">Account Statement</h2>
-<p class="muted" style="font-size:.85rem">Recent activity on this account, for reference.</p>
-<table><thead><tr><th>Invoice</th><th>Date</th><th>Status</th><th class="num">Amount</th></tr></thead>
-<tbody>
-<tr><td>INV-2026-0118</td><td>15 May 2026</td><td>Paid</td><td class="num">$9,240.00</td></tr>
-<tr><td>INV-2026-0130</td><td>16 Jun 2026</td><td>Paid</td><td class="num">$7,425.60</td></tr>
-<tr><td>INV-2026-0142</td><td>16 Jul 2026</td><td>Due</td><td class="num">$13,520.78</td></tr></tbody></table>
-
-<h2 style="margin-top:1.8rem">Work Summary</h2>
-<p class="muted" style="font-size:.9rem">This engagement covered the design and delivery of a document-automation system: a shared theming foundation, ten industry design profiles, numeric-table charting, and export to PDF, DOCX, and XLSX. Foundation and template work were fixed-scope; integration, QA, and onboarding were billed at the standard hourly rate. All deliverables were accepted on 12 July 2026.</p>
-<table><thead><tr><th>Workstream</th><th class="num">Hours</th><th class="num">Amount</th></tr></thead>
-<tbody>
-<tr><td>Design system &amp; profiles</td><td class="num">40</td><td class="num">$7,300.00</td></tr>
-<tr><td>Export &amp; integration</td><td class="num">20</td><td class="num">$2,400.00</td></tr>
-<tr><td>QA, accessibility &amp; onboarding</td><td class="num">8</td><td class="num">$1,260.00</td></tr>
-<tr><td><strong>Total</strong></td><td class="num"><strong>68</strong></td><td class="num"><strong>$10,960.00</strong></td></tr></tbody></table>
-
-<h2>Terms &amp; Conditions</h2>
-<p style="font-size:.88rem"><strong>1. Payment.</strong> Payment is due within thirty (30) days of the invoice date. Amounts are stated in USD and are exclusive of any bank charges, which are the responsibility of the payer.</p>
-<p style="font-size:.88rem"><strong>2. Late payment.</strong> Overdue amounts accrue interest at 1.5% per month. Provider reserves the right to suspend services on accounts more than fifteen (15) days overdue.</p>
-<p style="font-size:.88rem"><strong>3. Disputes.</strong> Any dispute regarding an invoice must be raised in writing within ten (10) business days of receipt; undisputed amounts remain due.</p>
-<p style="font-size:.88rem"><strong>4. Taxes.</strong> Where a valid VAT identification number is supplied, the reverse-charge mechanism may apply. Client is responsible for any withholding required by local law.</p>
-
-<h2 style="margin-top:1.8rem">Detailed Activity Log</h2>
-<p class="muted" style="font-size:.9rem">Hours billed against this engagement, for reference. Totals reconcile to the Work Summary above.</p>
-<table><thead><tr><th>Date</th><th>Activity</th><th class="num">Hours</th></tr></thead>
-<tbody>
-<tr><td>01 Jul</td><td>Kickoff, discovery, and design tokens</td><td class="num">6</td></tr>
-<tr><td>02–03 Jul</td><td>Base theme and typography system</td><td class="num">10</td></tr>
-<tr><td>04–05 Jul</td><td>Report &amp; docs profiles</td><td class="num">9</td></tr>
-<tr><td>06–07 Jul</td><td>Invoice, legal, and clinical profiles</td><td class="num">8</td></tr>
-<tr><td>08 Jul</td><td>Chart injection for numeric tables</td><td class="num">7</td></tr>
-<tr><td>09 Jul</td><td>PDF/DOCX export integration</td><td class="num">12</td></tr>
-<tr><td>10 Jul</td><td>Accessibility and print QA</td><td class="num">6</td></tr>
-<tr><td>11–12 Jul</td><td>Onboarding sessions and handover</td><td class="num">10</td></tr>
-<tr><td><strong>Total</strong></td><td></td><td class="num"><strong>68</strong></td></tr></tbody></table>
-
-<h2>Purchase Order &amp; Approvals</h2>
-<div class="meta-grid"><div class="b"><div class="h">PO number</div>ACME-PO-3391</div><div class="b"><div class="h">Approved by</div>D. Fischer, VP Eng</div><div class="b"><div class="h">Cost center</div>ENG-PLATFORM</div><div class="b"><div class="h">Contract</div>MSA-2025-014</div></div>
-<p style="font-size:.88rem;margin-top:.6rem">This invoice is issued under the Master Services Agreement referenced above and against the approved purchase order. Deliverables were accepted in writing on 12 July 2026. No change orders were raised during this engagement.</p>
-
-<h2>Deliverables &amp; Acceptance</h2>
-<table><thead><tr><th>Deliverable</th><th>Accepted</th><th>Status</th></tr></thead>
-<tbody>
-<tr><td>Shared theming foundation</td><td>12 Jul 2026</td><td>Accepted</td></tr>
-<tr><td>Ten industry design profiles</td><td>12 Jul 2026</td><td>Accepted</td></tr>
-<tr><td>Numeric-table charting</td><td>12 Jul 2026</td><td>Accepted</td></tr>
-<tr><td>PDF / DOCX / XLSX export</td><td>12 Jul 2026</td><td>Accepted</td></tr>
-<tr><td>Documentation &amp; handover</td><td>12 Jul 2026</td><td>Accepted</td></tr></tbody></table>
-<p style="font-size:.88rem">All deliverables listed above were reviewed and accepted by the Client's authorized representative. This acceptance triggers the payment terms set out in the Master Services Agreement.</p>
-
-<h2>Billing Enquiries</h2>
-<div class="meta-grid"><div class="b"><div class="h">Contact</div>billing@chorale.dev</div><div class="b"><div class="h">Phone</div>+49 30 9876 5432</div><div class="b"><div class="h">Hours</div>Mon–Fri, 09:00–17:00 CET</div></div>
-<p style="font-size:.88rem;margin-top:.4rem">Please quote invoice #INV-2026-0142 and PO ACME-PO-3391 in any correspondence. Statements are issued monthly on the first business day.</p>
-
-<div class="terms" style="margin-top:1.4rem"><strong>Remittance advice.</strong> Please detach and include with payment. Invoice #INV-2026-0142 · Amount due $13,520.78 · Due 15 Aug 2026 · Ref: ACME-0142.</div>`;
+<div class="terms" style="margin-top:.9rem"><strong>Remittance advice.</strong> Please detach and include with payment. Invoice #INV-2026-0142 · Amount due $13,520.78 · Due 15 Aug 2026 · Ref: ACME-0142.</div>`;
 
 const resume = `
 <div class="cvhead"><h1>Jordan Rivera</h1><div class="role">Senior Software Engineer · Platform &amp; Developer Tools</div>
@@ -280,23 +313,7 @@ Spanish (conversational)<div class="bar"><i style="width:55%"></i></div>
 
 <div class="main">
 <h3>Summary</h3>
-<p>Senior engineer with 8 years building developer platforms and document tooling. I turn ambiguous product goals into reliable, well-tested systems, and I care about the details that make software feel trustworthy. Recently led a grounded document-generation platform from prototype to production.</p>
-<p>I gravitate to the parts of a product where correctness and craft meet: data pipelines, developer tooling, and the rendering layer where a document either earns trust or loses it. I write things down, I test the boundaries, and I leave systems easier to change than I found them.</p>
-<h3 style="margin-top:1rem">Impact at a Glance</h3>
-<table><thead><tr><th>Outcome</th><th>Result</th></tr></thead>
-<tbody>
-<tr><td>Generated-report errors</td><td>−92%</td></tr>
-<tr><td>Production incidents</td><td>−60%</td></tr>
-<tr><td>Events handled (daily)</td><td>2M @ p99 &lt; 40ms</td></tr>
-<tr><td>Open-source stars</td><td>1,400+</td></tr></tbody></table>
-<h3 style="margin-top:1rem">Technical Skills Matrix</h3>
-<table><thead><tr><th>Area</th><th>Tools</th><th>Level</th></tr></thead>
-<tbody>
-<tr><td>Languages</td><td>TypeScript, Rust, Python</td><td>Expert</td></tr>
-<tr><td>Backend</td><td>Node, PostgreSQL, GraphQL</td><td>Expert</td></tr>
-<tr><td>Frontend</td><td>React, CSS architecture, a11y</td><td>Advanced</td></tr>
-<tr><td>Infra</td><td>Docker, Kubernetes, AWS, CI/CD</td><td>Advanced</td></tr>
-<tr><td>Quality</td><td>Contract &amp; property testing</td><td>Expert</td></tr></tbody></table>
+<p>Senior engineer with 8 years building developer platforms and document tooling. I turn ambiguous product goals into reliable, well-tested systems, and I care about the details that make software feel trustworthy. Recently led a grounded document-generation platform from prototype to production, cutting fabricated figures in generated reports by 92%.</p>
 <h3 style="margin-top:1rem">Experience</h3>
 <div class="xp"><div class="top"><span>Staff Software Engineer</span><span class="date">2023 — Present</span></div><div class="org">Chorale Labs · Berlin</div>
 <p class="muted">Led the document-agent platform: grounded generation, an anti-hallucination fidelity check, and multi-format export (PDF/DOCX/XLSX). Cut fabricated figures in generated reports by 92%. Mentored four engineers; owned the design-system and theming work.</p></div>
@@ -309,22 +326,8 @@ Spanish (conversational)<div class="bar"><i style="width:55%"></i></div>
 <h3 style="margin-top:1rem">Selected Projects</h3>
 <div class="xp"><div class="top"><span>doc-themes</span></div><p class="muted">Open-source, print-friendly theming system with 10 topic profiles; 1.4k stars.</p></div>
 <div class="xp"><div class="top"><span>groundcheck</span></div><p class="muted">A deterministic fidelity checker for model-authored documents; used in production.</p></div>
-<h3 style="margin-top:1rem">Publications &amp; Talks</h3>
-<div class="xp"><div class="top"><span>Grounded Generation Reduces Fabrication</span><span class="date">2026</span></div><div class="org">Proc. of DocML (co-author)</div></div>
-<div class="xp"><div class="top"><span>"Print-first documents in a dark-mode world"</span><span class="date">2025</span></div><div class="org">FrontendConf EU · invited talk</div></div>
-<div class="xp"><div class="top"><span>"Testing the untestable: contract tests at scale"</span><span class="date">2024</span></div><div class="org">NodeSummit · lightning talk</div></div>
 <h3 style="margin-top:1rem">Awards &amp; Recognition</h3>
-<ul><li>Engineering Excellence Award, Chorale Labs (2024)</li><li>Top 5% open-source contributor, DevGraph (2023)</li><li>Hackathon winner, Acme internal (2021)</li></ul>
-<h3 style="margin-top:1rem">Selected Achievements</h3>
-<ul><li>Reduced generated-report errors by 92% via an automated fidelity check now used in production.</li><li>Cut production incidents 60% by introducing contract testing across service boundaries.</li><li>Achieved WCAG AA compliance on a reporting module used by 12,000 accounts.</li><li>Grew an open-source theming library to 1,400 stars and 30+ contributors.</li></ul>
-<h3 style="margin-top:1rem">Portfolio Highlights</h3>
-<div class="xp"><div class="top"><span>Grounded document platform</span><span class="date">Chorale</span></div><p class="muted">Architected the end-to-end pipeline: markdown authoring, ten design profiles, fidelity checking, and multi-format export. Owned the theming system and the print-first output standard now used across the product.</p></div>
-<div class="xp"><div class="top"><span>Analytics ingestion</span><span class="date">Acme</span></div><p class="muted">Designed a typed, back-pressured pipeline handling 2M daily events with sub-40ms p99; introduced contract tests that became the team's default practice.</p></div>
-<div class="xp"><div class="top"><span>Accessible reporting module</span><span class="date">Northwind</span></div><p class="muted">Led the WCAG AA effort and the print-output redesign for a module used by 12,000 accounts.</p></div>
-<h3 style="margin-top:1rem">References</h3>
-<p class="muted">Available on request. Recent managers and collaborators at Chorale Labs and Acme Corp are happy to speak to my work.</p>
-<h3 style="margin-top:1rem">Community &amp; Interests</h3>
-<p class="muted">Maintainer of two open-source developer tools; mentor with a coding non-profit teaching teenagers to build their first web app. Outside work: long-distance cycling, film photography, and an ongoing quest for the perfect sourdough.</p>
+<ul><li>Engineering Excellence Award, Chorale Labs (2024)</li><li>Top 5% open-source contributor, DevGraph (2023)</li><li>Co-author, "Grounded Generation Reduces Fabrication", Proc. of DocML (2026)</li></ul>
 </div></div>`;
 
 const clinical = `

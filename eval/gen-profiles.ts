@@ -1,6 +1,7 @@
 /**
- * Generate one full-length (≈4–5 A4 pages) showcase HTML per topic profile, exercising
- * that profile's signature components with realistic dummy content (from profile-demos.ts).
+ * Generate one showcase HTML per topic profile, exercising that profile's signature
+ * components with realistic dummy content (from profile-demos.ts), each sized to a
+ * topic-appropriate length (invoice ~1 page … research paper ~10; see doc-pages.ts).
  * All light + print-friendly. Usage: npx tsx eval/gen-profiles.ts
  */
 import { writeFileSync } from "node:fs";
