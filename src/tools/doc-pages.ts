@@ -61,6 +61,25 @@ export function resolvePageTarget(topic: string, requested?: number | null): Res
   return { target: base.default, min: base.min, max: base.max, source: "default", note: base.note };
 }
 
+export interface LengthVerdict {
+  /** `ok` = within the topic's range; `under`/`over` = shorter/longer than it should be. */
+  status: "ok" | "under" | "over";
+  /** Human-readable guidance for the agent. */
+  message: string;
+}
+
+/** Judge a measured page count against a resolved target, with guidance on how to adjust. */
+export function assessLength(pages: number, r: ResolvedPages): LengthVerdict {
+  const want = r.source === "user" ? "requested" : "typical";
+  if (pages < r.min) {
+    return { status: "under", message: `${pages} page(s) is short of the ${want} ${r.target} (min ${r.min}). Add depth — more detail, examples, or sections that serve the topic — rather than filler or larger type.` };
+  }
+  if (pages > r.max) {
+    return { status: "over", message: `${pages} page(s) exceeds the ${want} ${r.target} (max ${r.max}). Tighten — cut repetition and non-essential sections — rather than shrinking the type or margins.` };
+  }
+  return { status: "ok", message: `${pages} page(s) is on target (${want} ${r.target}, range ${r.min}–${r.max}).` };
+}
+
 const NUM_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
   eleven: 11, twelve: 12, fifteen: 15, twenty: 20, thirty: 30, forty: 40, fifty: 50,

@@ -2,7 +2,7 @@ import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, statSync } from "node:fs";
-import { dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { marked } from "marked";
@@ -12,6 +12,7 @@ import PDFDocument from "pdfkit";
 import htmlToDocx from "html-to-docx";
 import { PDFParse } from "pdf-parse";
 import { buildHtmlDoc, injectCharts, isTheme, type ThemeName } from "./doc-themes.js";
+import { resolvePageTarget, assessLength } from "./doc-pages.js";
 import { resolveInside, rel, type ToolContext } from "./permissions.js";
 
 const MAX_BYTES = 25 * 1024 * 1024; // don't parse absurdly large binaries
@@ -172,6 +173,31 @@ async function pdfToText(abs: string): Promise<string> {
   const parser = new PDFParse({ data: new Uint8Array(readFileSync(abs)) });
   const { text } = await parser.getText();
   return text;
+}
+
+/** Count the A4 pages of a PDF file. */
+async function countPdfPages(abs: string): Promise<number> {
+  const { total } = await new PDFParse({ data: new Uint8Array(readFileSync(abs)) }).getText();
+  return total;
+}
+
+// Infer a topic/profile from a rendered HTML by its signature component classes, so
+// check_length can pick the right target without the caller naming the profile.
+const TOPIC_SIGNATURES: Array<[RegExp, string]> = [
+  [/\b(exsum|bottomline)\b/, "executive"],
+  [/\b(twocol|abstract)\b/, "academic"],
+  [/\b(clauses|confidential)\b/, "legal"],
+  [/\b(inv-head|totals)\b/, "invoice"],
+  [/\b(cvgrid|cvhead)\b/, "resume"],
+  [/\b(pt-head|flag-h)\b/, "clinical"],
+  [/\b(hero|cta)\b/, "marketing"],
+  [/\b(masthead|dropcap)\b/, "editorial"],
+  [/\b(r-meta|ingredients)\b/, "recipe"],
+  [/\b(adm|method)\b/, "techdoc"],
+];
+function inferTopic(html: string): string | null {
+  for (const [re, topic] of TOPIC_SIGNATURES) if (re.test(html)) return topic;
+  return null;
 }
 
 /** PPTX → text (dynamic import — officeparser is only needed for slides). */
@@ -395,7 +421,70 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
     },
   });
 
-  return { read_doc, write_doc, write_sheet, convert };
+  const check_length = tool({
+    description:
+      "Measure a document's page count and check it against a topic-appropriate target length. Renders the file " +
+      "(.pdf/.html/.md/.txt) to A4, counts pages, and compares to a sensible per-topic default (invoice ~1, report ~4, " +
+      "clinical 3–4, academic ~12, …). Use after writing a document to confirm it's sized right. Pass `topic` (a profile " +
+      "name) to choose the target, or `pages` for an explicit target (e.g. the user's requested count); the topic is " +
+      "inferred from the file when omitted. Returns the page count, the target, and guidance to add depth or tighten.",
+    inputSchema: z.object({
+      path: z.string().describe("Workspace-relative path to a .pdf/.html/.md/.txt document"),
+      topic: z.string().optional().describe("Topic/profile for the target length (executive, academic, legal, invoice, resume, clinical, marketing, editorial, recipe, techdoc, report, docs). Inferred from an HTML file when omitted."),
+      pages: z.number().optional().describe("An explicit target page count (e.g. the user's requested length) — overrides the topic default."),
+      theme: z.string().optional().describe("Theme to render Markdown with when measuring (default: docs)."),
+    }),
+    execute: async ({ path, topic, pages, theme }) => {
+      try {
+        const abs = resolveInside(cwd, path);
+        if (!existsSync(abs)) return { error: `not found: ${path}` };
+        const ext = extname(abs).toLowerCase();
+        let html = "";
+        let pageCount: number;
+        let engine = "pdf";
+        if (ext === ".pdf") {
+          pageCount = await countPdfPages(abs);
+        } else if (ext === ".html" || ext === ".htm" || ext === ".md" || ext === ".markdown" || ext === ".txt") {
+          const tmpPdf = join(tmpdir(), `chorale-len-${process.pid}-${basename(abs)}.pdf`);
+          if (ext === ".html" || ext === ".htm") {
+            html = readFileSync(abs, "utf8");
+            engine = (await htmlToPdf(html, tmpPdf)).engine;
+          } else {
+            engine = (await mdToPdf(readFileSync(abs, "utf8"), tmpPdf, resolveTheme(theme))).engine;
+          }
+          try {
+            pageCount = await countPdfPages(tmpPdf);
+          } finally {
+            try {
+              unlinkSync(tmpPdf);
+            } catch {
+              /* ignore */
+            }
+          }
+        } else {
+          return { error: `can't measure "${ext}" — use a .pdf, .html, .md, or .txt document` };
+        }
+        const topicKey = (topic && topic.trim()) || inferTopic(html) || "default";
+        const resolved = resolvePageTarget(topicKey, typeof pages === "number" ? pages : null);
+        const verdict = assessLength(pageCount, resolved);
+        return {
+          path: rel(cwd, abs),
+          pages: pageCount,
+          topic: topicKey,
+          target: resolved.target,
+          range: [resolved.min, resolved.max] as [number, number],
+          source: resolved.source,
+          status: verdict.status,
+          message: verdict.message,
+          engine,
+        };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  });
+
+  return { read_doc, write_doc, write_sheet, convert, check_length };
 }
 
 async function readSheetRows(abs: string, ext: string): Promise<(string | number)[][]> {
@@ -420,6 +509,6 @@ async function readSheetRows(abs: string, ext: string): Promise<(string | number
 }
 
 /** Names of document tools that only read (available in every permission mode). */
-export const READ_ONLY_DOC_TOOLS = new Set(["read_doc"]);
+export const READ_ONLY_DOC_TOOLS = new Set(["read_doc", "check_length"]);
 /** Names of document tools that write files (omitted in read-only mode). */
 export const WRITE_DOC_TOOLS = new Set(["write_doc", "write_sheet", "convert"]);

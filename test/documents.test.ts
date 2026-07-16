@@ -200,6 +200,38 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
     expect(parsePageRequest("just write the invoice")).toBeNull();
   });
 
+  it("assessLength: judges a page count against a resolved target", async () => {
+    const { resolvePageTarget, assessLength } = await import("../src/tools/doc-pages");
+    expect(assessLength(1, resolvePageTarget("invoice")).status).toBe("ok");
+    expect(assessLength(6, resolvePageTarget("invoice")).status).toBe("over"); // an invoice shouldn't be 6 pages
+    expect(assessLength(3, resolvePageTarget("academic")).status).toBe("under"); // a paper shouldn't be 3
+    expect(assessLength(12, resolvePageTarget("academic")).status).toBe("ok");
+    // a user-requested count sets an exact target
+    expect(assessLength(5, resolvePageTarget("invoice", 5)).status).toBe("ok");
+    expect(assessLength(2, resolvePageTarget("invoice", 5)).status).toBe("under");
+  });
+
+  it("check_length: measures a rendered document and checks it against the topic target", async () => {
+    // a long report → many pages; measured against the small invoice target it reads 'over'
+    const long = "# Invoice\n\n" + Array.from({ length: 40 }, (_, i) => `## Section ${i + 1}\n\n${"filler ".repeat(120)}\n`).join("\n");
+    await exec(tools.write_doc)({ path: "big.pdf", content: long, theme: "report" });
+    const r = await exec(tools.check_length)({ path: "big.pdf", topic: "invoice" });
+    expect(r.pages).toBeGreaterThan(3);
+    expect(r.topic).toBe("invoice");
+    expect(r.status).toBe("over"); // too long to be an invoice
+    // an explicit page target overrides the topic default
+    const r2 = await exec(tools.check_length)({ path: "big.pdf", pages: r.pages });
+    expect(r2.status).toBe("ok");
+    expect(r2.source).toBe("user");
+  });
+
+  it("check_length is read-only (available in read-only mode)", () => {
+    expect(READ_ONLY_DOC_TOOLS.has("check_length")).toBe(true);
+    const ro = Object.keys(buildToolSet(["read_doc", "check_length", "write_doc"], { mode: "read-only", cwd: dir }));
+    expect(ro).toContain("check_length");
+    expect(ro).not.toContain("write_doc");
+  });
+
   it("gates write tools by permission mode; read_doc always available", () => {
     const names = ["read_doc", "write_doc", "write_sheet", "convert"];
     expect(WRITE_DOC_TOOLS.has("write_doc")).toBe(true);
