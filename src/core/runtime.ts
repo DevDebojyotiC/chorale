@@ -111,8 +111,11 @@ async function reviewGateFindings(
     "Review these just-written files for correctness and security BUGS only (ignore style/nits). " +
     "Report findings in your exact format and end with a VERDICT.\n\n" +
     parts.join("\n\n");
-  const prev = process.env.CHORALE_NO_CRITIQUE;
-  process.env.CHORALE_NO_CRITIQUE = "1"; // one reviewer pass for the gate
+  // Recursion guard: run the reviewer one-pass with its own gates + critique disabled.
+  const prevCritique = process.env.CHORALE_NO_CRITIQUE;
+  const prevGates = process.env.CHORALE_NO_GATES;
+  process.env.CHORALE_NO_CRITIQUE = "1";
+  process.env.CHORALE_NO_GATES = "1";
   try {
     const res = await runAgent({ config, registry, agent: reviewer, prompt, permissionMode: "read-only", stream: false });
     log.debug(`[chorale] review gate raw: ${res.text.length} chars · ${res.text.match(/VERDICT:[^\n]*/)?.[0] ?? "(no verdict)"}\n`);
@@ -124,8 +127,10 @@ async function reviewGateFindings(
     log.info(`[chorale] review gate errored: ${err instanceof Error ? err.message : String(err)}\n`);
     return []; // a failed gate must not block the coder's result
   } finally {
-    if (prev === undefined) delete process.env.CHORALE_NO_CRITIQUE;
-    else process.env.CHORALE_NO_CRITIQUE = prev;
+    if (prevCritique === undefined) delete process.env.CHORALE_NO_CRITIQUE;
+    else process.env.CHORALE_NO_CRITIQUE = prevCritique;
+    if (prevGates === undefined) delete process.env.CHORALE_NO_GATES;
+    else process.env.CHORALE_NO_GATES = prevGates;
   }
 }
 
@@ -329,9 +334,15 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const critique = agent.selfCritique && process.env.CHORALE_NO_CRITIQUE !== "1";
   let suppressOutput = critique;
 
-  // Review gate: after this agent's code verifies clean, get a semantic second opinion
-  // from the reviewer and fix any BLOCKER/MAJOR it finds. Disable with CHORALE_NO_REVIEW_GATE=1.
-  const reviewGate = agent.reviewGate && process.env.CHORALE_NO_REVIEW_GATE !== "1";
+  // Gate recursion guard: an agent running AS a gate has its own gates disabled, so gates
+  // never recurse (depth capped at 1). Generalizes the reviewer gate's one-pass guard.
+  const gatesActive = process.env.CHORALE_NO_GATES !== "1";
+  // Review gate: an auto reviewer gate that fires after this agent's code verifies clean —
+  // a semantic second opinion that fixes any BLOCKER/MAJOR it finds. Disable with CHORALE_NO_REVIEW_GATE=1.
+  const reviewGate =
+    gatesActive &&
+    process.env.CHORALE_NO_REVIEW_GATE !== "1" &&
+    (agent.gates ?? []).some((g) => g.agent === "reviewer" && g.mode === "auto" && g.when === "post-verify");
 
   // Whether the latest attempt tried to write files — used to detect no-op turns
   // where a weak model emits write calls with empty/invalid arguments.

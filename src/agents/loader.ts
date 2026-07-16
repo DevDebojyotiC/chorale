@@ -2,6 +2,49 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import matter from "gray-matter";
 
+/**
+ * A gate: another agent this one may run as a checking/planning step (allow-listed).
+ * `auto` gates fire deterministically at a lifecycle point; `on-demand` gates are invoked
+ * by the agent itself via the `gate()` tool. An agent running AS a gate has its own gates
+ * disabled (depth capped at 1), so gates cannot recurse.
+ */
+export interface GateSpec {
+  /** Name of the agent to run as a gate (the allow-list entry). */
+  agent: string;
+  /** `auto` = runs at a lifecycle point; `on-demand` = the agent calls it via the gate() tool. */
+  mode: "auto" | "on-demand";
+  /** Lifecycle point for an `auto` gate: `pre` (before work) or `post-verify` (after code verifies clean). */
+  when: "pre" | "post-verify";
+}
+
+/**
+ * Parse the `gates` allow-list from frontmatter. Accepts either a bare agent name
+ * (string ⇒ an on-demand gate) or an object `{agent, mode?, when?}`. For backward
+ * compatibility, the legacy `reviewGate` tick-box (default on) is translated into an
+ * implicit auto reviewer gate that fires after verify.
+ */
+function parseGates(data: Record<string, unknown>): GateSpec[] {
+  const raw = Array.isArray(data.gates) ? data.gates : [];
+  const gates: GateSpec[] = [];
+  for (const g of raw) {
+    if (typeof g === "string") {
+      gates.push({ agent: g, mode: "on-demand", when: "post-verify" });
+    } else if (g && typeof g === "object" && "agent" in g) {
+      const o = g as { agent: unknown; mode?: unknown; when?: unknown };
+      gates.push({
+        agent: String(o.agent),
+        mode: o.mode === "on-demand" ? "on-demand" : "auto",
+        when: o.when === "pre" ? "pre" : "post-verify",
+      });
+    }
+  }
+  // Legacy: `reviewGate` (default on) ⇒ an implicit auto reviewer gate after verify.
+  if (data.reviewGate !== false && !gates.some((x) => x.agent === "reviewer")) {
+    gates.push({ agent: "reviewer", mode: "auto", when: "post-verify" });
+  }
+  return gates;
+}
+
 /** A parsed `agent.md`: declarative frontmatter + markdown persona (system prompt). */
 export interface AgentSpec {
   name: string;
@@ -29,6 +72,9 @@ export interface AgentSpec {
    * feed any BLOCKER/MAJOR findings back for a fix round. Catches semantic bugs verify can't.
    * Tick-box, on by default; only actually fires for agents that write + verify code (e.g. the coder). */
   reviewGate: boolean;
+  /** Gate allow-list: other agents this one may run as checking/planning steps (see GateSpec).
+   * Includes any legacy `reviewGate` translated into an implicit auto reviewer gate. */
+  gates: GateSpec[];
   /** Groundedness check (anti-hallucination): after this agent writes docs, verify that the concrete
    * claims (file paths, commands) actually exist in the workspace; loop back to fix invented ones.
    * The scribe's form of verification. Opt-in (default off; on for the scribe). */
@@ -60,6 +106,7 @@ export function loadAgent(filePath: string): AgentSpec {
     selfHeal: data.selfHeal !== false,
     selfCritique: data.selfCritique === true,
     reviewGate: data.reviewGate !== false,
+    gates: parseGates(data),
     groundCheck: data.groundCheck === true,
     selfLearn: data.selfLearn !== false,
     tier: data.tier ? String(data.tier) : undefined,
