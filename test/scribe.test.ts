@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { createFileTools, WRITE_FILE_TOOLS } from "../src/tools/fs";
 import { buildToolSet } from "../src/tools/registry";
 import { loadAgent } from "../src/agents/loader";
+import { extractPathRefs, checkGroundedness, groundednessFeedback } from "../src/core/ground";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const exec = (t: any) => (i: any) => t.execute(i, {});
@@ -47,6 +48,34 @@ describe("Phase 4 — scribe move tool (reference-safe file ops)", () => {
     const names = ["read", "move"];
     expect(Object.keys(buildToolSet(names, { mode: "read-only", cwd: dir }))).not.toContain("move");
     expect(Object.keys(buildToolSet(names, { mode: "auto-edit", cwd: dir }))).toContain("move");
+  });
+});
+
+describe("Phase 4 — scribe groundedness check (anti-hallucination)", () => {
+  it("extracts markdown link targets and backticked repo paths, not urls/anchors/bare words", () => {
+    const refs = extractPathRefs(
+      "See [guide](docs/guide.md) and [site](https://x.com) and [top](#intro). Run `src/index.ts`; use `npm test`; edit `config.yaml`.",
+    );
+    expect(refs).toContain("docs/guide.md"); // relative link
+    expect(refs).toContain("src/index.ts"); // backticked path (slash + ext)
+    expect(refs).not.toContain("https://x.com"); // url skipped
+    expect(refs).not.toContain("#intro"); // anchor skipped
+    expect(refs).not.toContain("npm test"); // not a path
+    expect(refs).not.toContain("config.yaml"); // bare filename (no slash) — too ambiguous
+  });
+
+  it("flags a referenced path that does not exist, passes one that does", () => {
+    const dir = mkdtempSync(join(tmpdir(), "chorale-ground-"));
+    try {
+      mkdirSync(join(dir, "src"), { recursive: true });
+      writeFileSync(join(dir, "src", "index.ts"), "export const x = 1;");
+      writeFileSync(join(dir, "README.md"), "Real: [x](src/index.ts). Fake: [y](src/nope.ts).");
+      const missing = checkGroundedness(["README.md"], dir);
+      expect(missing.map((m) => m.ref)).toEqual(["src/nope.ts"]);
+      expect(groundednessFeedback(missing)).toMatch(/src\/nope\.ts/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -17,6 +17,7 @@ import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 import { verifyFiles, verifyFeedback } from "./verify.js";
 import { smokeTest, smokeFeedback } from "./smoke.js";
+import { checkGroundedness, groundednessFeedback } from "./ground.js";
 import { matchDiagnoses } from "./diagnose.js";
 import { getLessonStore } from "./lessons.js";
 import { log } from "./log.js";
@@ -481,6 +482,28 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           result = await attempt(repairTemp(round));
           continue;
         }
+      }
+
+      // (1.5) Groundedness check — for doc agents (e.g. scribe). The anti-hallucination
+      // pass: verify the paths the written docs reference actually exist; fix invented ones.
+      if (agent.groundCheck && process.env.CHORALE_NO_GROUND !== "1") {
+        if (touched.size === 0) break; // a plain answer, nothing written
+        const missing = checkGroundedness([...touched], cwd);
+        if (missing.length === 0) {
+          log.info(round > 0 ? `\n[chorale] ✓ docs grounded after ${round} fix round(s)\n` : `\n[chorale] ✓ docs grounded (all referenced paths exist)\n`);
+          break;
+        }
+        if (isLast) {
+          log.info(`\n[chorale] ⚠ ${missing.length} unresolved path reference(s) remain after ${maxRounds} rounds\n`);
+          break;
+        }
+        log.info(`\n[chorale] ⚠ groundedness: ${missing.length} invented path reference(s) — asking to fix…\n`);
+        for (const m of missing.slice(0, 6)) log.info(`    ${m.file}: ${m.ref}\n`);
+        opts.onEvent?.({ type: "verify", text: `groundedness: ${missing.length} invented ref(s) — fixing` });
+        messages.push({ role: "assistant", content: result.text || "(wrote docs)" });
+        messages.push({ role: "user", content: groundednessFeedback(missing) });
+        result = await attempt(repairTemp(round));
+        continue;
       }
 
       // (2) Verify-repair — only for agents that opt in (e.g. coder).
