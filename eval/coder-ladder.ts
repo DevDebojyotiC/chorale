@@ -8,6 +8,7 @@
  * Usage: npx tsx eval/coder-ladder.ts   (needs HF_TOKEN / FIREWORKS_API_KEY)
  */
 import "dotenv/config";
+process.env.CHORALE_NO_REVIEW_GATE = "1"; // benchmarks measure the coder alone, not the review gate
 import { mkdtempSync, rmSync, readdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";

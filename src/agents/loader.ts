@@ -25,6 +25,9 @@ export interface AgentSpec {
   /** Self-critique pass: after the turn, re-examine the output and produce a corrected final answer.
    * The reviewer's form of self-healing — validates each finding + re-scans for misses. Opt-in (default off). */
   selfCritique: boolean;
+  /** Review gate: after this agent's written code verifies clean, run the `reviewer` agent on it and
+   * feed any BLOCKER/MAJOR findings back for a fix round. Catches semantic bugs verify can't. Opt-in. */
+  reviewGate: boolean;
   /** Self-learning from past runs — PARKED FOR PHASE 3; toggle recognized but inert for now. */
   selfLearn: boolean;
   /** Agent role, used by model profiles to route by tier (e.g. code, research, chat). */
@@ -51,6 +54,7 @@ export function loadAgent(filePath: string): AgentSpec {
     fewShot: data.fewShot !== false,
     selfHeal: data.selfHeal !== false,
     selfCritique: data.selfCritique === true,
+    reviewGate: data.reviewGate === true,
     selfLearn: data.selfLearn !== false,
     tier: data.tier ? String(data.tier) : undefined,
     system: content.trim(),

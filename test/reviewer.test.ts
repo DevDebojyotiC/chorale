@@ -26,6 +26,14 @@ describe("Phase 4 — reviewer agent", () => {
     expect(loadAgent(resolve("agents/coder.md")).selfCritique).toBe(false);
   });
 
+  it("wires the review gate into the coder, not the reviewer", () => {
+    // The coder gets a semantic second opinion from the reviewer after its code verifies.
+    expect(loadAgent(resolve("agents/coder.md")).reviewGate).toBe(true);
+    // The reviewer itself does not gate (no recursion) and neither do other agents.
+    expect(loadAgent(resolve("agents/reviewer.md")).reviewGate).toBe(false);
+    expect(loadAgent(resolve("agents/research.md")).reviewGate).toBe(false);
+  });
+
   it("numbers code lines 1-based for citations", () => {
     expect(numberedCode("a\nb")).toBe("  1  a\n  2  b");
   });

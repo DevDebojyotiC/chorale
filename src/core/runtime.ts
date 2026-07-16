@@ -1,13 +1,13 @@
 import { streamText, stepCountIs, NoSuchToolError } from "ai";
 import type { LanguageModelUsage, ToolSet } from "ai";
 import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, isAbsolute } from "node:path";
 import type { ChoraleConfig } from "./config.js";
 import type { Registry, ModelRef } from "./model-registry.js";
 import { resolveModelPlan } from "./model-policy.js";
 import type { AgentSpec } from "../agents/loader.js";
 import type { ChatMessage } from "./session.js";
-import { listAgents } from "../agents/loader.js";
+import { listAgents, loadAgent } from "../agents/loader.js";
 import { buildToolSet } from "../tools/registry.js";
 import type { PermissionMode } from "../tools/permissions.js";
 import { createSkillViewTool } from "../tools/skill.js";
@@ -76,6 +76,52 @@ export function securityClassesIn(text: string): Set<string> {
   const out = new Set<string>();
   for (const c of REVIEW_LESSON_CLASSES) if (c.terms.some((t) => lower.includes(t))) out.add(c.key);
   return out;
+}
+
+/**
+ * Review gate: after a coding agent's output verifies clean, ask the `reviewer` agent
+ * for a semantic second opinion on the written files and return its BLOCKER/MAJOR
+ * finding lines (empty = approved). Single-pass (no self-critique) to bound cost.
+ */
+async function reviewGateFindings(
+  files: string[],
+  cwd: string,
+  config: ChoraleConfig,
+  registry: Registry,
+): Promise<string[]> {
+  const reviewerFile = resolve(config.agents.dir, "reviewer.md");
+  if (!existsSync(reviewerFile)) return [];
+  const reviewer = loadAgent(reviewerFile);
+  const parts: string[] = [];
+  for (const f of files) {
+    const p = isAbsolute(f) ? f : resolve(cwd, f);
+    try {
+      parts.push(`### ${f}\n\`\`\`\n${readFileSync(p, "utf8")}\n\`\`\``);
+    } catch {
+      /* file gone/unreadable — skip */
+    }
+  }
+  if (parts.length === 0) return [];
+  const prompt =
+    "Review these just-written files for correctness and security BUGS only (ignore style/nits). " +
+    "Report findings in your exact format and end with a VERDICT.\n\n" +
+    parts.join("\n\n");
+  const prev = process.env.CHORALE_NO_CRITIQUE;
+  process.env.CHORALE_NO_CRITIQUE = "1"; // one reviewer pass for the gate
+  try {
+    const res = await runAgent({ config, registry, agent: reviewer, prompt, permissionMode: "read-only", stream: false });
+    log.debug(`[chorale] review gate raw: ${res.text.length} chars · ${res.text.match(/VERDICT:[^\n]*/)?.[0] ?? "(no verdict)"}\n`);
+    return res.text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => /^-?\s*\[\s*(BLOCKER|MAJOR)\s*\]/i.test(l));
+  } catch (err) {
+    log.info(`[chorale] review gate errored: ${err instanceof Error ? err.message : String(err)}\n`);
+    return []; // a failed gate must not block the coder's result
+  } finally {
+    if (prev === undefined) delete process.env.CHORALE_NO_CRITIQUE;
+    else process.env.CHORALE_NO_CRITIQUE = prev;
+  }
 }
 
 /** ~char budget guarding the model's context window (~30k tokens). */
@@ -274,6 +320,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const critique = agent.selfCritique && process.env.CHORALE_NO_CRITIQUE !== "1";
   let suppressOutput = critique;
 
+  // Review gate: after this agent's code verifies clean, get a semantic second opinion
+  // from the reviewer and fix any BLOCKER/MAJOR it finds. Disable with CHORALE_NO_REVIEW_GATE=1.
+  const reviewGate = agent.reviewGate && process.env.CHORALE_NO_REVIEW_GATE !== "1";
+
   // Whether the latest attempt tried to write files — used to detect no-op turns
   // where a weak model emits write calls with empty/invalid arguments.
   let sawWriteAttempt = false;
@@ -468,6 +518,27 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         if (smoke.length > 0) { issues = smoke; feedback = smokeFeedback(smoke); kind = "runtime (self-heal)"; }
       }
       if (issues.length === 0) {
+        // Review gate: a semantic second opinion from the reviewer on the clean code.
+        // Catches logic/security bugs that syntax + smoke can't. Bounded by the repair budget.
+        if (reviewGate && !isLast) {
+          const findings = await reviewGateFindings([...touched], cwd, config, registry);
+          if (findings.length > 0) {
+            log.info(`\n[chorale] ⚠ review gate: ${findings.length} blocking finding(s) — asking the coder to fix…\n`);
+            for (const f of findings.slice(0, 6)) log.info(`    ${f}\n`);
+            opts.onEvent?.({ type: "verify", text: `review gate: ${findings.length} finding(s) — fixing` });
+            messages.push({ role: "assistant", content: result.text || "(wrote files)" });
+            messages.push({
+              role: "user",
+              content:
+                "A code reviewer flagged these blocking issue(s) in the files you just wrote:\n" +
+                findings.join("\n") +
+                "\nFix each one by rewriting the affected file(s) with correct code. Address the root cause, not the symptom.",
+            });
+            result = await attempt(repairTemp(round));
+            continue;
+          }
+          log.info(`\n[chorale] ✓ review gate: no blocking findings\n`);
+        }
         // A diagnosed repair succeeded → the fix worked; learn it.
         if (learnStore && pending.length) { for (const p of pending) learnStore.record(agent.name, p.key, p.lesson, true); pending = []; }
         log.info(

@@ -12,6 +12,7 @@
  * Needs HF_TOKEN / FIREWORKS_API_KEY in .env for the serverless models.
  */
 import "dotenv/config";
+process.env.CHORALE_NO_REVIEW_GATE = "1"; // benchmarks measure the coder alone, not the review gate
 import { mkdtempSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, extname, resolve } from "node:path";

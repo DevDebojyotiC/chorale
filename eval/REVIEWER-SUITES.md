@@ -69,6 +69,23 @@ reviews scan for it up front. (A reviewer has no runtime ground-truth like the c
 capture is scoped to this critique-recovery signal; broader experience-learning needs a human/downstream
 feedback signal — tracked as future work.)
 
+## Production review modes
+Beyond reviewing snippets, the reviewer works the way real reviews happen:
+
+- **Diff review** (`DIFF` suite; `chorale review [--staged] [paths…]`) — judge a unified diff: catch
+  regressions the *change* introduces (dropped guard, flipped comparison, typo'd field), don't flag
+  pre-existing issues, APPROVE a correct change. gemma **3/3** regressions + correct-change APPROVEd.
+  `chorale review` runs it on your `git diff` or given files.
+- **Multi-file cross-contract** (`MULTIFILE`; `eval/reviewer-multifile.ts`) — bugs that only show *across*
+  files (wrong argument order, a field the producer doesn't return, an unawaited async result). The
+  reviewer **reads the files via its tools** and reasons across them. gemma + gpt-oss both **3/3 recall ·
+  1/1 precision**.
+- **Coder review gate** (`reviewGate` toggle, on for the coder; `eval/reviewer-gate-demo.ts`) — after the
+  coder's code verifies clean (syntax + smoke), the reviewer gives a **semantic second opinion**; any
+  BLOCKER/MAJOR loops back for a fix. Live demo: the coder wrote SQL injection → gate caught it →
+  next round the gate caught a missing `await` → final code is parameterized + awaited, clean in 2 rounds.
+  Catches the security/logic/async bugs that syntax + smoke can't. Disable with `CHORALE_NO_REVIEW_GATE=1`.
+
 ## Honest caveats
 Single-file fixtures, small N (2–4 runs/level). Term-match grading measures whether the reviewer *named* the
 defect class, not the full quality of its prose. The self-critique pass is a recall backstop with neutral

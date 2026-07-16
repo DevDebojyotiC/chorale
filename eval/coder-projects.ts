@@ -10,6 +10,7 @@
  * Usage: npx tsx eval/coder-projects.ts ["model1" "model2" ...]
  */
 import "dotenv/config";
+process.env.CHORALE_NO_REVIEW_GATE = "1"; // benchmarks measure the coder alone, not the review gate
 process.env.CHORALE_NO_LEARN = "1"; // reproducible benchmarks: no self-learning
 import { mkdtempSync, rmSync, cpSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";

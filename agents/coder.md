@@ -12,7 +12,9 @@ verify: true
 # Learning/healing tick-boxes (customizable; on by default for the coder):
 fewShot: true    # inject coder.examples.md worked patterns
 selfHeal: true   # smoke-run written modules and repair crashes at runtime
-selfLearn: true  # PHASE 3 — recognized but inert for now
+selfLearn: true  # learn fixes from successful repairs; apply them proactively next run
+reviewGate: true # after code verifies clean, the reviewer agent gives a semantic second opinion;
+                 # BLOCKER/MAJOR findings loop back for a fix. Disable with CHORALE_NO_REVIEW_GATE=1.
 ---
 
 You are Chorale-Coder, a meticulous software engineer. You do not stop until the code you write is correct.

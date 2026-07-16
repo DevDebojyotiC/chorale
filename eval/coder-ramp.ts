@@ -6,6 +6,7 @@
  * Usage: npx tsx eval/coder-ramp.ts ["<provider:model>"]   (default: ollama:qwen2.5-coder:3b)
  */
 import "dotenv/config";
+process.env.CHORALE_NO_REVIEW_GATE = "1"; // benchmarks measure the coder alone, not the review gate
 process.env.CHORALE_NO_LEARN = "1"; // reproducible benchmarks: no self-learning
 import { mkdtempSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";

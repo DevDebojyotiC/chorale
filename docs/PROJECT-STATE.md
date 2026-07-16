@@ -2,10 +2,10 @@
 
 A snapshot of what exists and works right now. Refreshed at the completion of every phase, before shipping.
 
-> **Version:** 0.2.0 (Phase 3 shipped) · **Phase:** 4 in progress (Core Agents) · **Tests:** 111 passing · **Last updated:** Phase 4 Task 1 (reviewer agent landed).
+> **Version:** 0.2.0 (Phase 3 shipped) · **Phase:** 4 in progress (Core Agents) · **Tests:** 112 passing · **Last updated:** Phase 4 Task 1 (reviewer agent landed).
 
 ## Status at a glance
-- **Runtime:** model-agnostic, production coder pipeline (salvage + verify + self-heal + diagnose-and-compensate), fallback chain with per-request timeout + retry/backoff.
+- **Runtime:** model-agnostic, production coder pipeline (salvage + verify + self-heal + diagnose-and-compensate + a **reviewer review-gate**), fallback chain with per-request timeout + retry/backoff.
 - **Agents:** `coder` (verify/fewShot/selfHeal on), `research`, `orchestrator`, `general`, `reviewer` (read-only structured review; fewShot + self-critique + self-learn on). 5 agents.
 - **Skills:** Claude-compatible SKILL.md with progressive disclosure (1 shipped). **MCP:** client connects any MCP server.
 - **Persistence:** SQLite sessions/messages/usage (WAL); per-session run transcripts; secret-redacted logs.
@@ -30,11 +30,11 @@ Full evidence: [`model-evaluation-report.md`](model-evaluation-report.md), [`eng
 - **`selfLearn`** v1 is **live** (Phase 3, Task 1): learns fixes from successful repairs, injects them proactively; `chorale lessons` to inspect. v2 (LLM reflection for novel failures) is future work.
 - Benchmarks are self-contained projects (up to a full-stack app), **not thousand-line codebases**; N is small on the hardest tiers.
 - **TUI shipped** (`chorale tui` — Ink streaming chat REPL); the React/Ink TSX is excluded from `npm run typecheck` (native TS7 crashes on React types) but is type-transpiled by `npm run build`.
-- **Reviewer agent shipped** (Phase 4, Task 1): read-only structured code review, hardened with the **four mechanisms** (per-model compensation, few-shot, self-heal via a self-critique pass, self-learn). Benchmarked across 5 suites — ramp **10/10**, precision **9/9**, multi **8/8**, polyglot **3/3**, expert security **3/3** (gemma, single-pass; see [`eval/REVIEWER-SUITES.md`](../eval/REVIEWER-SUITES.md)). Self-critique is a guarded recall safety net (recovered gpt-oss 2→3, never drops a security finding). Not yet auto-wired into the coder loop (delegate manually / via orchestrator). Files/docs, planner, test-writer, productivity agents still to come.
+- **Reviewer agent shipped** (Phase 4, Task 1): read-only structured code review, hardened with the **four mechanisms** (per-model compensation, few-shot, self-heal via a self-critique pass, self-learn). Benchmarked across 5 suites — ramp **10/10**, precision **9/9**, multi **8/8**, polyglot **3/3**, expert security **3/3** (gemma, single-pass; see [`eval/REVIEWER-SUITES.md`](../eval/REVIEWER-SUITES.md)). Self-critique is a guarded recall safety net (recovered gpt-oss 2→3, never drops a security finding). Also does **diff review** (`chorale review`), **multi-file cross-contract** review (reads files via tools, 3/3), and is **auto-wired into the coder as a review gate** (semantic second opinion after verify — live demo caught SQLi + a missing `await` and drove the fix). Files/docs, planner, test-writer, productivity agents still to come.
 - Research falls back to brittle DuckDuckGo scraping without a Tavily key (degrades gracefully, but Tavily recommended).
 
 ## Quality gates
-- `npm run typecheck` (tsc, strict; `src/tui` excluded — native TS7 crashes on React types) · `npm test` (vitest, 111) · CI on push (`.github/workflows/ci.yml`).
+- `npm run typecheck` (tsc, strict; `src/tui` excluded — native TS7 crashes on React types) · `npm test` (vitest, 112) · CI on push (`.github/workflows/ci.yml`).
 - Graders self-validated against known-good/bad reference solutions before any benchmark run.
 - **Security:** no secrets/absolute paths/`.env`/`data/` in tracked files; SQL is parameterized; shell has a catastrophic-command denylist; logs are secret-redacted. `npm audit` reports **0 vulnerabilities** (an `esbuild` override forces the patched version) and runs in CI. `selfHeal` runs model-written code — see [`SECURITY.md`](../SECURITY.md).
 
