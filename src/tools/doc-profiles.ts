@@ -132,7 +132,7 @@ h1{font-size:2.4rem;line-height:1.12;letter-spacing:-.5px}.byline{font-family:${
 const RECIPE = build(
   `--fg:#3a2f28;--ink:#4a2c1a;--muted:#8a7565;--accent:#c2410c;--accent-2:#65a30d;--bg:#ffffff;--panel:#fdf6ec;--border:#eaddc7;--body-font:${SANS};--head-font:${SERIF};--measure:52rem`,
   `h1{color:var(--accent);font-size:2.2rem}
-.r-meta{display:flex;flex-wrap:wrap;gap:.6rem;margin:.8rem 0 1.4rem}.r-meta .badge{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:.4rem .8rem;font-size:.82rem}.r-meta .badge b{color:var(--accent);display:block;font-size:1rem}
+.r-meta{display:flex;flex-wrap:wrap;gap:.6rem;margin:.8rem 0 1.4rem}.r-meta .badge{flex:1 1 0;min-width:5rem;text-align:center;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:.5rem .8rem;font-size:.82rem}.r-meta .badge b{color:var(--accent);display:block;font-size:1rem}
 .cook{display:grid;grid-template-columns:1fr 1.7fr;gap:1.6rem}
 .ingredients{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.1rem 1.3rem}.ingredients h3{color:var(--accent-2);margin-top:0}.ingredients li{list-style:none}.ingredients li::before{content:"○";color:var(--accent);margin-right:.5rem}
 .steps{counter-reset:st;list-style:none;padding:0}.steps>li{counter-increment:st;position:relative;padding-left:2.6rem;margin:1rem 0}.steps>li::before{content:counter(st);position:absolute;left:0;top:-.1rem;width:1.8rem;height:1.8rem;background:var(--accent);color:#fff;border-radius:50%;text-align:center;line-height:1.8rem;font-weight:800}
