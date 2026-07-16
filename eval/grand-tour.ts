@@ -20,6 +20,12 @@ import { loadConfig } from "../src/core/config.js";
 import { buildRegistry } from "../src/core/model-registry.js";
 import { loadAgent } from "../src/agents/loader.js";
 import { runAgent } from "../src/core/runtime.js";
+import { setLogLevel } from "../src/core/log.js";
+
+// Full visibility: stream every agent (delegated + gated), banner each one as it starts, and
+// surface every tool call / verify / gate step at debug level.
+process.env.CHORALE_TRACE = "1";
+setLogLevel("debug");
 
 const DEFAULT_PROMPT =
   "Do this as one project, in order: " +
@@ -80,7 +86,9 @@ process.stdout.write(
     `${"═".repeat(78)}\n` +
     `  A single request routed through the whole pipeline. Expected hand-offs:\n` +
     `    orchestrator ▸ planner (plan-first) ▸ research ▸ coder ▸ test-writer ▸ reviewer ▸ scribe\n` +
-    `  (the coder also runs the reviewer as an automatic post-verify gate)\n\n` +
+    `  (the coder also runs the reviewer as an automatic post-verify gate)\n` +
+    `  FULL-VISIBILITY TRACE is on: every agent streams live, banners mark each start,\n` +
+    `  and every tool call / verify / gate step is shown (debug level).\n\n` +
     `  Prompt:\n    ${prompt.replace(/\. (\d\)) /g, ".\n    $1 ")}\n` +
     `${"─".repeat(78)}\n\n`,
 );

@@ -66,7 +66,8 @@ export function createDelegateTool(ctx: DelegateContext) {
 
       process.stderr.write(`\n[delegate → ${agentName}] ${task.slice(0, 90)}\n`);
       try {
-        const res = await run({ config, registry, agent: spec, prompt: task, depth: depth + 1, stream: false, permissionMode, delegationPath: [...path, agentName] });
+        // Sub-agents run silent by default; CHORALE_TRACE streams their work live for full visibility.
+        const res = await run({ config, registry, agent: spec, prompt: task, depth: depth + 1, stream: process.env.CHORALE_TRACE === "1", permissionMode, delegationPath: [...path, agentName] });
         return { agent: agentName, model: res.model, result: res.text };
       } catch (e) {
         return { error: `Delegation to "${agentName}" failed: ${e instanceof Error ? e.message : String(e)}` };

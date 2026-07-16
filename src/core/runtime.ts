@@ -115,7 +115,7 @@ async function runGate(opts: {
   process.env.CHORALE_NO_CRITIQUE = "1"; // one pass, no self-critique
   try {
     const res = await withGateChain(opts.callerChain, () =>
-      runAgent({ config: opts.config, registry: opts.registry, agent: spec, prompt: opts.prompt, permissionMode: opts.permissionMode ?? "read-only", stream: false }),
+      runAgent({ config: opts.config, registry: opts.registry, agent: spec, prompt: opts.prompt, permissionMode: opts.permissionMode ?? "read-only", stream: process.env.CHORALE_TRACE === "1" }),
     );
     return { ok: true, text: res.text, plan: res.plan };
   } catch (err) {
@@ -287,6 +287,16 @@ export interface RunEvent {
 export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const { config, registry, agent, prompt, modelOverride } = opts;
   const stream = opts.stream ?? true;
+
+  // Full-visibility trace: announce every agent as it starts (entry / delegated / gate), indented
+  // by delegation depth, so the whole pipeline is legible on the CLI. Opt-in via CHORALE_TRACE=1.
+  if (process.env.CHORALE_TRACE === "1") {
+    const depth = opts.depth ?? 0;
+    const gateChainEnv = (process.env.CHORALE_GATE_CHAIN ?? "").split(",").filter(Boolean);
+    const via = gateChainEnv.length ? `gate of ${gateChainEnv[gateChainEnv.length - 1]}` : depth ? `delegated · depth ${depth}` : "entry";
+    const pad = "  ".repeat(depth);
+    log.info(`\n${pad}┌─────▶ agent: ${agent.name}  (${via})\n${pad}│ task: ${prompt.replace(/\s+/g, " ").slice(0, 110)}${prompt.length > 110 ? "…" : ""}\n`);
+  }
 
   const plan = resolveModelPlan(agent, config, modelOverride, opts.profile);
   const chain = [plan.model, ...plan.fallbacks];
