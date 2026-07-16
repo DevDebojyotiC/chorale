@@ -22,6 +22,9 @@ export interface AgentSpec {
   fewShot: boolean;
   /** Runtime self-healing: smoke-run written modules and repair crashes (needs verify; tick-box, default on). */
   selfHeal: boolean;
+  /** Self-critique pass: after the turn, re-examine the output and produce a corrected final answer.
+   * The reviewer's form of self-healing — validates each finding + re-scans for misses. Opt-in (default off). */
+  selfCritique: boolean;
   /** Self-learning from past runs — PARKED FOR PHASE 3; toggle recognized but inert for now. */
   selfLearn: boolean;
   /** Agent role, used by model profiles to route by tier (e.g. code, research, chat). */
@@ -47,6 +50,7 @@ export function loadAgent(filePath: string): AgentSpec {
     verify: data.verify === true,
     fewShot: data.fewShot !== false,
     selfHeal: data.selfHeal !== false,
+    selfCritique: data.selfCritique === true,
     selfLearn: data.selfLearn !== false,
     tier: data.tier ? String(data.tier) : undefined,
     system: content.trim(),

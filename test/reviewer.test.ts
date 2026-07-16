@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { resolve } from "node:path";
 import { loadAgent } from "../src/agents/loader";
+import { securityClassesIn } from "../src/core/runtime";
 import { FIXTURES, RAMP, gradeReview, numberedCode } from "../eval/reviewer-fixtures";
+import { PRECISION, MULTI, POLYGLOT, EXPERT } from "../eval/reviewer-suites";
 
 describe("Phase 4 — reviewer agent", () => {
   it("loads with a read-only inspection toolset and is delegable", () => {
@@ -12,6 +14,16 @@ describe("Phase 4 — reviewer agent", () => {
     expect(spec.tools).toEqual(expect.arrayContaining(["read", "grep", "glob", "bash"]));
     expect(spec.tools).not.toContain("write");
     expect(spec.tools).not.toContain("edit");
+  });
+
+  it("enables self-critique (its self-heal analog) and few-shot; not the coder loops", () => {
+    const spec = loadAgent(resolve("agents/reviewer.md"));
+    expect(spec.selfCritique).toBe(true);
+    expect(spec.fewShot).toBe(true);
+    expect(spec.verify).toBe(false);
+    expect(spec.selfHeal).toBe(false);
+    // selfCritique is opt-in: agents that don't set it stay off.
+    expect(loadAgent(resolve("agents/coder.md")).selfCritique).toBe(false);
   });
 
   it("numbers code lines 1-based for citations", () => {
@@ -67,5 +79,36 @@ describe("Phase 4 — reviewer difficulty ramp", () => {
       expect(gradeReview(f, perfect).caught).toHaveLength(1);
       expect(gradeReview(f, "Looks correct.").caught).toHaveLength(0);
     }
+  });
+});
+
+describe("Phase 4 — reviewer suites (precision / multi / polyglot / expert)", () => {
+  it("PRECISION fixtures are all clean controls; the rest carry keyed defects", () => {
+    expect(PRECISION.length).toBeGreaterThan(0);
+    for (const f of PRECISION) {
+      expect(f.clean).toBe(true);
+      expect(f.defects).toHaveLength(0);
+    }
+    for (const f of [...MULTI, ...POLYGLOT]) {
+      expect(f.defects.length).toBeGreaterThan(0);
+      for (const d of f.defects) expect(d.terms.length).toBeGreaterThan(0);
+    }
+    // EXPERT mixes hard defects with one adversarial clean control.
+    expect(EXPERT.some((f) => f.clean)).toBe(true);
+    expect(EXPERT.some((f) => f.defects.length > 0)).toBe(true);
+  });
+
+  it("a clean fixture with a bogus BLOCKER is scored as a false positive", () => {
+    const clean = PRECISION[0]!;
+    expect(gradeReview(clean, "All good.\nVERDICT: APPROVE").falseBlockers).toBe(0);
+    expect(gradeReview(clean, "- [BLOCKER] x:1 — nope.").falseBlockers).toBe(1);
+  });
+});
+
+describe("Phase 4 — reviewer self-learn (security-class detection)", () => {
+  it("detects named security classes for the critique → lesson signal", () => {
+    expect(securityClassesIn("This is a clear SSRF via server-side request forgery.").has("sec-ssrf")).toBe(true);
+    expect(securityClassesIn("The signature is not verified, so the token is forgeable.").has("sec-verify")).toBe(true);
+    expect(securityClassesIn("Looks fine, nicely done.").size).toBe(0);
   });
 });

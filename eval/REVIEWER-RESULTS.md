@@ -34,11 +34,12 @@ Fixed with two **general, model-agnostic** measures (not tuned to the benchmark)
 
 Precision went 0/1 → **1/1** while recall stayed **5/5** — `clamp` is now correctly `APPROVE WITH NITS`.
 
-## Difficulty ramp (L1→L10)
-Beyond this precision/recall bench, the reviewer is stress-tested on a **10-level subtlety ramp** —
-from a default-sort gotcha (L1) to prototype pollution (L10). See [`REVIEWER-RAMP.md`](REVIEWER-RAMP.md).
-Headline: after a general **security vulnerability-class checklist** was added to compensate a real gap,
-**gemma-4-31B scores a stable 10/10** (perfect ×3, ~8s, ≈$0), out-consistenting the frontier gpt-oss-120B.
+## More suites + the four mechanisms
+This is the base precision/recall bench. The reviewer is further stress-tested on:
+- a **10-level subtlety ramp** ([`REVIEWER-RAMP.md`](REVIEWER-RAMP.md)) — gemma stable **10/10** after the security checklist;
+- **precision / multi-defect / polyglot / expert** suites, plus the **four robustness mechanisms**
+  (per-model compensation, few-shot, self-heal via a self-critique pass, self-learn) — full write-up in
+  [`REVIEWER-SUITES.md`](REVIEWER-SUITES.md).
 
 ## Caveats
 Small, single-file fixtures with one planted defect each; N is small. This measures review *quality*

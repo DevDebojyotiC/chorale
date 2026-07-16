@@ -9,6 +9,7 @@ Three mechanisms, exposed as **customizable per-agent tick-boxes** (agent.md fro
 | `fewShot` | ✅ Shipped (Phase 2) | Injects `<name>.examples.md` worked patterns into the prompt (show, don't tell). |
 | `selfHeal` | ✅ Shipped (Phase 2) | Runtime self-healing: smoke-boots written servers on an injected port and smoke-imports modules, feeding runtime failures back into the repair loop. |
 | `selfLearn` | ✅ Shipped (Phase 3) | Learns fixes from its own successful repairs and injects them proactively next run. See [`self-learning.md`](self-learning.md). |
+| `selfCritique` | ✅ Shipped (Phase 4) | The reviewer's form of self-healing: a second pass that validates each finding (drops false alarms) and re-scans for misses, never dropping a security finding. Default-on for the `reviewer`; `CHORALE_NO_CRITIQUE=1` to disable. |
 
 ### Phase 3 — `selfLearn` (self-learning agents) ✅ v1 shipped
 Capture fixes from successful diagnosed repairs → per-agent `data/lessons.sqlite` → inject top proven
@@ -50,7 +51,7 @@ benchmark** (an agent you can't measure, you can't trust). Proposed lineup, orde
 
 | Task | Agent | Why here |
 |------|-------|----------|
-| 1 ✅ | **Reviewer / Verifier** | Reviews code & output (correctness / security / style) → structured findings. Compounds the quality of every other agent, so it comes first. **Shipped:** read-only static review, recall 5/5 · precision 1/1 on the planted-defect bench + **10/10 on the L1→L10 subtlety ramp** (`eval/REVIEWER-RAMP.md`); a calibration fix cured false MAJORs and a security vuln-class checklist closed a real gap — both from our end. |
+| 1 ✅ | **Reviewer / Verifier** | Reviews code & output (correctness / security / style) → structured findings. Compounds the quality of every other agent, so it comes first. **Shipped + hardened with the four mechanisms** (per-model compensation, few-shot, self-heal via a self-critique pass, self-learn): ramp 10/10 · precision 9/9 · multi 8/8 · polyglot 3/3 · expert-security 3/3 (gemma). See [`eval/REVIEWER-SUITES.md`](../eval/REVIEWER-SUITES.md). |
 | 2 | **Files / Docs specialist** | File & document work — summarize, generate/refresh docs, organize, edit prose. One of the four product pillars. |
 | 3 | **Planner / Architect** | Decomposes a complex request into a plan and delegates it; strengthens the orchestrator. |
 | 4 | **Test-writer** | Generates and runs tests — pulls the long-noted "test-execution verification" lever and compounds the coder. |

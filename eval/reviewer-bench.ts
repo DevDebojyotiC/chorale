@@ -16,6 +16,7 @@ import { runAgent } from "../src/core/runtime.js";
 import { FIXTURES, gradeReview, numberedCode, type ReviewGrade } from "./reviewer-fixtures.js";
 
 process.env.CHORALE_NO_LEARN = "1"; // reproducible: no lesson injection/capture
+process.env.CHORALE_NO_CRITIQUE = "1"; // measure raw single-pass ability (critique isolated in the A/B harness)
 
 const models = process.argv.slice(2);
 const config = loadConfig();

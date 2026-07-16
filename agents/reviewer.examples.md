@@ -40,3 +40,23 @@ VERDICT: APPROVE WITH NITS — correct concatenation; the only note is an option
 ```
 
 Note what Example 2 does **not** do: it does not raise a BLOCKER/MAJOR for "missing input validation" on values the caller controls. Correct code earns APPROVE (or APPROVE WITH NITS), never a manufactured MAJOR.
+
+## Example 3 — deliberate, documented error suppression (restraint)
+
+Code under review:
+```js
+  1  // Best-effort cache warm-up: a failed prefetch must never break startup.
+  2  export function warmCache(keys, store) {
+  3    for (const k of keys) {
+  4      void store.prefetch(k).catch(() => {});
+  5    }
+  6  }
+```
+
+Review:
+```
+- [NIT] cache.js:4 — the prefetch error is swallowed silently. Why: it's intentional (a comment says failures must not break startup), so this is fine; you may optionally record failures for observability. Fix (optional): count or debug-log prefetch failures.
+VERDICT: APPROVE WITH NITS — intentional best-effort suppression; the only note is optional observability.
+```
+
+The point of Example 3: **intentional, commented "fire-and-forget" / best-effort error suppression is correct** — flag it at most as a NIT (optionally log it), never as a BLOCKER/MAJOR "swallowed error." Distinguish a *deliberate* empty `catch` (with a comment explaining why) from an *accidental* one that hides real failures on a path that matters.

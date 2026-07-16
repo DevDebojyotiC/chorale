@@ -43,6 +43,41 @@ export function isRetriable(e: unknown): boolean {
   return /\b429\b|\b5\d\d\b|rate.?limit|overloaded|too many requests|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|fetch failed|socket hang up|network error/i.test(msg);
 }
 
+/**
+ * Self-critique instruction (used by agents with `selfCritique: true`, e.g. the reviewer).
+ * Drives a second pass that improves BOTH precision (drop unsupported severe findings) and
+ * recall (re-scan for misses) before the answer is shown.
+ */
+const SELF_CRITIQUE_PROMPT =
+  "Re-examine your review against the code. Change it ONLY where you are clearly right — a good draft should mostly survive.\n" +
+  "1. KEEP every finding that names a concrete input or condition triggering a real failure or security issue — do not delete or weaken a well-supported finding. NEVER remove or downgrade a security finding (injection, auth/authz, crypto/timing, SSRF, deserialization, path traversal, secrets) — security issues always stay. If a non-security BLOCKER/MAJOR has no concrete trigger, first try to DOWNGRADE its severity (to MINOR/NIT); only REMOVE it if it is plainly about correct, idiomatic, or intentional (commented) code, or a caller's own precondition.\n" +
+  "2. Add a NEW finding only if you are highly confident it is a real defect and can name its concrete trigger — especially an unhandled standard security class (injection, path traversal, prototype pollution, genuinely-ambiguous ReDoS, unsafe deserialization, SSRF, secrets/authz). When unsure, do NOT add it.\n" +
+  "Then output your FINAL review in the exact required format (findings most-severe first, then the VERDICT line). Output only the final review — no commentary about this revision.";
+
+/**
+ * Security classes a self-critiquing agent can learn to scan for: if the critique
+ * pass surfaces one the first draft missed, that's a sound "I overlooked this" signal
+ * (the reviewer's analog of the coder's diagnosed-repair → lesson). Recorded as a
+ * proactive lesson so future reviews check it up front.
+ */
+const REVIEW_LESSON_CLASSES: { key: string; label: string; terms: string[] }[] = [
+  { key: "sec-injection", label: "injection (SQL/command/path from unsanitized input)", terms: ["sql injection", "command injection", "path traversal"] },
+  { key: "sec-proto", label: "prototype pollution (__proto__/constructor keys from untrusted input)", terms: ["prototype pollution", "__proto__"] },
+  { key: "sec-redos", label: "ReDoS (ambiguous/overlapping regex quantifiers on untrusted input)", terms: ["redos", "catastrophic backtrack"] },
+  { key: "sec-ssrf", label: "SSRF (server-side fetch of a user-supplied URL)", terms: ["ssrf", "server-side request forgery"] },
+  { key: "sec-verify", label: "broken verification (trusting an unsigned/unverified token or payload)", terms: ["signature", "unverified", "not verified", "without verifying"] },
+  { key: "sec-timing", label: "timing attack (non-constant-time secret/MAC comparison)", terms: ["timing attack", "constant-time", "timingsafeequal"] },
+  { key: "sec-deser", label: "unsafe deserialization / dynamic eval of untrusted data", terms: ["unsafe deserialization", "eval(", "insecure deserialization"] },
+];
+
+/** Labels of security classes named in a review (case-insensitive term match). */
+export function securityClassesIn(text: string): Set<string> {
+  const lower = text.toLowerCase();
+  const out = new Set<string>();
+  for (const c of REVIEW_LESSON_CLASSES) if (c.terms.some((t) => lower.includes(t))) out.add(c.key);
+  return out;
+}
+
 /** ~char budget guarding the model's context window (~30k tokens). */
 const MAX_CONTEXT_CHARS = 120_000;
 /**
@@ -233,6 +268,12 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const system = `Current date: ${today}.\n\n${delegateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}${fewShotBlock}${lessonsBlock}`;
   const messages: ChatMessage[] = [...(opts.history ?? []), { role: "user", content: prompt }];
 
+  // Self-critique (the reviewer's form of self-healing): after the main turn, feed
+  // the draft answer back and ask the model to validate + correct it. The draft is
+  // computed silently (suppressOutput) so only the final, corrected answer is shown.
+  const critique = agent.selfCritique && process.env.CHORALE_NO_CRITIQUE !== "1";
+  let suppressOutput = critique;
+
   // Whether the latest attempt tried to write files — used to detect no-op turns
   // where a weak model emits write calls with empty/invalid arguments.
   let sawWriteAttempt = false;
@@ -307,6 +348,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
 
         const emitText = (s: string): void => {
           if (!s) return;
+          if (suppressOutput) return; // consumed (accumulated into `text`) but not shown — e.g. the draft before a self-critique pass
           if (opts.onToken) opts.onToken(s);
           else if (stream) process.stdout.write(s);
           emittedAny = true;
@@ -322,7 +364,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         text += tail;
         emitText(tail);
         if (streamError) throw streamError;
-        if (stream && !opts.onToken && text) process.stdout.write("\n");
+        if (stream && !opts.onToken && text && !suppressOutput) process.stdout.write("\n");
 
         const usage = await Promise.resolve(result.totalUsage).catch(() => undefined);
         if (usage) {
@@ -448,6 +490,37 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       // Remember which diagnoses we're betting on, to score next round.
       if (learnStore) pending = matchDiagnoses(issues.map((i) => i.message)).map((d) => ({ key: d.key, lesson: d.hint }));
       result = await attempt(repairTemp(round));
+    }
+
+    // Self-critique pass: re-examine the draft, prune unsupported severe findings
+    // (precision) and re-scan for misses (recall), then emit the corrected answer.
+    if (critique && result.text.trim()) {
+      const draft = result.text;
+      messages.push({ role: "assistant", content: draft });
+      messages.push({ role: "user", content: SELF_CRITIQUE_PROMPT });
+      opts.onEvent?.({ type: "verify", text: "self-critique — validating findings" });
+      log.debug(`\n[chorale] self-critique pass…\n`);
+      suppressOutput = false; // the corrected answer is the visible output
+      try {
+        result = await attempt();
+        // Self-learn: a security class the critique surfaced but the draft missed is a
+        // sound "I overlooked this" signal — record it so future reviews scan for it.
+        if (learnStore) {
+          const before = securityClassesIn(draft);
+          for (const cls of REVIEW_LESSON_CLASSES) {
+            if (!before.has(cls.key) && securityClassesIn(result.text).has(cls.key)) {
+              learnStore.record(agent.name, cls.key, `Always scan for ${cls.label} — a first-pass review missed it before.`, true);
+            }
+          }
+        }
+      } catch (err) {
+        // Whole chain failed on the critique call — keep the draft rather than lose the answer.
+        const msg = err instanceof Error ? err.message : String(err);
+        log.info(`\n[chorale] self-critique pass failed (${msg}) — keeping the draft answer\n`);
+        if (opts.onToken) opts.onToken(draft);
+        else if (stream) process.stdout.write(draft + "\n");
+        result = { ...result, text: draft };
+      }
     }
 
     // Report cumulative usage across all attempts (undefined if no provider reported any).

@@ -5,6 +5,7 @@
  * Run: npx tsx eval/reviewer-selftest.ts
  */
 import { FIXTURES, RAMP, gradeReview } from "./reviewer-fixtures.js";
+import { PRECISION, MULTI, POLYGLOT, EXPERT } from "./reviewer-suites.js";
 
 let ok = true;
 const expect = (label: string, got: string | number, want: string | number): void => {
@@ -61,6 +62,20 @@ for (const f of defectFixtures) {
     const perfect = `- [MAJOR] ${f.id}.js:${f.defects[0]!.line} — ${f.defects[0]!.terms[0]} here.`;
     expect(`ramp perfect catches ${f.id}`, gradeReview(f, perfect).caught.length, 1);
     expect(`ramp empty misses ${f.id}`, gradeReview(f, "Looks fine to me.").caught.length, 0);
+  }
+}
+
+// 7) Suites: PRECISION clean-controls flag bogus severe findings; defect suites credit by terms.
+{
+  for (const f of PRECISION) {
+    expect(`precision ${f.id} is a clean control`, f.clean ? "clean" : "defect", "clean");
+    expect(`precision ${f.id} no false positive on APPROVE`, gradeReview(f, "Correct.\nVERDICT: APPROVE").falseBlockers, 0);
+    expect(`precision ${f.id} flags a bogus BLOCKER`, gradeReview(f, "- [BLOCKER] x:1 — bogus.").falseBlockers, 1);
+  }
+  for (const f of [...MULTI, ...POLYGLOT, ...EXPERT.filter((x) => !x.clean)]) {
+    const perfect = f.defects.map((d) => `- [MAJOR] x:${d.line} — ${d.terms[0]}.`).join("\n");
+    expect(`suite perfect catches all of ${f.id}`, `${gradeReview(f, perfect).caught.length}/${f.defects.length}`, `${f.defects.length}/${f.defects.length}`);
+    expect(`suite empty misses ${f.id}`, gradeReview(f, "No issues.").caught.length, 0);
   }
 }
 

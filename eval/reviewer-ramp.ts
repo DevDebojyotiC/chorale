@@ -19,7 +19,8 @@ import { loadAgent } from "../src/agents/loader.js";
 import { runAgent } from "../src/core/runtime.js";
 import { RAMP, gradeReview, numberedCode } from "./reviewer-fixtures.js";
 
-process.env.CHORALE_NO_LEARN = "1"; // reproducible: no lesson injection/capture
+process.env.CHORALE_NO_LEARN = "1"; // single-pass base measurement
+process.env.CHORALE_NO_CRITIQUE = "1"; // reproducible: no lesson injection/capture
 
 const DEFAULT_MODELS = ["hf:google/gemma-4-31B-it", "fireworks:accounts/fireworks/models/gpt-oss-120b"];
 const models = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT_MODELS;
