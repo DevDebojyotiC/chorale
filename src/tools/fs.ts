@@ -1,8 +1,8 @@
 import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
-import { dirname, join, extname } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, existsSync, statSync } from "node:fs";
+import { dirname, join, extname, basename } from "node:path";
 import { resolveInside, rel, SKIP_DIRS, type ToolContext } from "./permissions.js";
 
 const CODE_EXT = new Set([
@@ -44,6 +44,32 @@ function globToRegExp(pattern: string): RegExp {
     else re += c;
   }
   return new RegExp(`^${re}$`);
+}
+
+/**
+ * Find files that reference `needle` (a path or basename) so a move can be made
+ * reference-safe — the caller updates the links the move would otherwise break.
+ */
+function findReferences(cwd: string, needle: string, self: string): Array<{ file: string; line: number; text: string }> {
+  const base = basename(needle);
+  const out: Array<{ file: string; line: number; text: string }> = [];
+  for (const f of walkFiles(cwd, resolveInside(cwd, "."), 5000)) {
+    if (f === self) continue;
+    let content: string;
+    try {
+      content = readFileSync(resolveInside(cwd, f), "utf8");
+    } catch {
+      continue;
+    }
+    const lines = content.split("\n");
+    for (let i = 0; i < lines.length && out.length < 100; i++) {
+      if (lines[i]!.includes(needle) || lines[i]!.includes(base)) {
+        out.push({ file: f, line: i + 1, text: lines[i]!.slice(0, 200) });
+      }
+    }
+    if (out.length >= 100) break;
+  }
+  return out;
 }
 
 /** Recursively list workspace-relative file paths, skipping heavy dirs. */
@@ -156,6 +182,34 @@ export function createFileTools(ctx: ToolContext): ToolSet {
     },
   });
 
+  const move = tool({
+    description:
+      "Move or rename a file within the workspace. Refuses if the destination exists. Returns `references` — " +
+      "other files that mention the old path/name — so you can update those links (reference-safe move).",
+    inputSchema: z.object({
+      from: z.string().describe("Existing workspace-relative file path"),
+      to: z.string().describe("New workspace-relative file path"),
+    }),
+    execute: async ({ from, to }) => {
+      try {
+        const src = resolveInside(cwd, from);
+        const dst = resolveInside(cwd, to);
+        if (!existsSync(src)) return { error: `source not found: ${from}` };
+        if (statSync(src).isDirectory()) return { error: `"${from}" is a directory; move files individually` };
+        if (existsSync(dst)) return { error: `destination already exists: ${to}` };
+        mkdirSync(dirname(dst), { recursive: true });
+        renameSync(src, dst);
+        const fromRel = rel(cwd, src);
+        const toRel = rel(cwd, dst);
+        ctx.touched?.add(toRel);
+        const references = findReferences(cwd, fromRel, toRel);
+        return { from: fromRel, to: toRel, moved: true, references };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  });
+
   const ls = tool({
     description: "List a directory in the workspace. Set recursive to see a file tree.",
     inputSchema: z.object({ path: z.string().optional(), recursive: z.boolean().optional() }),
@@ -229,10 +283,10 @@ export function createFileTools(ctx: ToolContext): ToolSet {
     },
   });
 
-  return { read, write, edit, multi_edit, ls, glob, grep };
+  return { read, write, edit, multi_edit, move, ls, glob, grep };
 }
 
 /** Names of read-only file tools (available in every mode). */
 export const READ_ONLY_FILE_TOOLS = new Set(["read", "ls", "glob", "grep"]);
 /** Names of mutating file tools (omitted in read-only mode). */
-export const WRITE_FILE_TOOLS = new Set(["write", "edit", "multi_edit"]);
+export const WRITE_FILE_TOOLS = new Set(["write", "edit", "multi_edit", "move"]);

@@ -29,6 +29,10 @@ export interface AgentSpec {
    * feed any BLOCKER/MAJOR findings back for a fix round. Catches semantic bugs verify can't.
    * Tick-box, on by default; only actually fires for agents that write + verify code (e.g. the coder). */
   reviewGate: boolean;
+  /** Groundedness check (anti-hallucination): after this agent writes docs, verify that the concrete
+   * claims (file paths, commands) actually exist in the workspace; loop back to fix invented ones.
+   * The scribe's form of verification. Opt-in (default off; on for the scribe). */
+  groundCheck: boolean;
   /** Self-learning from past runs — PARKED FOR PHASE 3; toggle recognized but inert for now. */
   selfLearn: boolean;
   /** Agent role, used by model profiles to route by tier (e.g. code, research, chat). */
@@ -56,6 +60,7 @@ export function loadAgent(filePath: string): AgentSpec {
     selfHeal: data.selfHeal !== false,
     selfCritique: data.selfCritique === true,
     reviewGate: data.reviewGate !== false,
+    groundCheck: data.groundCheck === true,
     selfLearn: data.selfLearn !== false,
     tier: data.tier ? String(data.tier) : undefined,
     system: content.trim(),
