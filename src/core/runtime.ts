@@ -19,6 +19,7 @@ import { verifyFiles, verifyFeedback } from "./verify.js";
 import { smokeTest, smokeFeedback } from "./smoke.js";
 import { checkGroundedness, groundednessFeedback, checkFactsPreserved, meaningFeedback, checkDesignFidelity, fidelityFeedback } from "./ground.js";
 import { matchDiagnoses } from "./diagnose.js";
+import { chainWith, canRunGate, withGateChain } from "./gate.js";
 import { getLessonStore } from "./lessons.js";
 import { log } from "./log.js";
 import { parseTextToolCalls, extractCodeBlocks, inferFilename, ensureExports, type ParsedToolCall } from "./tool-call-salvage.js";
@@ -111,11 +112,10 @@ async function reviewGateFindings(
     "Review these just-written files for correctness and security BUGS only (ignore style/nits). " +
     "Report findings in your exact format and end with a VERDICT.\n\n" +
     parts.join("\n\n");
-  // Recursion guard: run the reviewer one-pass with its own gates + critique disabled.
+  // One reviewer pass (no self-critique). Loop prevention is handled by the gate chain the
+  // caller advanced (withGateChain): the reviewer's own gates see it in the chain already.
   const prevCritique = process.env.CHORALE_NO_CRITIQUE;
-  const prevGates = process.env.CHORALE_NO_GATES;
   process.env.CHORALE_NO_CRITIQUE = "1";
-  process.env.CHORALE_NO_GATES = "1";
   try {
     const res = await runAgent({ config, registry, agent: reviewer, prompt, permissionMode: "read-only", stream: false });
     log.debug(`[chorale] review gate raw: ${res.text.length} chars · ${res.text.match(/VERDICT:[^\n]*/)?.[0] ?? "(no verdict)"}\n`);
@@ -129,8 +129,6 @@ async function reviewGateFindings(
   } finally {
     if (prevCritique === undefined) delete process.env.CHORALE_NO_CRITIQUE;
     else process.env.CHORALE_NO_CRITIQUE = prevCritique;
-    if (prevGates === undefined) delete process.env.CHORALE_NO_GATES;
-    else process.env.CHORALE_NO_GATES = prevGates;
   }
 }
 
@@ -334,15 +332,16 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const critique = agent.selfCritique && process.env.CHORALE_NO_CRITIQUE !== "1";
   let suppressOutput = critique;
 
-  // Gate recursion guard: an agent running AS a gate has its own gates disabled, so gates
-  // never recurse (depth capped at 1). Generalizes the reviewer gate's one-pass guard.
-  const gatesActive = process.env.CHORALE_NO_GATES !== "1";
+  // Gate chain including this agent — used to forbid re-entering any agent already active
+  // in the lineage (no loops), and to bound depth. See src/core/gate.ts.
+  const myGateChain = chainWith(agent.name);
   // Review gate: an auto reviewer gate that fires after this agent's code verifies clean —
   // a semantic second opinion that fixes any BLOCKER/MAJOR it finds. Disable with CHORALE_NO_REVIEW_GATE=1.
+  // Only fires if running "reviewer" wouldn't loop back into an agent already in the chain.
   const reviewGate =
-    gatesActive &&
     process.env.CHORALE_NO_REVIEW_GATE !== "1" &&
-    (agent.gates ?? []).some((g) => g.agent === "reviewer" && g.mode === "auto" && g.when === "post-verify");
+    (agent.gates ?? []).some((g) => g.agent === "reviewer" && g.mode === "auto" && g.when === "post-verify") &&
+    canRunGate(myGateChain, "reviewer").ok;
 
   // Whether the latest attempt tried to write files — used to detect no-op turns
   // where a weak model emits write calls with empty/invalid arguments.
@@ -595,7 +594,9 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         // Review gate: a semantic second opinion from the reviewer on the clean code.
         // Catches logic/security bugs that syntax + smoke can't. Bounded by the repair budget.
         if (reviewGate && !isLast) {
-          const findings = await reviewGateFindings([...touched], cwd, config, registry);
+          // Advance the gate chain to include this agent so the reviewer (and anything it
+          // gates) cannot re-enter an agent already in the lineage.
+          const findings = await withGateChain(myGateChain, () => reviewGateFindings([...touched], cwd, config, registry));
           if (findings.length > 0) {
             log.info(`\n[chorale] ⚠ review gate: ${findings.length} blocking finding(s) — asking the coder to fix…\n`);
             for (const f of findings.slice(0, 6)) log.info(`    ${f}\n`);
