@@ -247,6 +247,7 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
         else if (IMAGE_EXT.has(ext)) content = await imageToText(abs);
         else if (ext === ".html" || ext === ".htm") content = htmlToText(readFileSync(abs, "utf8"));
         else content = readFileSync(abs, "utf8"); // csv/tsv/json/yaml/toml/md/txt
+        ctx.reads?.push(content.slice(0, TEXT_MAX));
         return { path: rel(cwd, abs), format: ext.slice(1) || "txt", content: content.slice(0, TEXT_MAX), truncated: content.length > TEXT_MAX };
       } catch (e) {
         return { error: e instanceof Error ? e.message : String(e) };

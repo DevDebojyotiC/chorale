@@ -108,6 +108,7 @@ export function createFileTools(ctx: ToolContext): ToolSet {
       try {
         const abs = resolveInside(cwd, path);
         const text = readFileSync(abs, "utf8");
+        ctx.reads?.push(text.slice(0, READ_MAX));
         return { path: rel(cwd, abs), content: text.slice(0, READ_MAX), truncated: text.length > READ_MAX };
       } catch (e) {
         return { error: e instanceof Error ? e.message : String(e) };

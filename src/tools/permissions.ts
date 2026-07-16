@@ -20,6 +20,9 @@ export interface ToolContext {
   /** If provided, edit tools snapshot a file's ORIGINAL content here the first time they change it
    * (for the meaning-preservation check — facts present before an edit must survive it). */
   originals?: Map<string, string>;
+  /** If provided, read tools append the content they return here (the "source of truth" this turn) —
+   * used by the design-mode fidelity check to catch fabricated data in a model-authored artifact. */
+  reads?: string[];
 }
 
 /** Resolve `p` against the workspace root and refuse if it escapes it. */

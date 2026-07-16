@@ -17,7 +17,7 @@ import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 import { verifyFiles, verifyFeedback } from "./verify.js";
 import { smokeTest, smokeFeedback } from "./smoke.js";
-import { checkGroundedness, groundednessFeedback, checkFactsPreserved, meaningFeedback } from "./ground.js";
+import { checkGroundedness, groundednessFeedback, checkFactsPreserved, meaningFeedback, checkDesignFidelity, fidelityFeedback } from "./ground.js";
 import { matchDiagnoses } from "./diagnose.js";
 import { getLessonStore } from "./lessons.js";
 import { log } from "./log.js";
@@ -261,8 +261,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const touched = new Set<string>();
   // Original content of edited files (for the scribe's meaning-preservation check).
   const originals = new Map<string, string>();
+  // Content the agent reads this turn (the "source of truth" for the design-fidelity check).
+  const reads: string[] = [];
   const tools: ToolSet = {
-    ...buildToolSet(agent.tools, { mode: permissionMode, cwd, touched, originals }),
+    ...buildToolSet(agent.tools, { mode: permissionMode, cwd, touched, originals, reads }),
     ...mcp.tools,
   };
   if (agentSkills.length > 0) tools.skill_view = createSkillViewTool(agentSkills);
@@ -499,12 +501,25 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         // Meaning-preservation is intent-sensitive (an intended edit legitimately changes a fact),
         // so nudge at most ONCE and let the model decide, rather than fighting an intentional change.
         const dropped = meaningWarned ? [] : checkFactsPreserved(originals, cwd);
-        if (missing.length === 0 && dropped.length === 0) {
+        // Design-fidelity: if the agent read source(s) then authored an HTML artifact, that bespoke
+        // document must not invent data numbers absent from the source. (Design mode's grounded edge.)
+        const fabricated: string[] = [];
+        if (reads.length) {
+          for (const f of [...touched].filter((p) => /\.html?$/i.test(p))) {
+            try {
+              fabricated.push(...checkDesignFidelity(reads, readFileSync(resolve(cwd, f), "utf8")).fabricated);
+            } catch {
+              /* unreadable — skip */
+            }
+          }
+        }
+        const fab = [...new Set(fabricated)];
+        if (missing.length === 0 && dropped.length === 0 && fab.length === 0) {
           log.info(round > 0 ? `\n[chorale] ✓ docs grounded after ${round} fix round(s)\n` : `\n[chorale] ✓ docs grounded (references exist, facts preserved)\n`);
           break;
         }
         if (isLast) {
-          log.info(`\n[chorale] ⚠ ${missing.length} invented ref(s) + ${dropped.length} dropped fact(s) remain after ${maxRounds} rounds\n`);
+          log.info(`\n[chorale] ⚠ ${missing.length} invented ref(s) + ${dropped.length} dropped fact(s) + ${fab.length} fabricated number(s) remain after ${maxRounds} rounds\n`);
           break;
         }
         const parts: string[] = [];
@@ -519,7 +534,12 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           parts.push(meaningFeedback(dropped));
           meaningWarned = true; // nudge once; don't re-fight an intentional change
         }
-        opts.onEvent?.({ type: "verify", text: `docs: ${missing.length + dropped.length} issue(s) — fixing` });
+        if (fab.length) {
+          log.info(`\n[chorale] ⚠ design fidelity: ${fab.length} fabricated number(s) not in the source — asking to fix…\n`);
+          for (const n of fab.slice(0, 8)) log.info(`    ${n}\n`);
+          parts.push(fidelityFeedback({ fabricated: fab }));
+        }
+        opts.onEvent?.({ type: "verify", text: `docs: ${missing.length + dropped.length + fab.length} issue(s) — fixing` });
         messages.push({ role: "assistant", content: result.text || "(wrote docs)" });
         messages.push({ role: "user", content: parts.join("\n\n") });
         result = await attempt(repairTemp(round));

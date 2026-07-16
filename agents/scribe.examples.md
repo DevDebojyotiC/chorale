@@ -46,3 +46,27 @@ Task: rename `guide.md` → `docs/user-guide.md`.
 3. `grep` for the old name to confirm nothing still points at it.
 
 Never leave a dangling link, and never delete the file instead of moving it.
+
+## Example 4 — a bespoke designed HTML report (design mode)
+
+After reading a source that says *"Gemma scored 9, gpt-oss scored 10"*, author a self-contained styled report — every number grounded:
+
+```html
+<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
+:root{--accent:#4f46e5;--fg:#1f2937;--bg:#fff;--panel:#f7f8fa;--border:#e5e7eb}
+@media (prefers-color-scheme:dark){:root{--fg:#e5e7eb;--bg:#0f1117;--panel:#171a21;--border:#2a2f3a}}
+body{font-family:system-ui,sans-serif;color:var(--fg);background:var(--bg);max-width:52rem;margin:0 auto;padding:2rem}
+.cover{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:2rem;border-radius:10px}
+table{border-collapse:collapse;width:100%}thead th{background:var(--accent);color:#fff}
+td,th{padding:.5rem;border-top:1px solid var(--border)}tbody tr:nth-child(even){background:var(--panel)}
+.bar{height:1rem;background:var(--accent);border-radius:5px}
+@media print{.cover{-webkit-print-color-adjust:exact}}
+</style></head><body>
+<div class="cover"><h1>Model Benchmark</h1></div>
+<table><thead><tr><th>Model</th><th>Score</th></tr></thead>
+<tbody><tr><td>Gemma</td><td>9</td></tr><tr><td>gpt-oss</td><td>10</td></tr></tbody></table>
+<div class="bar" style="width:90%"></div><div class="bar" style="width:100%"></div>
+</body></html>
+```
+
+The scores `9` and `10` come straight from the source. The design is bespoke; the data is grounded — that is the point of design mode.

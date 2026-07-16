@@ -13,6 +13,7 @@ import {
   groundednessFeedback,
   extractFacts,
   checkFactsPreserved,
+  checkDesignFidelity,
 } from "../src/core/ground";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,6 +126,16 @@ describe("Phase 4 — scribe groundedness check (anti-hallucination)", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("design fidelity flags a fabricated number, allows grounded + dropped ones", () => {
+    const source = ["Gemma scored 9 and gpt-oss scored 10 on the port 8080 test."];
+    // Artifact uses only grounded numbers (and drops one) → clean.
+    expect(checkDesignFidelity(source, "<h1>Report</h1><p>Gemma 9, gpt-oss 10.</p>").fabricated).toEqual([]);
+    // Artifact invents a statistic not in the source → flagged.
+    expect(checkDesignFidelity(source, "<p>Revenue grew 4200%.</p>").fabricated).toEqual(["4200"]);
+    // CSS numbers in <style> are not counted (only visible text).
+    expect(checkDesignFidelity(source, "<style>.x{width:1234px}</style><p>Gemma 9</p>").fabricated).toEqual([]);
   });
 
   it("extractFacts captures numbers, backticked tokens, and urls", () => {

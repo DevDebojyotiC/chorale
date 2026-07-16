@@ -215,6 +215,50 @@ export function checkFactsPreserved(originals: Map<string, string>, cwd: string)
   return dropped;
 }
 
+// ---- design-mode fidelity (a model-authored artifact must not fabricate data) ----
+
+const stripHtml = (s: string): string =>
+  s
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z#0-9]+;/gi, " ");
+
+/** Distinctive numbers (≥2 digits or a decimal — skips trivial 1–9 list markers). */
+function distinctiveNumbers(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of text.replace(/,(?=\d)/g, "").matchAll(/(?<![\w.])\d+(?:\.\d+)?/g)) {
+    const n = m[0]!;
+    if (n.length >= 2 || n.includes(".")) out.add(n);
+  }
+  return out;
+}
+
+export interface DesignFidelity {
+  fabricated: string[]; // numbers in the artifact that don't appear in any source
+}
+
+/**
+ * Verify a model-authored artifact (bespoke HTML/text) invents no data: every distinctive
+ * number in its VISIBLE text must be present in the source(s) it was built from. Dropped
+ * source numbers are allowed (a report summarizes); fabricated ones are not.
+ */
+export function checkDesignFidelity(sources: string[], artifactHtml: string): DesignFidelity {
+  if (!sources.length) return { fabricated: [] };
+  const src = distinctiveNumbers(sources.join("\n"));
+  const art = distinctiveNumbers(stripHtml(artifactHtml));
+  return { fabricated: [...art].filter((n) => !src.has(n)) };
+}
+
+export function fidelityFeedback(f: DesignFidelity): string {
+  return (
+    "Design fidelity check: these numbers appear in the document you produced but are NOT in the source material:\n" +
+    f.fabricated.map((n) => `- ${n}`).join("\n") +
+    "\nRemove or correct each — a designed report may restyle and summarize, but must NEVER invent a statistic, " +
+    "figure, or value that isn't grounded in the source."
+  );
+}
+
 export function meaningFeedback(dropped: DroppedFact[]): string {
   const byFile = new Map<string, string[]>();
   for (const d of dropped) {
