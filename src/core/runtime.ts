@@ -15,6 +15,7 @@ import { createDelegateTool } from "../tools/delegate.js";
 import { createGateTool } from "../tools/gate-tool.js";
 import { createPlanTool } from "../tools/plan-tool.js";
 import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./plan.js";
+import { executePlan, type StepRunner } from "./plan-exec.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
@@ -404,6 +405,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   // A trivial decomposition injects nothing (Approach B: the task just proceeds inline). Loop-
   // guarded and cost-degrading: a refused/failed pre-gate is recorded as an unmet need, not fatal.
   let preGateBlock = "";
+  let preGatePlan: Plan | null = null;
   for (const pg of (agent.gates ?? []).filter((g) => g.mode === "auto" && g.when === "pre")) {
     const decision = canRunGate(myGateChain, pg.agent);
     if (!decision.ok) {
@@ -417,6 +419,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     }
     if (r.plan) {
       if (r.plan.complexity === "complex") {
+        preGatePlan = r.plan;
         preGateBlock += `## Plan to follow\nA ${pg.agent} decomposed this task. Execute these steps in order, respecting the dependencies; treat each step's "done when" as its acceptance criterion:\n\n${formatPlan(r.plan)}\n\n`;
         log.info(`\n[chorale] ✓ plan-first: injected a ${r.plan.steps.length}-step plan\n`);
       } else {
@@ -427,8 +430,48 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     }
   }
 
+  // Deterministic plan execution (lever #1, opt-in via CHORALE_PLAN_EXEC): rather than trusting the
+  // model to delegate every step of a big plan inside one turn (which overflows its budget and stops
+  // partway), run EVERY step in dependency order, delegating each to its assigned specialist and
+  // threading prior results forward. The agent's own turn then just synthesizes the final answer.
+  let planExecBlock = "";
+  if (process.env.CHORALE_PLAN_EXEC === "1" && preGatePlan && agent.tools.includes("delegate")) {
+    preGateBlock = ""; // the plan is being executed for real — don't also tell the model to do it
+    const stepRunner: StepRunner = async (agentName, task) => {
+      const file = resolve(config.agents.dir, `${agentName}.md`);
+      if (!existsSync(file)) return { ok: false, text: `unknown specialist "${agentName}"` };
+      try {
+        const spec = loadAgent(file);
+        const res = await runAgent({
+          config,
+          registry,
+          agent: spec,
+          prompt: task,
+          permissionMode,
+          stream: process.env.CHORALE_TRACE === "1",
+          depth: (opts.depth ?? 0) + 1,
+          delegationPath: [...(opts.delegationPath ?? []), agentName],
+        });
+        return { ok: true, text: res.text };
+      } catch (e) {
+        return { ok: false, text: e instanceof Error ? e.message : String(e) };
+      }
+    };
+    log.info(`\n[chorale] ▶ executing ${preGatePlan.steps.length}-step plan deterministically…\n`);
+    const results = await executePlan(preGatePlan, stepRunner, {
+      goal: prompt,
+      onStep: (r, i, total) => log.info(`[chorale]   step ${i + 1}/${total} [${r.agent}] ${r.title} — ${r.ok ? "✓" : "✗ " + r.text.slice(0, 80)}\n`),
+    });
+    const failed = results.filter((r) => !r.ok).length;
+    log.info(`[chorale] ✓ plan executed: ${results.length - failed}/${results.length} steps ok\n`);
+    planExecBlock =
+      "## The plan has already been executed by specialists\nEach step below was carried out. Write the user a concise final summary of what was built (and note any failed step); do NOT re-delegate or redo the work.\n\n" +
+      results.map((r) => `- ${r.id} [${r.agent}] ${r.title}: ${r.ok ? r.text.replace(/\s+/g, " ").slice(0, 300) : "FAILED — " + r.text.slice(0, 200)}`).join("\n") +
+      "\n\n";
+  }
+
   const today = new Date().toISOString().slice(0, 10);
-  const system = `Current date: ${today}.\n\n${preGateBlock}${delegateBlock}${gateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}${fewShotBlock}${lessonsBlock}`;
+  const system = `Current date: ${today}.\n\n${planExecBlock}${preGateBlock}${delegateBlock}${gateBlock}${renderSkillsForPrompt(agentSkills)}${agent.system}${fewShotBlock}${lessonsBlock}`;
   const messages: ChatMessage[] = [...(opts.history ?? []), { role: "user", content: prompt }];
 
   // Self-critique (the reviewer's form of self-healing): after the main turn, feed
