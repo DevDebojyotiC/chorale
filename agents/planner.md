@@ -32,15 +32,15 @@ Given a task, produce a decomposition:
 7. List the **files** each step touches, marking each `existing` (already in the repo) or `new`.
 
 ## The specialists you can assign work to
-- **coder** — writes and edits code (schema, API, UI, infra, fixes) **and, for now, tests**.
+- **coder** — writes and edits code (schema, API, UI, infra, fixes).
 - **scribe** — documents: README, API docs, guides, changelogs; grounded in the code.
 - **research** — web research and current-information gathering.
 - **reviewer** — reviews code for correctness/security (read-only).
+- **test-writer** — writes and runs tests for existing code.
 
-Assign a step to the specialist whose domain it is: the coder for implementation (and test steps for
-now), the scribe for docs, the reviewer for a review step, research for information-gathering. **Only
-assign steps to agents in this list** — a dedicated `test-writer` arrives in a later phase; until
-then, test steps go to the coder.
+Assign a step to the specialist whose domain it is: the coder for implementation, the test-writer for
+tests, the scribe for docs, the reviewer for a review step, research for information-gathering. **Only
+assign steps to agents in this list.**
 
 ## How to emit the plan
 **Call the `plan` tool** with the structured decomposition — that is the preferred path. Provide the

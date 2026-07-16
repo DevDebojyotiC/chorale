@@ -44,7 +44,7 @@ export interface PlanFixture {
 }
 
 /** The specialists a plan may currently assign to (existing, delegable agents). */
-export const ROSTER = ["coder", "scribe", "research", "reviewer"];
+export const ROSTER = ["coder", "scribe", "research", "reviewer", "test-writer"];
 
 export const FIXTURES: PlanFixture[] = [
   {
@@ -52,7 +52,7 @@ export const FIXTURES: PlanFixture[] = [
     goal: "Build a small library management app: catalog books, register members, and check books in and out.",
     expectComplexity: "complex",
     requiredLayers: ["schema", "api", "ui", "tests", "docs"],
-    requiredAgents: ["coder", "scribe"],
+    requiredAgents: ["coder", "scribe", "test-writer"],
     repo: { "package.json": JSON.stringify({ name: "library", version: "0.1.0" }, null, 2) + "\n" },
     gold: {
       summary: "Build a library management app (catalog, members, checkout).",
@@ -60,7 +60,7 @@ export const FIXTURES: PlanFixture[] = [
         { title: "Design the data model", agent: "coder", layer: "schema", acceptance: "books/members/loans tables + a migration exist", files: [{ path: "src/db/schema.ts", status: "new" }] },
         { title: "CRUD + checkout/return endpoints", agent: "coder", layer: "api", dependsOn: [1], acceptance: "endpoints return correct status codes; checkout decrements availability", files: [{ path: "src/api/index.ts", status: "new" }] },
         { title: "Catalog + loan UI", agent: "coder", layer: "ui", dependsOn: [2], acceptance: "list, search and checkout screens render and call the API", files: [{ path: "src/ui/App.tsx", status: "new" }] },
-        { title: "API tests", agent: "coder", layer: "tests", dependsOn: [2], acceptance: "happy-path + edge-case tests pass", files: [{ path: "test/api.test.ts", status: "new" }] },
+        { title: "API tests", agent: "test-writer", layer: "tests", dependsOn: [2], acceptance: "happy-path + edge-case tests pass and would catch a regression", files: [{ path: "test/api.test.ts", status: "new" }] },
         { title: "README + setup docs", agent: "scribe", layer: "docs", dependsOn: [2], acceptance: "README documents setup and the API", files: [{ path: "README.md", status: "new" }] },
       ],
     },
@@ -97,7 +97,7 @@ export const FIXTURES: PlanFixture[] = [
     goal: "Add Google OAuth login across the app — decide where auth state lives, then implement it.",
     expectComplexity: "complex", // an up-front design decision
     requiredLayers: ["api", "ui", "tests"],
-    requiredAgents: ["coder"],
+    requiredAgents: ["coder", "test-writer"],
     repo: { "package.json": JSON.stringify({ name: "app", version: "0.1.0" }, null, 2) + "\n", "src/api/index.ts": "export const app = {};\n" },
     gold: {
       summary: "Add Google OAuth login, deciding the auth-state approach first.",
@@ -105,7 +105,7 @@ export const FIXTURES: PlanFixture[] = [
         { title: "Decide between session and JWT auth (trade-off)", agent: "coder", layer: "api", designDecision: true, acceptance: "approach chosen and written down with rationale", files: [] },
         { title: "Implement OAuth login + callback endpoints", agent: "coder", layer: "api", dependsOn: [1], acceptance: "login and callback endpoints complete the OAuth flow", files: [{ path: "src/api/auth.ts", status: "new" }] },
         { title: "Add the login UI", agent: "coder", layer: "ui", dependsOn: [2], acceptance: "a login button starts the flow and redirects back signed in", files: [{ path: "src/ui/Login.tsx", status: "new" }] },
-        { title: "Auth flow tests", agent: "coder", layer: "tests", dependsOn: [2], acceptance: "the OAuth flow is covered by passing tests", files: [{ path: "test/auth.test.ts", status: "new" }] },
+        { title: "Auth flow tests", agent: "test-writer", layer: "tests", dependsOn: [2], acceptance: "the OAuth flow is covered by passing tests", files: [{ path: "test/auth.test.ts", status: "new" }] },
       ],
     },
   },
