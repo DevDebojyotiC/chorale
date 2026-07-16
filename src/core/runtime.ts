@@ -437,22 +437,41 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   let planExecBlock = "";
   if (process.env.CHORALE_PLAN_EXEC === "1" && preGatePlan && agent.tools.includes("delegate")) {
     preGateBlock = ""; // the plan is being executed for real — don't also tell the model to do it
-    const stepRunner: StepRunner = async (agentName, task) => {
+    const stepRunner: StepRunner = async (agentName, task, step) => {
       const file = resolve(config.agents.dir, `${agentName}.md`);
       if (!existsSync(file)) return { ok: false, text: `unknown specialist "${agentName}"` };
+      let spec: AgentSpec;
       try {
-        const spec = loadAgent(file);
-        const res = await runAgent({
+        spec = loadAgent(file);
+      } catch (e) {
+        return { ok: false, text: `failed to load "${agentName}": ${e instanceof Error ? e.message : String(e)}` };
+      }
+      const newFiles = step.files.filter((f) => f.status === "new").map((f) => f.path);
+      const missing = () => newFiles.filter((p) => !existsSync(resolve(cwd, p)));
+      const runOnce = (t: string) =>
+        runAgent({
           config,
           registry,
           agent: spec,
-          prompt: task,
+          prompt: t,
           permissionMode,
           stream: process.env.CHORALE_TRACE === "1",
           depth: (opts.depth ?? 0) + 1,
           delegationPath: [...(opts.delegationPath ?? []), agentName],
         });
-        return { ok: true, text: res.text };
+      try {
+        let res = await runOnce(task);
+        // Verify the step actually produced its declared `new` files. A step that created NONE of
+        // them did not do its job (the sub-agent explored/no-opped) — retry once, pointed.
+        if (newFiles.length > 0 && missing().length === newFiles.length) {
+          log.info(`[chorale]   ↻ step ${step.id} wrote none of its files — retrying\n`);
+          res = await runOnce(
+            `${task}\n\nYou did not create any of the required files. Write the FULL contents of each one now with the write tool (it creates folders automatically — do not use mkdir or bash for this): ${missing().join(", ")}.`,
+          );
+        }
+        const still = missing();
+        const ok = newFiles.length === 0 || still.length < newFiles.length; // produced at least some deliverable
+        return { ok, text: res.text + (still.length ? `\n[incomplete — missing files: ${still.join(", ")}]` : "") };
       } catch (e) {
         return { ok: false, text: e instanceof Error ? e.message : String(e) };
       }

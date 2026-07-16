@@ -26,10 +26,11 @@ describe("Phase 4 — plan execution (lever #1)", () => {
     const step = plan.steps[0]!; // backend API
     const task = stepTask(step, ["s2 [coder] schema (files: backend/db.js): created users/notes tables"], "Build a notes app");
     expect(task).toMatch(/Overall goal: Build a notes app/);
-    expect(task).toMatch(/Already completed/); // prior work threaded in
+    expect(task).toMatch(/Earlier steps already ran/); // prior work threaded in
     expect(task).toMatch(/backend\/db\.js/); // so this step matches the real file
     expect(task).toMatch(/Done when: endpoints work/);
     expect(task).toMatch(/backend\/app\.js \(new\)/);
+    expect(task).toMatch(/write the actual file contents now/i); // an unambiguous build instruction
   });
 
   it("executePlan runs EVERY step in dependency order, threading prior results forward", async () => {

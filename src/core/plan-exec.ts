@@ -51,17 +51,19 @@ export function summarizeStep(step: PlanStep, resultText: string): string {
  * their file paths / names / API contracts), and this step's own title, acceptance, and files.
  */
 export function stepTask(step: PlanStep, priorSummaries: string[], goal: string): string {
-  const parts: string[] = [`You are building ONE step of a larger project. Overall goal: ${goal}`];
+  const parts: string[] = [`You are building ONE step of a larger project (other specialists handle the other steps). Overall goal: ${goal}`];
   if (priorSummaries.length) {
     parts.push(
-      "\nAlready completed — build ON these and stay consistent with their file paths, names, routes, and data shapes:\n" +
+      "\nEarlier steps already ran and their files are on disk — read them if useful and stay consistent with their paths, names, routes, and data shapes. Do NOT recreate them:\n" +
         priorSummaries.map((s) => `- ${s}`).join("\n"),
     );
   }
-  parts.push(`\nYour step (${step.id}): ${step.title}`);
+  parts.push(`\nYOUR STEP (${step.id}): ${step.title}`);
   if (step.acceptance) parts.push(`Done when: ${step.acceptance}`);
-  if (step.files.length) parts.push(`Files to create/edit: ${step.files.map((f) => `${f.path} (${f.status})`).join(", ")}`);
-  parts.push("\nComplete this step now, end to end. Do not redo earlier steps; extend them coherently.");
+  if (step.files.length) {
+    parts.push(`Create these files by WRITING them (the write tool creates parent folders for you — do NOT run mkdir): ${step.files.map((f) => `${f.path} (${f.status})`).join(", ")}`);
+  }
+  parts.push("\nImplement this step FULLY and write the actual file contents now with the write tool. Don't just explore, plan, or make directories — produce the working code/files for this step.");
   return parts.join("\n");
 }
 
