@@ -28,15 +28,77 @@ table td code{background:var(--panel)}.tag-dep{color:#dc2626;border:1px solid #f
 </style></head><body>
 
 <h1>Documents API</h1>
-<div class="toc"><h3>On this page</h3><a href="#read">Reading documents</a><a href="#write">Writing documents</a><a href="#convert">Converting</a></div>
-<h2 id="read">Reading documents</h2><p>Use <code>read_doc</code> to extract text from any supported format.</p>
-<div class="adm info"><div class="t">Info</div>Spreadsheets are returned as Markdown tables.</div>
-<pre><code>const { content } = await read_doc({ path: "report.pdf" });</code></pre>
-<h2 id="write">Writing documents</h2><p><span class="method m-post">POST</span> <code>write_doc(path, content, theme?)</code></p>
-<table><thead><tr><th>Param</th><th>Type</th><th>Notes</th></tr></thead>
-<tbody><tr><td><code>path</code></td><td><code>string</code></td><td>Output path; format from the extension</td></tr>
-<tr><td><code>theme</code></td><td><code>string</code></td><td>Design profile <span class="tag-dep">optional</span></td></tr></tbody></table>
-<div class="adm warn"><div class="t">Warning</div>Binary output can't be edited afterward — regenerate from source.</div>
-<h2 id="convert">Converting</h2><div class="adm tip"><div class="t">Tip</div>Press <kbd>Ctrl</kbd> + <kbd>P</kbd> to print any generated HTML to PDF.</div>
-<pre><code>await convert({ from: "notes.md", to: "notes.pdf", theme: "report" });</code></pre>
+<p>Read, create, and convert documents in any supported format. This reference covers the four core operations and their parameters.</p>
+<div class="toc"><h3>On this page</h3><a href="#auth">Authentication</a><a href="#read">read_doc</a><a href="#write">write_doc</a><a href="#convert">convert</a><a href="#errors">Error codes</a><a href="#limits">Rate limits</a></div>
+
+<h2 id="auth">Authentication</h2>
+<p>All requests require a bearer token in the <code>Authorization</code> header. Tokens are workspace-scoped.</p>
+<pre><code>Authorization: Bearer sk_live_...</code></pre>
+<div class="adm info"><div class="t">Info</div>Tokens never expire but can be revoked from the dashboard. Treat them like passwords.</div>
+
+<h2 id="read">read_doc</h2>
+<p><span class="method m-get">GET</span> <code>read_doc(path)</code> — extract text or Markdown from a document. Spreadsheets are returned as Markdown tables; images are OCR'd.</p>
+<table><thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>path</code></td><td><code>string</code></td><td>Yes</td><td>Workspace-relative path to the document.</td></tr>
+</tbody></table>
+<p><strong>Example</strong></p>
+<pre><code>const { content, format } = await read_doc({ path: "report.pdf" });
+// content: extracted text · format: "pdf"</code></pre>
+
+<h2 id="write">write_doc</h2>
+<p><span class="method m-post">POST</span> <code>write_doc(path, content, theme?, charts?)</code> — create a document from Markdown. The output format is chosen by the file extension.</p>
+<table><thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>path</code></td><td><code>string</code></td><td>Yes</td><td>Output path (.pdf / .docx / .html / .md).</td></tr>
+<tr><td><code>content</code></td><td><code>string</code></td><td>Yes</td><td>Markdown source.</td></tr>
+<tr><td><code>theme</code></td><td><code>string</code></td><td>No</td><td>Design profile <span class="tag-dep">optional</span> — report, invoice, legal, …</td></tr>
+<tr><td><code>charts</code></td><td><code>boolean</code></td><td>No</td><td>Render numeric tables as bar charts.</td></tr>
+</tbody></table>
+<div class="adm warn"><div class="t">Warning</div>Binary output (PDF/DOCX) cannot be edited after creation — regenerate from source instead.</div>
+<pre><code>await write_doc({ path: "q3.pdf", content: brief, theme: "report", charts: true });</code></pre>
+
+<h2 id="convert">convert</h2>
+<p><span class="method m-put">PUT</span> <code>convert(from, to, theme?)</code> — convert a file to another format in one step. HTML sources render faithfully; Markdown sources use the chosen theme.</p>
+<div class="adm tip"><div class="t">Tip</div>Press <kbd>Ctrl</kbd> + <kbd>P</kbd> on any generated HTML to print it to PDF with identical styling.</div>
+<pre><code>await convert({ from: "notes.md", to: "notes.pdf", theme: "report" });
+await convert({ from: "data.csv",  to: "data.xlsx" });</code></pre>
+
+<h2 id="errors">Error codes</h2>
+<table><thead><tr><th>Code</th><th>Meaning</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>400</code></td><td>Unsupported format</td><td>Check the file extension is supported.</td></tr>
+<tr><td><code>403</code></td><td>Path escapes workspace</td><td>Use a path inside the workspace root.</td></tr>
+<tr><td><code>413</code></td><td>File too large</td><td>Files must be under 25 MB.</td></tr>
+</tbody></table>
+
+<h2 id="limits">Rate limits</h2>
+<p>The API allows <strong>120</strong> requests per minute per token. Conversions that spawn a browser count as <strong>2</strong>. Exceeding the limit returns <code>429</code> with a <code>Retry-After</code> header.</p>
+
+<h2>Pagination</h2>
+<p>List endpoints return at most <strong>50</strong> items per page. Use the <code>cursor</code> from the response to fetch the next page; an empty <code>cursor</code> signals the end.</p>
+<pre><code>let cursor = null;
+do {
+  const page = await list_docs({ cursor });
+  process(page.items);
+  cursor = page.cursor;
+} while (cursor);</code></pre>
+
+<h2>Webhooks</h2>
+<p>Register a URL to receive events when long-running conversions finish. Payloads are signed; verify the <code>X-Chorale-Signature</code> header before trusting a request.</p>
+<table><thead><tr><th>Event</th><th>Fires when</th></tr></thead>
+<tbody>
+<tr><td><code>doc.created</code></td><td>A document finished rendering.</td></tr>
+<tr><td><code>doc.failed</code></td><td>A conversion errored (payload includes the code).</td></tr>
+</tbody></table>
+<div class="adm info"><div class="t">Info</div>Webhooks retry with exponential backoff for up to 24 hours until your endpoint returns 2xx.</div>
+
+<h2>SDKs &amp; quickstart</h2>
+<p>Official SDKs are available for Node and Python. Install and generate your first document in under a minute:</p>
+<pre><code>import { Chorale } from "chorale";
+const c = new Chorale(process.env.CHORALE_KEY);
+await c.write_doc({ path: "hello.pdf", content: "# Hello", theme: "report" });</code></pre>
+
+<h2>Versioning</h2>
+<p>The API is versioned by date. Pin a version with the <code>Chorale-Version</code> header (e.g. <code>2026-07-01</code>). Breaking changes ship under a new version; additive changes do not. <span class="tag-dep">deprecated</span> fields are supported for at least six months after announcement.</p>
 </body></html>

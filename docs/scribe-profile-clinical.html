@@ -26,12 +26,87 @@ tr.abn td{background:#fff7f6}
 .disclaimer{font-size:.78rem;color:var(--muted);border-top:1px solid var(--border);margin-top:1.6rem;padding-top:.7rem}
 </style></head><body>
 
-<div class="pt-head"><div class="f"><div class="h">Patient</div>J. Doe · 41 · M</div><div class="f"><div class="h">Specimen</div>Serum</div><div class="f"><div class="h">Collected</div>16 Jul 2026 08:20</div><div class="f"><div class="h">Accession</div>LAB-88213</div></div>
-<h2>Complete Metabolic Panel</h2>
+<div class="pt-head"><div class="f"><div class="h">Patient</div>J. Doe · 41 y · Male</div><div class="f"><div class="h">MRN</div>004-88213</div><div class="f"><div class="h">Ordering provider</div>Dr. A. Klein</div><div class="f"><div class="h">Specimen</div>Serum / Whole blood</div><div class="f"><div class="h">Collected</div>16 Jul 2026 08:20</div><div class="f"><div class="h">Reported</div>16 Jul 2026 14:05</div></div>
+
+<h2>Complete Blood Count (CBC)</h2>
 <table><thead><tr><th>Analyte</th><th class="num">Result</th><th>Units</th><th>Reference range</th><th>Flag</th></tr></thead>
-<tbody><tr><td>Glucose</td><td class="num">92</td><td>mg/dL</td><td>70–99</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tbody>
+<tr><td>Hemoglobin</td><td class="num">14.6</td><td>g/dL</td><td>13.5–17.5</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr><td>Hematocrit</td><td class="num">43.1</td><td>%</td><td>41–53</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr class="abn"><td>WBC</td><td class="num">11.8</td><td>10⁹/L</td><td>4.0–11.0</td><td><span class="flag flag-h">High</span></td></tr>
+<tr><td>Platelets</td><td class="num">254</td><td>10⁹/L</td><td>150–400</td><td><span class="flag flag-n">Normal</span></td></tr></tbody></table>
+
+<h2>Comprehensive Metabolic Panel (CMP)</h2>
+<table><thead><tr><th>Analyte</th><th class="num">Result</th><th>Units</th><th>Reference range</th><th>Flag</th></tr></thead>
+<tbody>
+<tr><td>Glucose (fasting)</td><td class="num">92</td><td>mg/dL</td><td>70–99</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr><td>Sodium</td><td class="num">139</td><td>mmol/L</td><td>136–145</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr class="abn"><td>Potassium</td><td class="num">3.2</td><td>mmol/L</td><td>3.5–5.1</td><td><span class="flag flag-l">Low</span></td></tr>
+<tr><td>Creatinine</td><td class="num">0.98</td><td>mg/dL</td><td>0.7–1.3</td><td><span class="flag flag-n">Normal</span></td></tr>
 <tr class="abn"><td>ALT</td><td class="num">68</td><td>U/L</td><td>7–56</td><td><span class="flag flag-h">High</span></td></tr>
-<tr class="abn"><td>Potassium</td><td class="num">3.2</td><td>mmol/L</td><td>3.5–5.1</td><td><span class="flag flag-l">Low</span></td></tr></tbody></table>
-<div class="interp"><strong>Interpretation.</strong> Mildly elevated ALT and low potassium; correlate clinically and consider repeat testing.</div>
-<div class="disclaimer">This report is for the ordering clinician. Reference ranges are method-specific. Not a diagnosis.</div>
+<tr><td>AST</td><td class="num">41</td><td>U/L</td><td>10–40</td><td><span class="flag flag-h">High</span></td></tr></tbody></table>
+
+<h2>Lipid Panel</h2>
+<table><thead><tr><th>Analyte</th><th class="num">Result</th><th>Units</th><th>Reference range</th><th>Flag</th></tr></thead>
+<tbody>
+<tr><td>Total cholesterol</td><td class="num">188</td><td>mg/dL</td><td>&lt; 200</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr class="abn"><td>LDL</td><td class="num">142</td><td>mg/dL</td><td>&lt; 100</td><td><span class="flag flag-h">High</span></td></tr>
+<tr><td>HDL</td><td class="num">48</td><td>mg/dL</td><td>&gt; 40</td><td><span class="flag flag-n">Normal</span></td></tr></tbody></table>
+
+<h2>Thyroid Function</h2>
+<table><thead><tr><th>Analyte</th><th class="num">Result</th><th>Units</th><th>Reference range</th><th>Flag</th></tr></thead>
+<tbody>
+<tr><td>TSH</td><td class="num">2.10</td><td>mIU/L</td><td>0.4–4.0</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr><td>Free T4</td><td class="num">1.1</td><td>ng/dL</td><td>0.8–1.8</td><td><span class="flag flag-n">Normal</span></td></tr></tbody></table>
+
+<h2>Glycemic &amp; Iron Studies</h2>
+<table><thead><tr><th>Analyte</th><th class="num">Result</th><th>Units</th><th>Reference range</th><th>Flag</th></tr></thead>
+<tbody>
+<tr class="abn"><td>HbA1c</td><td class="num">5.9</td><td>%</td><td>4.0–5.6</td><td><span class="flag flag-h">High</span></td></tr>
+<tr><td>Ferritin</td><td class="num">96</td><td>ng/mL</td><td>30–400</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr class="abn"><td>Vitamin D (25-OH)</td><td class="num">22</td><td>ng/mL</td><td>30–100</td><td><span class="flag flag-l">Low</span></td></tr></tbody></table>
+
+<h2>Urinalysis</h2>
+<table><thead><tr><th>Parameter</th><th class="num">Result</th><th>Reference</th><th>Flag</th></tr></thead>
+<tbody>
+<tr><td>Appearance</td><td class="num">Clear</td><td>Clear</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr><td>Protein</td><td class="num">Negative</td><td>Negative</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr><td>Glucose</td><td class="num">Negative</td><td>Negative</td><td><span class="flag flag-n">Normal</span></td></tr></tbody></table>
+
+<h2>Coagulation</h2>
+<table><thead><tr><th>Analyte</th><th class="num">Result</th><th>Units</th><th>Reference range</th><th>Flag</th></tr></thead>
+<tbody>
+<tr><td>PT</td><td class="num">12.4</td><td>s</td><td>11.0–13.5</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr><td>INR</td><td class="num">1.05</td><td>—</td><td>0.9–1.1</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr><td>aPTT</td><td class="num">31</td><td>s</td><td>25–35</td><td><span class="flag flag-n">Normal</span></td></tr></tbody></table>
+
+<h2>Cardiac &amp; Inflammatory Markers</h2>
+<table><thead><tr><th>Analyte</th><th class="num">Result</th><th>Units</th><th>Reference range</th><th>Flag</th></tr></thead>
+<tbody>
+<tr><td>Troponin I</td><td class="num">&lt;0.01</td><td>ng/mL</td><td>&lt; 0.04</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr class="abn"><td>hs-CRP</td><td class="num">4.8</td><td>mg/L</td><td>&lt; 3.0</td><td><span class="flag flag-h">High</span></td></tr>
+<tr><td>BNP</td><td class="num">42</td><td>pg/mL</td><td>&lt; 100</td><td><span class="flag flag-n">Normal</span></td></tr></tbody></table>
+
+<h2>Historical Trend — ALT (U/L)</h2>
+<table><thead><tr><th>Date</th><th class="num">Result</th><th>Reference</th><th>Flag</th></tr></thead>
+<tbody>
+<tr><td>16 Jan 2026</td><td class="num">44</td><td>7–56</td><td><span class="flag flag-n">Normal</span></td></tr>
+<tr><td>17 Apr 2026</td><td class="num">57</td><td>7–56</td><td><span class="flag flag-h">High</span></td></tr>
+<tr class="abn"><td>16 Jul 2026</td><td class="num">68</td><td>7–56</td><td><span class="flag flag-h">High</span></td></tr></tbody></table>
+<p class="muted" style="font-size:.85rem">ALT has trended upward over six months (44 → 57 → 68 U/L), warranting follow-up.</p>
+
+<div class="interp"><strong>Interpretation.</strong> Mildly elevated transaminases (ALT/AST) with a leukocytosis and borderline-low potassium. LDL is above target and HbA1c is in the pre-diabetic range (5.9%). hs-CRP is mildly elevated, suggesting low-grade inflammation; cardiac and coagulation studies are within range. Vitamin D is insufficient at 22 ng/mL. Thyroid function and urinalysis are unremarkable. Findings are non-specific; correlate clinically. Suggest repeat metabolic panel in 2–4 weeks, review of hepatotoxic medications, dietary lipid and glycemic counselling, and vitamin-D supplementation. Potassium of 3.2 mmol/L is mildly low — consider supplementation if symptomatic.</div>
+<h2>Specimen &amp; Methodology</h2>
+<table><thead><tr><th>Panel</th><th>Specimen</th><th>Method</th></tr></thead>
+<tbody>
+<tr><td>CBC</td><td>EDTA whole blood</td><td>Automated flow cytometry</td></tr>
+<tr><td>CMP / Lipid</td><td>Serum</td><td>Spectrophotometry</td></tr>
+<tr><td>Thyroid / Cardiac</td><td>Serum</td><td>Chemiluminescent immunoassay</td></tr>
+<tr><td>HbA1c</td><td>Whole blood</td><td>HPLC</td></tr>
+<tr><td>Urinalysis</td><td>Random urine</td><td>Dipstick + microscopy</td></tr></tbody></table>
+
+<h2>Critical-Value Policy</h2>
+<p style="font-size:.9rem">No results in this report met critical-value thresholds requiring immediate telephone notification. Values flagged <span class="flag flag-h">High</span> or <span class="flag flag-l">Low</span> are outside the reference range but not critical. Critical values (per laboratory policy) are called to the ordering provider within 30 minutes of verification.</p>
+
+<div class="disclaimer"><strong>Methodology &amp; disclaimer.</strong> Analyzed on a certified clinical chemistry platform; reference ranges are method- and population-specific and may differ between laboratories. This report is intended for the ordering clinician and does not constitute a diagnosis. Results should be interpreted in the context of the patient's history and presentation. Specimen integrity was acceptable; no interference flags were raised.</div>
 </body></html>

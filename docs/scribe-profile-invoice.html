@@ -27,13 +27,86 @@ thead th{background:var(--ink);color:#fff;text-transform:uppercase;font-size:.75
 .due{display:inline-block;background:var(--panel);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:.2rem .7rem;font-weight:700;font-size:.85rem}
 </style></head><body>
 
-<div class="inv-head"><div><div class="co">Chorale Labs</div><div class="muted">hello@chorale.dev · Remote</div></div>
-<div class="lbl"><h1>INVOICE</h1><div class="muted">#INV-2026-014</div><div class="due">Due 30 Jul 2026</div></div></div>
-<div class="meta-grid"><div class="b"><div class="h">Bill To</div>Acme Corp<br>123 Market St<br>Berlin</div><div class="b"><div class="h">Issued</div>16 Jul 2026</div></div>
-<table><thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
-<tbody><tr><td>Design system implementation</td><td class="num">40</td><td class="num">$120.00</td><td class="num">$4,800.00</td></tr>
-<tr><td>Report automation</td><td class="num">12</td><td class="num">$120.00</td><td class="num">$1,440.00</td></tr></tbody></table>
-<div class="totals"><div class="row"><span>Subtotal</span><span>$6,240.00</span></div><div class="row"><span>Tax (19%)</span><span>$1,185.60</span></div>
-<div class="row grand"><span>Total</span><span>$7,425.60</span></div></div>
-<div class="terms">Payment due within 30 days by bank transfer. Thank you for your business.</div>
+<div class="inv-head"><div><div class="co">Chorale Labs</div><div class="muted">hello@chorale.dev · VAT DE123456789<br>Prinzenstraße 84, 10969 Berlin</div></div>
+<div class="lbl"><h1>INVOICE</h1><div class="muted">#INV-2026-0142</div><div class="due">Due 15 Aug 2026</div></div></div>
+
+<div class="meta-grid"><div class="b"><div class="h">Bill To</div>Acme Corporation<br>Attn: Accounts Payable<br>123 Market Street<br>Munich, 80331</div>
+<div class="b"><div class="h">Ship To</div>Same as billing</div>
+<div class="b"><div class="h">Invoice date</div>16 Jul 2026</div>
+<div class="b"><div class="h">Terms</div>Net 30</div></div>
+
+<table><thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+<tbody>
+<tr><td>Design system implementation — foundation</td><td class="num">40</td><td class="num">hr</td><td class="num">$120.00</td><td class="num">$4,800.00</td></tr>
+<tr><td>Report automation pipeline</td><td class="num">12</td><td class="num">hr</td><td class="num">$120.00</td><td class="num">$1,440.00</td></tr>
+<tr><td>Template library — 10 topic profiles</td><td class="num">1</td><td class="num">ea</td><td class="num">$2,500.00</td><td class="num">$2,500.00</td></tr>
+<tr><td>PDF/DOCX export integration</td><td class="num">8</td><td class="num">hr</td><td class="num">$120.00</td><td class="num">$960.00</td></tr>
+<tr><td>Accessibility &amp; print QA</td><td class="num">6</td><td class="num">hr</td><td class="num">$110.00</td><td class="num">$660.00</td></tr>
+<tr><td>Onboarding &amp; handover session</td><td class="num">2</td><td class="num">ea</td><td class="num">$300.00</td><td class="num">$600.00</td></tr>
+</tbody></table>
+
+<div class="totals">
+<div class="row"><span>Subtotal</span><span>$11,960.00</span></div>
+<div class="row"><span>Discount (loyalty, 5%)</span><span>−$598.00</span></div>
+<div class="row"><span>Tax (19% VAT)</span><span>$2,158.78</span></div>
+<div class="row grand"><span>Total due</span><span>$13,520.78</span></div></div>
+
+<div class="terms"><strong>Payment.</strong> Bank transfer to Chorale Labs — IBAN DE00 1234 5678 9012 3456 00 · BIC ABCDDEFFXXX. Please reference invoice #INV-2026-0142. A 1.5%/month late fee applies after the due date.</div>
+
+<h2 style="margin-top:1.8rem">Account Statement</h2>
+<p class="muted" style="font-size:.85rem">Recent activity on this account, for reference.</p>
+<table><thead><tr><th>Invoice</th><th>Date</th><th>Status</th><th class="num">Amount</th></tr></thead>
+<tbody>
+<tr><td>INV-2026-0118</td><td>15 May 2026</td><td>Paid</td><td class="num">$9,240.00</td></tr>
+<tr><td>INV-2026-0130</td><td>16 Jun 2026</td><td>Paid</td><td class="num">$7,425.60</td></tr>
+<tr><td>INV-2026-0142</td><td>16 Jul 2026</td><td>Due</td><td class="num">$13,520.78</td></tr></tbody></table>
+
+<h2 style="margin-top:1.8rem">Work Summary</h2>
+<p class="muted" style="font-size:.9rem">This engagement covered the design and delivery of a document-automation system: a shared theming foundation, ten industry design profiles, numeric-table charting, and export to PDF, DOCX, and XLSX. Foundation and template work were fixed-scope; integration, QA, and onboarding were billed at the standard hourly rate. All deliverables were accepted on 12 July 2026.</p>
+<table><thead><tr><th>Workstream</th><th class="num">Hours</th><th class="num">Amount</th></tr></thead>
+<tbody>
+<tr><td>Design system &amp; profiles</td><td class="num">40</td><td class="num">$7,300.00</td></tr>
+<tr><td>Export &amp; integration</td><td class="num">20</td><td class="num">$2,400.00</td></tr>
+<tr><td>QA, accessibility &amp; onboarding</td><td class="num">8</td><td class="num">$1,260.00</td></tr>
+<tr><td><strong>Total</strong></td><td class="num"><strong>68</strong></td><td class="num"><strong>$10,960.00</strong></td></tr></tbody></table>
+
+<h2>Terms &amp; Conditions</h2>
+<p style="font-size:.88rem"><strong>1. Payment.</strong> Payment is due within thirty (30) days of the invoice date. Amounts are stated in USD and are exclusive of any bank charges, which are the responsibility of the payer.</p>
+<p style="font-size:.88rem"><strong>2. Late payment.</strong> Overdue amounts accrue interest at 1.5% per month. Provider reserves the right to suspend services on accounts more than fifteen (15) days overdue.</p>
+<p style="font-size:.88rem"><strong>3. Disputes.</strong> Any dispute regarding an invoice must be raised in writing within ten (10) business days of receipt; undisputed amounts remain due.</p>
+<p style="font-size:.88rem"><strong>4. Taxes.</strong> Where a valid VAT identification number is supplied, the reverse-charge mechanism may apply. Client is responsible for any withholding required by local law.</p>
+
+<h2 style="margin-top:1.8rem">Detailed Activity Log</h2>
+<p class="muted" style="font-size:.9rem">Hours billed against this engagement, for reference. Totals reconcile to the Work Summary above.</p>
+<table><thead><tr><th>Date</th><th>Activity</th><th class="num">Hours</th></tr></thead>
+<tbody>
+<tr><td>01 Jul</td><td>Kickoff, discovery, and design tokens</td><td class="num">6</td></tr>
+<tr><td>02–03 Jul</td><td>Base theme and typography system</td><td class="num">10</td></tr>
+<tr><td>04–05 Jul</td><td>Report &amp; docs profiles</td><td class="num">9</td></tr>
+<tr><td>06–07 Jul</td><td>Invoice, legal, and clinical profiles</td><td class="num">8</td></tr>
+<tr><td>08 Jul</td><td>Chart injection for numeric tables</td><td class="num">7</td></tr>
+<tr><td>09 Jul</td><td>PDF/DOCX export integration</td><td class="num">12</td></tr>
+<tr><td>10 Jul</td><td>Accessibility and print QA</td><td class="num">6</td></tr>
+<tr><td>11–12 Jul</td><td>Onboarding sessions and handover</td><td class="num">10</td></tr>
+<tr><td><strong>Total</strong></td><td></td><td class="num"><strong>68</strong></td></tr></tbody></table>
+
+<h2>Purchase Order &amp; Approvals</h2>
+<div class="meta-grid"><div class="b"><div class="h">PO number</div>ACME-PO-3391</div><div class="b"><div class="h">Approved by</div>D. Fischer, VP Eng</div><div class="b"><div class="h">Cost center</div>ENG-PLATFORM</div><div class="b"><div class="h">Contract</div>MSA-2025-014</div></div>
+<p style="font-size:.88rem;margin-top:.6rem">This invoice is issued under the Master Services Agreement referenced above and against the approved purchase order. Deliverables were accepted in writing on 12 July 2026. No change orders were raised during this engagement.</p>
+
+<h2>Deliverables &amp; Acceptance</h2>
+<table><thead><tr><th>Deliverable</th><th>Accepted</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>Shared theming foundation</td><td>12 Jul 2026</td><td>Accepted</td></tr>
+<tr><td>Ten industry design profiles</td><td>12 Jul 2026</td><td>Accepted</td></tr>
+<tr><td>Numeric-table charting</td><td>12 Jul 2026</td><td>Accepted</td></tr>
+<tr><td>PDF / DOCX / XLSX export</td><td>12 Jul 2026</td><td>Accepted</td></tr>
+<tr><td>Documentation &amp; handover</td><td>12 Jul 2026</td><td>Accepted</td></tr></tbody></table>
+<p style="font-size:.88rem">All deliverables listed above were reviewed and accepted by the Client's authorized representative. This acceptance triggers the payment terms set out in the Master Services Agreement.</p>
+
+<h2>Billing Enquiries</h2>
+<div class="meta-grid"><div class="b"><div class="h">Contact</div>billing@chorale.dev</div><div class="b"><div class="h">Phone</div>+49 30 9876 5432</div><div class="b"><div class="h">Hours</div>Mon–Fri, 09:00–17:00 CET</div></div>
+<p style="font-size:.88rem;margin-top:.4rem">Please quote invoice #INV-2026-0142 and PO ACME-PO-3391 in any correspondence. Statements are issued monthly on the first business day.</p>
+
+<div class="terms" style="margin-top:1.4rem"><strong>Remittance advice.</strong> Please detach and include with payment. Invoice #INV-2026-0142 · Amount due $13,520.78 · Due 15 Aug 2026 · Ref: ACME-0142.</div>
 </body></html>

@@ -26,10 +26,49 @@ h1{font-size:2.4rem;line-height:1.12;letter-spacing:-.5px}.byline{font-family:-a
 
 <div class="masthead"><span>The Chorale Review</span><span>Issue 07 · July 2026</span></div>
 <h1>The quiet revolution in machine-written documents</h1>
-<div class="byline">By A. Chatterjee · 6 min read</div>
-<p class="lead">For years, the promise of machine-authored reports came with a catch: they looked convincing and were sometimes wrong. That trade-off is finally breaking, and the fix is less glamorous than the models themselves.</p>
-<p>The shift is not a bigger model. It is a small, stubborn checker that reads what the model produced and refuses to let a number through unless it appears in the source.</p>
+<div class="byline">By Aria Chatterjee · Feature · 8 min read</div>
+
+<p class="lead">For the better part of a decade, the promise of machine-authored reports came wrapped in a caveat that quietly undermined it: the documents looked convincing, and they were sometimes wrong. You could have polish or you could have certainty, the thinking went, but not both in the same file. That trade-off is finally breaking — and the fix is far less glamorous than the models that made it necessary.</p>
+
+<p>The breakthrough is not a larger model or a cleverer prompt. It is a small, stubborn checker that reads what the model just produced and refuses to let a number through unless that number appears in the source. It sounds almost insultingly simple. It is also, by the numbers, the most consequential change to document automation in years.</p>
+
 <p class="pull">"Polish was never the hard part. Honesty was."</p>
-<p>The result reads like a designer made it and an auditor signed it — a combination that, until recently, did not exist in the same document.</p>
-<div class="foot">The Chorale Review · Independent · Reproduction with attribution.</div>
+
+<h2>Why numbers were the weak point</h2>
+<p>Language models are extraordinary at restructuring prose. Hand one a dense spreadsheet and it will produce a readable narrative, complete with a headline finding and a tidy recommendation. The trouble is that somewhere in that fluent retelling, a figure occasionally drifts — a 42 becomes a 47, a total is rounded into fiction, a percentage is invented to make a sentence land. Readers, trusting the confident tone, rarely catch it.</p>
+<p>Prose errors are forgivable; a fabricated statistic in a board pack or a lab summary is not. The industry's early response was to make the models bigger and the prompts sterner. It helped at the margins and failed at the center, because the failure was never really about capability. It was about verification — and models are poor auditors of their own work.</p>
+
+<h2>The checker that changed the calculus</h2>
+<p>The new approach inverts the problem. Instead of asking the model to be trustworthy, it assumes the model is fallible and checks the output. Every distinctive number in the finished document is extracted and matched against the source. Anything that cannot be found is flagged and sent back for correction. Dropped numbers are fine — a report summarizes, after all — but invented ones are not.</p>
+<p>In a study of 240 documents across six domains, the technique cut fabricated figures by 92 percent, with no measurable loss of readability. The most error-prone genre, unsurprisingly, was marketing copy; the cleanest was clinical reporting, where the stakes have long forced discipline.</p>
+
+<p class="pull">"The result reads like a designer made it and an auditor signed it — a pairing that, until recently, did not exist in the same document."</p>
+
+<h2>What it means for the rest of us</h2>
+<p>The practical upshot is that a whole class of documents — invoices, statements, lab results, executive briefs — can now be generated with the same polish we expect from a design studio and the same integrity we expect from an accountant. The tooling that does this is quietly becoming infrastructure, the way spell-check did a generation ago.</p>
+<p>None of this makes the models honest. It makes them <em>checked</em> — and for documents that people act on, checked is the only kind of honest that matters.</p>
+
+<h2>The economics of trust</h2>
+<p>There is a reason this shift is arriving through the back office rather than the front page. The value of a checked document is highest precisely where a mistake is expensive and a human is currently paid to catch it. Reconciliation, review, sign-off — these are the quiet, costly rituals that surround every number an organization publishes.</p>
+<p>Automating the polish without automating the trust simply moved the cost, not removed it; a beautiful report still had to be checked by hand. By moving verification into the tool, the new approach collapses two steps into one. That is where the savings live, and it is why finance teams — not marketers — were the early adopters.</p>
+<p>The lesson generalizes. Wherever a task pairs creative generation with a hard constraint, the winning design is not a smarter generator but a cheap, relentless checker sitting downstream of it.</p>
+
+<h2>A brief history of getting it wrong</h2>
+<p>It is worth remembering how we arrived here. The first wave of document automation was template-driven: rigid, reliable, and incapable of surprise. It never lied because it never composed. The second wave handed composition to models and discovered that composition and fabrication are close cousins. The industry spent two years trying to prompt its way out of a problem that prompting could not solve.</p>
+<p>The third wave — the one now arriving quietly in accounting departments and clinical labs — accepts that the model will occasionally be wrong and simply refuses to publish the wrongness. It is a humbler design, and a more honest one.</p>
+<p class="pull">"The tools that will last are the ones that assume fallibility and design around it."</p>
+<h2>The human in the loop, rethought</h2>
+<p>Sceptics ask whether removing the manual check simply moves the risk somewhere less visible. It is a fair question, and the honest answer is that the checker changes the human's job rather than eliminating it. Instead of hunting for transposed digits, the reviewer now adjudicates the handful of flags the tool surfaces — the genuinely ambiguous cases where a figure was derived rather than stated.</p>
+<p>That is a better use of human attention. Machines are tireless at the mechanical comparison of numbers and poor at judgement; people are the reverse. The design that wins is the one that hands each party the work it is actually good at, and this is the first document tool that does so at scale.</p>
+
+<h2>What comes next</h2>
+<p>The obvious extension is from presence to provenance: not merely checking that a number appears in the source, but that it was <em>derived</em> correctly. A total that sums its line items, a percentage that divides the right two figures. That is harder, and it is where the research frontier is moving.</p>
+<p>For now, though, the practical victory is real. A finance lead can generate a board pack and trust the totals. A clinician can summarize a panel and know no value was invented. That is not a small thing. It is, arguably, the difference between a novelty and an instrument.</p>
+<p>The models will keep getting bigger. The checkers, mercifully, will stay small — and that asymmetry may be the most reassuring detail in the whole story.</p>
+
+<h2>Coda: the boring future we deserve</h2>
+<p>If there is a disappointment lurking in all this, it is that the fix is so unglamorous. There is no breakthrough architecture here, no emergent capability to marvel at — just a small program that reads the output and says <em>no</em> when a number does not check out. It is the software equivalent of a proofreader, and proofreaders have never trended.</p>
+<p>But unglamorous is often what maturity looks like. The technologies that end up mattering are rarely the ones that dazzled; they are the ones that quietly became reliable enough to disappear into the workflow. Spell-check did it. Version control did it. Grounded generation, if the early numbers hold, is on the same path — and a decade from now we may struggle to remember that machine-written documents were ever allowed to lie.</p>
+
+<div class="foot">The Chorale Review · Independent · Reproduction permitted with attribution. Corrections: review@chorale.dev</div>
 </body></html>
