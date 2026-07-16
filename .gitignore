@@ -15,3 +15,6 @@ demo-todo/
 
 # crash dumps
 *.stackdump
+
+# tesseract.js OCR language data (downloaded at runtime)
+*.traineddata

@@ -16,12 +16,15 @@ import { resolveInside, rel, type ToolContext } from "./permissions.js";
 const MAX_BYTES = 25 * 1024 * 1024; // don't parse absurdly large binaries
 const TEXT_MAX = 40000;
 
+/** Image formats we OCR text out of. */
+export const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".pbm"]);
 /** Extensions we can extract text/markdown from. */
 export const READABLE_DOC_EXT = new Set([
-  ".pdf", ".docx", ".xlsx", ".xlsm", ".csv", ".tsv", ".html", ".htm", ".json", ".md", ".markdown", ".txt", ".yaml", ".yml", ".toml",
+  ".pdf", ".docx", ".xlsx", ".xlsm", ".pptx", ".csv", ".tsv", ".html", ".htm", ".json", ".md", ".markdown", ".txt", ".yaml", ".yml", ".toml",
+  ...IMAGE_EXT,
 ]);
 /** Extensions we can create. */
-export const WRITABLE_DOC_EXT = new Set([".pdf", ".docx", ".html", ".htm", ".md", ".markdown", ".txt"]);
+export const WRITABLE_DOC_EXT = new Set([".pdf", ".docx", ".pptx", ".html", ".htm", ".md", ".markdown", ".txt"]);
 /** Sheet formats for write_sheet. */
 export const SHEET_EXT = new Set([".xlsx", ".csv", ".tsv"]);
 /** Binary doc formats (skipped by the text-oriented groundedness check). */
@@ -152,6 +155,51 @@ async function pdfToText(abs: string): Promise<string> {
   return text;
 }
 
+/** PPTX → text (dynamic import — officeparser is only needed for slides). */
+async function pptxToText(abs: string): Promise<string> {
+  const { parseOffice } = (await import("officeparser")) as unknown as {
+    parseOffice: (p: string) => Promise<{ toText?: () => string; content?: string }>;
+  };
+  const r = await parseOffice(abs);
+  return (typeof r.toText === "function" ? r.toText() : r.content) ?? "";
+}
+
+/** Markdown → PPTX: each top-level heading starts a slide; following lines become bullets. */
+async function mdToPptx(md: string, absOut: string): Promise<void> {
+  const PptxGenJS = (await import("pptxgenjs")).default as unknown as new () => {
+    addSlide: () => { addText: (text: unknown, opts?: unknown) => void };
+    writeFile: (o: { fileName: string }) => Promise<string>;
+  };
+  const pptx = new PptxGenJS();
+  const blocks = md.split(/\n(?=#{1,2}\s)/).filter((b) => b.trim());
+  const slides = blocks.length ? blocks : [md];
+  for (const block of slides) {
+    const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) continue;
+    const title = lines[0]!.replace(/^#{1,6}\s*/, "").replace(/[*_`]/g, "");
+    const slide = pptx.addSlide();
+    slide.addText(title, { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true });
+    const bullets = lines.slice(1).map((l) => l.replace(/^[-*+]\s*/, "").replace(/[*_`#]/g, "")).filter(Boolean);
+    if (bullets.length) {
+      slide.addText(
+        bullets.map((t) => ({ text: t, options: { bullet: true, breakLine: true } })),
+        { x: 0.7, y: 1.3, w: 8.5, h: 5, fontSize: 16 },
+      );
+    }
+  }
+  await pptx.writeFile({ fileName: absOut });
+}
+
+/** Image → text via OCR (dynamic import — tesseract.js is heavy and rarely needed). */
+async function imageToText(abs: string): Promise<string> {
+  type Rec = (img: string, lang: string) => Promise<{ data: { text: string } }>;
+  const mod = (await import("tesseract.js")) as unknown as { recognize?: Rec; default?: { recognize?: Rec } };
+  const recognize = mod.recognize ?? mod.default?.recognize;
+  if (!recognize) throw new Error("tesseract.js recognize() unavailable");
+  const { data } = await recognize(abs, "eng");
+  return data.text;
+}
+
 function csvEscape(v: unknown, sep: string): string {
   const s = v == null ? "" : String(v);
   return /["\n\r]|[,;\t]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s.includes(sep) ? `"${s}"` : s;
@@ -176,6 +224,8 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
         if (ext === ".pdf") content = await pdfToText(abs);
         else if (ext === ".docx") content = await docxToMd(abs);
         else if (ext === ".xlsx" || ext === ".xlsm") content = await xlsxToMd(abs);
+        else if (ext === ".pptx") content = await pptxToText(abs);
+        else if (IMAGE_EXT.has(ext)) content = await imageToText(abs);
         else if (ext === ".html" || ext === ".htm") content = htmlToText(readFileSync(abs, "utf8"));
         else content = readFileSync(abs, "utf8"); // csv/tsv/json/yaml/toml/md/txt
         return { path: rel(cwd, abs), format: ext.slice(1) || "txt", content: content.slice(0, TEXT_MAX), truncated: content.length > TEXT_MAX };
@@ -199,7 +249,8 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
         else if (ext === ".docx") {
           const buf = await htmlToDocx(await mdToHtml(content));
           writeFileSync(abs, Buffer.isBuffer(buf) ? buf : Buffer.from(buf as ArrayBuffer));
-        } else if (ext === ".html" || ext === ".htm") writeFileSync(abs, await mdToHtml(content), "utf8");
+        } else if (ext === ".pptx") await mdToPptx(content, abs);
+        else if (ext === ".html" || ext === ".htm") writeFileSync(abs, await mdToHtml(content), "utf8");
         else writeFileSync(abs, content, "utf8");
         ctx.touched?.add(rel(cwd, abs));
         return { path: rel(cwd, abs), format: ext.slice(1), engine };

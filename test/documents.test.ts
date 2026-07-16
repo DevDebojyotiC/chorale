@@ -65,6 +65,15 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
     expect(r.content).toContain("36");
   });
 
+  it("PPTX: write_doc(markdown outline) then read_doc extracts slide text", async () => {
+    await exec(tools.write_doc)({ path: "deck.pptx", content: "# Quarterly Review\n\n- Revenue up 20 percent\n- Two new hires\n\n# Roadmap\n\n- Ship v2" });
+    expect(existsSync(join(dir, "deck.pptx"))).toBe(true);
+    const r = await exec(tools.read_doc)({ path: "deck.pptx" });
+    expect(r.content).toContain("Quarterly Review");
+    expect(r.content).toContain("20 percent");
+    expect(r.content).toContain("Roadmap");
+  });
+
   it("convert: DOCX → Markdown", async () => {
     await exec(tools.write_doc)({ path: "src.docx", content: "# Spec\n\nUse token XYZ123." });
     await exec(tools.convert)({ from: "src.docx", to: "src.md" });
