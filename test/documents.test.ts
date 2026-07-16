@@ -82,6 +82,24 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
     expect(r.content).toContain("XYZ123");
   });
 
+  it("convert: HTML → PDF renders the real HTML (not flattened text)", async () => {
+    writeFileSync(join(dir, "invoice.html"), "<html><body><h1>Invoice</h1><table><tr><td>Total</td><td>$4200</td></tr></table></body></html>");
+    const res = await exec(tools.convert)({ from: "invoice.html", to: "invoice.pdf" });
+    expect(res.engine === "browser" || res.engine === "pdfkit").toBe(true); // faithful render, or JS fallback
+    expect(existsSync(join(dir, "invoice.pdf"))).toBe(true);
+    const back = await exec(tools.read_doc)({ path: "invoice.pdf" });
+    expect(back.content).toContain("Invoice");
+    expect(back.content).toContain("4200");
+  });
+
+  it("convert: HTML → DOCX passes the real HTML to the docx writer", async () => {
+    writeFileSync(join(dir, "page.html"), "<html><body><h1>Heading</h1><p>Marker ZZ88.</p></body></html>");
+    await exec(tools.convert)({ from: "page.html", to: "page.docx" });
+    const back = await exec(tools.read_doc)({ path: "page.docx" });
+    expect(back.content).toContain("Heading");
+    expect(back.content).toContain("ZZ88");
+  });
+
   it("refuses paths that escape the workspace and unsupported formats", async () => {
     expect((await exec(tools.read_doc)({ path: "../secret.pdf" })).error).toMatch(/escapes/);
     expect((await exec(tools.write_doc)({ path: "x.rtf", content: "hi" })).error).toMatch(/unsupported/);

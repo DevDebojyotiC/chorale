@@ -71,29 +71,30 @@ function findBrowser(): string | null {
   return candidates.find((p) => existsSync(p)) ?? null;
 }
 
-/** Render markdown to a PDF file: headless Chrome/Edge if available, else pdfkit. */
-async function mdToPdf(md: string, absOut: string): Promise<{ engine: string }> {
+/** Print an HTML string to a PDF via a headless browser. Returns true on success. */
+function printHtmlToPdf(html: string, absOut: string): boolean {
   const browser = findBrowser();
-  if (browser) {
-    const html = await mdToHtml(md);
-    const tmp = join(tmpdir(), `chorale-pdf-${process.pid}-${absOut.length}.html`);
-    writeFileSync(tmp, html, "utf8");
+  if (!browser) return false;
+  const tmp = join(tmpdir(), `chorale-pdf-${process.pid}-${Buffer.byteLength(html)}.html`);
+  writeFileSync(tmp, html, "utf8");
+  try {
+    const r = spawnSync(
+      browser,
+      ["--headless", "--disable-gpu", "--no-sandbox", `--print-to-pdf=${absOut}`, "--no-pdf-header-footer", `file://${tmp.replace(/\\/g, "/")}`],
+      { timeout: 60000, stdio: "ignore" },
+    );
+    return existsSync(absOut) && !r.error;
+  } finally {
     try {
-      const r = spawnSync(
-        browser,
-        ["--headless", "--disable-gpu", "--no-sandbox", `--print-to-pdf=${absOut}`, "--no-pdf-header-footer", `file://${tmp.replace(/\\/g, "/")}`],
-        { timeout: 60000, stdio: "ignore" },
-      );
-      if (existsSync(absOut) && (!r.error)) return { engine: "browser" };
-    } finally {
-      try {
-        unlinkSync(tmp);
-      } catch {
-        /* ignore */
-      }
+      unlinkSync(tmp);
+    } catch {
+      /* ignore */
     }
   }
-  // Fallback: pure-JS pdfkit (basic markdown → text layout).
+}
+
+/** pure-JS pdfkit fallback rendering text lines; `markdown` enlarges `#` headings. */
+async function pdfkitLines(lines: string[], absOut: string, markdown: boolean): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const doc = new PDFDocument({ margin: 54 });
     const chunks: Buffer[] = [];
@@ -106,13 +107,26 @@ async function mdToPdf(md: string, absOut: string): Promise<{ engine: string }> 
         reject(e as Error);
       }
     });
-    for (const line of md.split("\n")) {
-      const h = /^(#{1,6})\s+(.*)/.exec(line);
+    for (const line of lines) {
+      const h = markdown ? /^(#{1,6})\s+(.*)/.exec(line) : null;
       if (h) doc.fontSize(20 - h[1]!.length * 2).text(h[2]!).moveDown(0.3).fontSize(11);
-      else doc.fontSize(11).text(line.replace(/[*_`]/g, ""));
+      else doc.fontSize(11).text(markdown ? line.replace(/[*_`]/g, "") : line);
     }
     doc.end();
   });
+}
+
+/** Render Markdown to a PDF: headless Chrome/Edge (fidelity) or pdfkit fallback. */
+async function mdToPdf(md: string, absOut: string): Promise<{ engine: string }> {
+  if (printHtmlToPdf(await mdToHtml(md), absOut)) return { engine: "browser" };
+  await pdfkitLines(md.split("\n"), absOut, true);
+  return { engine: "pdfkit" };
+}
+
+/** Render a raw HTML string to a PDF, preserving its structure/CSS (browser), else text (fallback). */
+async function htmlToPdf(html: string, absOut: string): Promise<{ engine: string }> {
+  if (printHtmlToPdf(html, absOut)) return { engine: "browser" };
+  await pdfkitLines(htmlToText(html).split("\n"), absOut, false);
   return { engine: "pdfkit" };
 }
 
@@ -317,6 +331,21 @@ export function createDocumentTools(ctx: ToolContext): ToolSet {
           }
           ctx.touched?.add(rel(cwd, dst));
           return { from: rel(cwd, src), to: rel(cwd, dst), rows: rows.length };
+        }
+
+        // HTML source: render it FAITHFULLY (structure + CSS), don't flatten to text first.
+        if (fromExt === ".html" || fromExt === ".htm") {
+          const rawHtml = readFileSync(src, "utf8");
+          let engine = toExt.slice(1);
+          if (toExt === ".pdf") engine = (await htmlToPdf(rawHtml, dst)).engine;
+          else if (toExt === ".docx") {
+            const buf = await htmlToDocx(rawHtml);
+            writeFileSync(dst, Buffer.isBuffer(buf) ? buf : Buffer.from(buf as ArrayBuffer));
+          } else if (toExt === ".html" || toExt === ".htm") writeFileSync(dst, rawHtml, "utf8");
+          else if (WRITABLE_DOC_EXT.has(toExt)) writeFileSync(dst, htmlToText(rawHtml), "utf8"); // md/txt = extracted text
+          else return { error: `unsupported conversion target "${toExt}"` };
+          ctx.touched?.add(rel(cwd, dst));
+          return { from: rel(cwd, src), to: rel(cwd, dst), engine };
         }
 
         // Otherwise go through markdown/text.
