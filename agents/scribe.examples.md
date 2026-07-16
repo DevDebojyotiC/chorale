@@ -94,3 +94,53 @@ td.c{text-align:center}.pass{color:var(--good);font-weight:700}.fail{color:var(-
 ```
 
 Every number — `10/10`, `9/10`, `1 / 3`, the `✓✗✗` trial grid, the `100%`/`90%` bars — comes straight from the source. The design is bespoke and rich; the data is grounded. When a **reference design** is provided, reproduce its components and CSS the same way, still grounding every figure in the source.
+
+## Example 5 — a topic-profile document with its signature components (design mode)
+
+When a document should read as a *designed* piece of its type, author the **profile's component HTML** and pass the matching `theme:` — the theme supplies the CSS, so you only write the component markup (much less to get wrong than inlining a whole stylesheet). You may mix plain Markdown between components.
+
+Task: *"produce a one-page executive-summary PDF"* after reading the source. Author the **executive** components — a `.cover` (kicker + title + subtitle), an `.exsum` box, a table with an `.exhibit` caption, a `.pull` quote, and a `.bottomline` — then render:
+
+```
+write_doc("summary.pdf", <<the content below>>, theme: "executive")
+```
+
+```html
+<div class="cover"><div class="kicker">Executive Summary · Confidential</div>
+<h1>AI Developer Tools — Market &amp; Tool</h1>
+<p style="opacity:.92;margin:.4rem 0 0">The most-funded 2026 AI dev-tools startup, and a Node.js utility to rank startups by funding.</p></div>
+
+<div class="exsum"><h3>Executive Summary</h3><ul>
+<li><strong>Anysphere (Cursor)</strong> leads the sector at <strong>$2B</strong> raised (valuation $50B).</li>
+<li>A grounded Node.js tool sorts startup records by funding; all 5 tests pass.</li></ul></div>
+
+<h2>Market Insight</h2>
+<p>As of 2026, Anysphere (Cursor) is the most-funded AI developer-tools startup.</p>
+<table><thead><tr><th>Company</th><th class="right">Funding</th></tr></thead>
+<tbody><tr><td>Anysphere (Cursor)</td><td class="right">$2.0B</td></tr>
+<tr><td>Mistral AI</td><td class="right">$1.0B</td></tr></tbody></table>
+<div class="exhibit">Exhibit 1 — Leading AI dev-tool startups by disclosed funding.</div>
+
+<p class="pull">"A single fabricated figure is a material misstatement — every number here is grounded in the source."</p>
+
+<h2>Bottom Line</h2>
+<div class="bottomline">The tool correctly ranks startups by funding, is tested (5/5) and reviewed; ship it.</div>
+```
+
+The result is the full navy-and-bronze executive look — cover, bronze-accented summary box, exhibit caption, pull quote, bottom-line — not just themed text. **Every figure ($2B, $50B, 5 tests) still comes from the source; the fidelity check enforces it.**
+
+### Profile component vocabulary (author these, then pass the matching `theme:`)
+Compact reference — each profile's distinctive component markup:
+
+- **executive**: `.cover`(>`.kicker`,h1,p) · `.exsum`(>h3,ul) · `.exhibit` (caption after a table) · `.pull` (quote) · `.bottomline`
+- **invoice**: `.inv-head`(>`.co`, `.lbl`>h1) · `.meta-grid`(>`.b`>`.h`+text) · table with `td.num` · `.totals`(>`.row`, `.grand`) · `.due` badge
+- **clinical**: `.pt-head`(>`.f`>`.h`+text) · result tables with `<span class="flag flag-h|flag-l|flag-n">` and `<tr class="abn">` · `.interp` · `.disclaimer`
+- **legal**: `.confidential` · `.parties` · `.recital` · `<ol class="clauses">`(nested `<ol>` for sub-clauses) · `.defs`(dl>dt/dd) · `.sig`(>`.block`>`.line`)
+- **academic**: `.titleblock`(>h1,`.authors`,`.affil`) · `.abstract`(>h3,p) · `.twocol` · `.figure`+`.caption` · `sup.cite` · `<ol class="refs">`
+- **resume**: `.cvhead`(>h1,`.role`,`.contact`) · `.cvgrid`(>`.side`,`.main`) · `.xp`(>`.top`,`.org`) · `.tag` · `.bar`>i
+- **marketing**: `.hero` · `.features`>`.feature`>`.ico` · `.statsband`>`.s`>`.big`/`.l` · `.pricing`>`.tier`(`.popular`) · `.cta`
+- **editorial**: `.masthead` · `.byline` · `.dropcap` (lead paragraph) · `.pull` · `.foot`
+- **recipe**: `.r-meta`>`.badge`>b · `.cook` (grid) · `.ingredients`(ul) · `<ol class="steps">` · `.tip`
+- **techdoc**: `.toc` · `.adm`(`.info`/`.warn`) · `.method` (GET/POST badge) · `.params` · `<kbd>`
+
+Author the markup; the chosen `theme:` styles it. Mix in plain Markdown freely. Ground every figure.
