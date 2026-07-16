@@ -5,15 +5,16 @@
  * prints an ordered summary of which agents actually fired.
  *
  * Usage:
- *   npx tsx eval/grand-tour.ts                 # the default grand-tour prompt
- *   npx tsx eval/grand-tour.ts "<your prompt>" # a custom one
+ *   npx tsx eval/grand-tour.ts                       # the default grand-tour prompt
+ *   npx tsx eval/grand-tour.ts "<your prompt>"       # a custom one
+ *   npx tsx eval/grand-tour.ts --out ./somewhere "<prompt>"   # build into a chosen folder
  *
- * Needs provider credentials (it makes real model calls). Artifacts are written to a fresh temp
- * directory, printed at the end, so your repo stays clean.
+ * Needs provider credentials (it makes real model calls). Artifacts are written to a
+ * project-local, gitignored folder — `grand-tour-output/run-<timestamp>/` by default (or the
+ * `--out` dir) — and the path is printed at the end.
  */
 import "dotenv/config";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { loadConfig } from "../src/core/config.js";
 import { buildRegistry } from "../src/core/model-registry.js";
@@ -29,7 +30,18 @@ const DEFAULT_PROMPT =
   "5) Review the script for correctness and security. " +
   "6) Produce a one-page executive-summary PDF of the finding and the tool.";
 
-const prompt = process.argv.slice(2).join(" ").trim() || DEFAULT_PROMPT;
+// Args: an optional `--out <dir>` (where to build), the rest joined is the prompt.
+const rawArgs = process.argv.slice(2);
+let outDir = "";
+const promptArgs: string[] = [];
+for (let i = 0; i < rawArgs.length; i++) {
+  if (rawArgs[i] === "--out") {
+    outDir = rawArgs[++i] ?? "";
+    continue;
+  }
+  promptArgs.push(rawArgs[i]!);
+}
+const prompt = promptArgs.join(" ").trim() || DEFAULT_PROMPT;
 
 // The agents a full tour should exercise, in the order they typically fire.
 const TARGETS = ["orchestrator", "planner", "research", "coder", "test-writer", "reviewer", "scribe"];
@@ -79,7 +91,11 @@ config.agents.dir = resolve(origCwd, config.agents.dir); // absolutize before we
 const registry = buildRegistry(config);
 const orchestrator = loadAgent(join(config.agents.dir, "orchestrator.md"));
 
-const workdir = mkdtempSync(join(tmpdir(), "chorale-grand-tour-"));
+// Build into a project-local, gitignored folder so the output is easy to find. Each run gets
+// its own timestamped subfolder. Override with `--out <dir>` (already stripped from the prompt).
+const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19); // e.g. 2026-07-16T17-30-00
+const workdir = outDir ? resolve(origCwd, outDir) : resolve(origCwd, "grand-tour-output", `run-${stamp}`);
+mkdirSync(workdir, { recursive: true });
 note("orchestrator", "orchestrator ◀ received the request (entry point)");
 
 let failed = "";
