@@ -12,6 +12,7 @@ const MONO = `ui-monospace,"Cascadia Code",Consolas,Menlo,monospace`;
 
 /** Shared base — the "always the same" foundation across all scribe docs. */
 const PBASE = `*{box-sizing:border-box}
+html{background:var(--bg)}
 body{color:var(--fg);background:var(--bg);line-height:1.6;margin:0 auto;max-width:var(--measure,58rem);padding:2.4rem 1.6rem;font-size:15px;font-family:var(--body-font,${SANS})}
 h1,h2,h3,h4{color:var(--ink,var(--fg));line-height:1.25;font-family:var(--head-font,inherit)}
 h1{font-size:1.9rem;margin:0 0 .6rem}h2{font-size:1.35rem;margin:1.8rem 0 .6rem}h3{font-size:1.1rem;margin:1.3rem 0 .4rem}
@@ -32,7 +33,7 @@ const build = (vars: string, extra = ""): string => `:root{${vars}}\n${PBASE}\n$
 
 // ── A · Formal / print ───────────────────────────────────────────────────────
 const EXECUTIVE = build(
-  `--fg:#26313f;--ink:#12233b;--muted:#5b6b7f;--accent:#1e3a5f;--accent-2:#b45309;--bg:#fffdf8;--panel:#f6f1e6;--border:#e6dcc8;--body-font:${SANS};--head-font:${SERIF};--measure:60rem`,
+  `--fg:#26313f;--ink:#12233b;--muted:#5b6b7f;--accent:#1e3a5f;--accent-2:#b45309;--bg:#ffffff;--panel:#f6f1e6;--border:#e6dcc8;--body-font:${SANS};--head-font:${SERIF};--measure:60rem`,
   `.cover{background:linear-gradient(120deg,#12233b,#1e3a5f);color:#fff;border-radius:12px;padding:2rem 2.2rem;border-bottom:4px solid var(--accent-2)}
 .cover h1{color:#fff;margin:.2rem 0}.cover .kicker{text-transform:uppercase;letter-spacing:.16em;font-size:.72rem;opacity:.85;font-family:${SANS}}
 .exsum{background:#fff;border:1px solid var(--border);border-left:5px solid var(--accent-2);border-radius:8px;padding:1rem 1.3rem;margin:1.3rem 0}
@@ -119,7 +120,7 @@ const MARKETING = build(
 );
 
 const EDITORIAL = build(
-  `--fg:#2b2622;--ink:#1a1613;--muted:#7c6f64;--accent:#b91c1c;--bg:#fffdf9;--panel:#f7f2ea;--border:#e7ddcf;--body-font:${SERIF};--head-font:${SERIF};--measure:48rem`,
+  `--fg:#2b2622;--ink:#1a1613;--muted:#7c6f64;--accent:#b91c1c;--bg:#ffffff;--panel:#f7f2ea;--border:#e7ddcf;--body-font:${SERIF};--head-font:${SERIF};--measure:48rem`,
   `.masthead{border-top:3px solid var(--ink);border-bottom:1px solid var(--border);padding:.6rem 0;margin-bottom:1.4rem;display:flex;justify-content:space-between;align-items:baseline;font-family:${SANS};font-size:.8rem;text-transform:uppercase;letter-spacing:.1em}
 h1{font-size:2.4rem;line-height:1.12;letter-spacing:-.5px}.byline{font-family:${SANS};font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:.4rem 0 1.2rem}
 .lead::first-letter{float:left;font-size:3.4rem;line-height:.8;padding:.1rem .6rem 0 0;color:var(--accent);font-weight:700}
@@ -129,7 +130,7 @@ h1{font-size:2.4rem;line-height:1.12;letter-spacing:-.5px}.byline{font-family:${
 );
 
 const RECIPE = build(
-  `--fg:#3a2f28;--ink:#4a2c1a;--muted:#8a7565;--accent:#c2410c;--accent-2:#65a30d;--bg:#fffdf5;--panel:#fdf6ec;--border:#eaddc7;--body-font:${SANS};--head-font:${SERIF};--measure:52rem`,
+  `--fg:#3a2f28;--ink:#4a2c1a;--muted:#8a7565;--accent:#c2410c;--accent-2:#65a30d;--bg:#ffffff;--panel:#fdf6ec;--border:#eaddc7;--body-font:${SANS};--head-font:${SERIF};--measure:52rem`,
   `h1{color:var(--accent);font-size:2.2rem}
 .r-meta{display:flex;flex-wrap:wrap;gap:.6rem;margin:.8rem 0 1.4rem}.r-meta .badge{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:.4rem .8rem;font-size:.82rem}.r-meta .badge b{color:var(--accent);display:block;font-size:1rem}
 .cook{display:grid;grid-template-columns:1fr 1.7fr;gap:1.6rem}

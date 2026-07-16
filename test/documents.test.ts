@@ -118,6 +118,7 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
     // Firm rule: light + print-friendly by default — a white background and NO auto dark-mode.
     expect(r).toMatch(/--bg:#ffffff/);
     expect(r).not.toMatch(/prefers-color-scheme:dark/);
+    expect(r).toMatch(/html\{background:var\(--bg\)\}/); // page surround matches the content background
 
     await exec(tools.write_doc)({ path: "m.html", content: md, theme: "minimal" });
     const m = readFileSync(join(dir, "m.html"), "utf8");
@@ -139,6 +140,9 @@ describe("Phase 4 — scribe document tools (round-trip)", () => {
       const h = readFileSync(join(dir, `${profile}.html`), "utf8");
       expect(h, `${profile} signature`).toMatch(re); // its distinctive component CSS is present
       expect(h, `${profile} light`).not.toMatch(/prefers-color-scheme:dark/); // print-friendly rule holds
+      // One consistent white page background: content, surround, and print margins all match.
+      expect(h, `${profile} white bg`).toMatch(/--bg:#ffffff/);
+      expect(h, `${profile} surround matches`).toMatch(/html\{background:var\(--bg\)\}/);
       expect(h.length, `${profile} nonempty`).toBeGreaterThan(500);
     }
   });

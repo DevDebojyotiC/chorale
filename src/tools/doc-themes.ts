@@ -28,6 +28,7 @@ const TOKENS_DARK = `:root{--accent:#818cf8;--accent-2:#a78bfa;--fg:#e5e7eb;--mu
 --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}`;
 
 const BASE = `*{box-sizing:border-box}
+html{background:var(--bg)}
 body{font-family:var(--sans);color:var(--fg);background:var(--bg);line-height:1.65;max-width:56rem;margin:0 auto;padding:2.5rem 1.5rem;font-size:16px}
 h1,h2,h3{line-height:1.2;font-weight:700}
 h2{font-size:1.4rem;margin-top:2.25rem;padding-bottom:.35rem;border-bottom:2px solid var(--border)}
