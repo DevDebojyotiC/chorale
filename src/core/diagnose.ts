@@ -75,6 +75,18 @@ export const DIAGNOSES: Diagnosis[] = [
     hint:
       "A bracket, paren, brace, quote, or comma is missing or extra. Re-read the reported line(s) and balance them.",
   },
+  {
+    key: "ts-node-loader",
+    test: /ts-node|Cannot read properties of undefined \(reading 'fileExists'\)|Unknown file extension "?\.ts"?|ERR_UNKNOWN_FILE_EXTENSION/i,
+    hint:
+      "The app runs TypeScript through ts-node (or a plain-node entry that imports .ts with no loader). ts-node breaks against newer TypeScript versions and is fragile in ESM. Use tsx instead: add tsx as a devDependency and set the start script to `tsx <entry>` (e.g. \"start\": \"tsx index.js\"); remove any `require('ts-node').register(...)` call. tsx uses esbuild and does not depend on the installed TypeScript version.",
+  },
+  {
+    key: "sqlite-dir",
+    test: /Cannot open database because the directory does not exist|SQLITE_CANTOPEN|unable to open database file/i,
+    hint:
+      "A file-based database (e.g. better-sqlite3) is being opened in a directory that doesn't exist — the driver creates the file but NOT its parent folder. Before opening the DB, create the directory: `import { mkdirSync } from 'node:fs'; mkdirSync(dirname(dbPath), { recursive: true });`. Also open ONE shared connection in a single db module and import it everywhere, rather than a fresh `new Database(...)` (with a possibly different path) in each repository.",
+  },
 ];
 
 /** The diagnosis rules whose pattern matches the error text. */

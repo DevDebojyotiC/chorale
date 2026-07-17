@@ -77,6 +77,18 @@ const SEED_META: Record<string, SeedMeta> = {
     keywords: ["unexpected", "input", "missing", "unterminated", "brace", "paren"],
     rootCause: "a bracket, paren, brace, quote, or comma is missing or extra",
   },
+  "ts-node-loader": {
+    sample: "ts-node register failed on startup — Cannot read properties of undefined (reading 'fileExists') — ts-node is incompatible with the installed TypeScript version.",
+    title: "ts-node crashes running TypeScript (use tsx instead)",
+    keywords: ["ts-node", "typescript", "register", "fileexists", "loader", "startup"],
+    rootCause: "ts-node runs the TypeScript app but breaks against newer TypeScript versions and is fragile in ESM",
+  },
+  "sqlite-dir": {
+    sample: "TypeError: Cannot open database because the directory does not exist — better-sqlite3 opened a DB in a folder that was never created.",
+    title: "Database opened in a directory that does not exist",
+    keywords: ["open", "database", "directory", "exist", "sqlite", "sqlite_cantopen"],
+    rootCause: "a file-based DB is opened in a directory the app never creates; the driver makes the file but not the folder",
+  },
 };
 
 /** A fully-specified seed (used for the runnability-gate classes, which aren't in the diagnose registry). */

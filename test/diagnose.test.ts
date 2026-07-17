@@ -27,6 +27,18 @@ describe("Phase 2 — diagnose-and-compensate registry", () => {
     expect(diagnose(["x.run is not a function"])).toMatch(/isn't a function|export name/i);
   });
 
+  it("flags a ts-node startup crash and steers to tsx (the BookIt boot failure)", () => {
+    const out = diagnose(["TypeError: Cannot read properties of undefined (reading 'fileExists')", "at readConfig (node_modules/ts-node/dist/configuration.js:91)"]);
+    expect(out).toMatch(/tsx/);
+    expect(out).toMatch(/ts-node/);
+  });
+
+  it("flags a sqlite open failure caused by a missing directory", () => {
+    const out = diagnose(["TypeError: Cannot open database because the directory does not exist"]);
+    expect(out).toMatch(/mkdirSync/);
+    expect(out).toMatch(/directory/i);
+  });
+
   it("returns empty for an unrecognized error", () => {
     expect(diagnose(["some totally novel failure 42"])).toBe("");
   });
