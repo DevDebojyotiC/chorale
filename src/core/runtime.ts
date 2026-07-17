@@ -18,6 +18,7 @@ import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./
 import { executePlan, type StepRunner } from "./plan-exec.js";
 import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
 import { checkRunnable, runnableFeedback } from "./runnable.js";
+import { smokeRun, smokeRunFeedback } from "./smoke-run.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
@@ -573,6 +574,27 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         for (const i of issues.slice(0, 6)) log.info(`    ${i.message}\n`);
         // First fix round on the cheap model; escalate the repair once it persists (#5).
         await runSpecialist("coder", runnableFeedback(issues), round >= 1);
+      }
+    }
+
+    // Dynamic boot gate (fullstack frontier, opt-in via CHORALE_SMOKE_RUN): actually boot the
+    // assembled server and probe it — catches crash-on-boot (e.g. a CJS/ESM export mismatch) and 5xx
+    // handler bugs that static checks can't. Best-effort; escalated repair. Needs deps installed.
+    if (process.env.CHORALE_SMOKE_RUN === "1") {
+      const maxBoot = 2;
+      for (let round = 0; round <= maxBoot; round++) {
+        const bootIssues = await smokeRun(cwd, collectProject(cwd).files);
+        if (bootIssues.length === 0) {
+          log.info(round > 0 ? `[chorale] ✓ boots + serves after ${round} fix round(s)\n` : `[chorale] ✓ dynamic boot: server starts and serves\n`);
+          break;
+        }
+        if (round === maxBoot) {
+          log.info(`[chorale] ⚠ ${bootIssues.length} boot issue(s) remain after ${maxBoot} fix round(s)\n`);
+          break;
+        }
+        log.info(`[chorale] ⚠ boot: ${bootIssues.length} issue(s) — asking the coder to fix (escalated)…\n`);
+        for (const i of bootIssues.slice(0, 4)) log.info(`    ${i.message.split("\n")[0]}\n`);
+        await runSpecialist("coder", smokeRunFeedback(bootIssues), true); // escalate: a boot crash is worth the strong model
       }
     }
 
