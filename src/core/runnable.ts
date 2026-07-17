@@ -13,13 +13,25 @@
 import type { SourceFile } from "./contract.js";
 
 export interface RunnableIssue {
-  kind: "no-entry" | "broken-start" | "missing-import" | "missing-env";
+  kind: "no-entry" | "broken-start" | "missing-import" | "missing-env" | "unmounted-routes";
   where?: string;
   message: string;
 }
 
 const norm = (p: string): string => p.replace(/\\/g, "/");
 const dirOf = (p: string): string => norm(p).split("/").slice(0, -1).join("/");
+const moduleKey = (p: string): string => norm(p).replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "").replace(/\/index$/, "");
+
+/** Resolve an import specifier against the importing file's dir, to a comparable module tail. */
+function resolveTail(fromPath: string, spec: string): string {
+  const dir = moduleKey(fromPath).split("/").slice(0, -1);
+  for (const seg of norm(spec).replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "").split("/")) {
+    if (seg === "." || seg === "") continue;
+    if (seg === "..") dir.pop();
+    else dir.push(seg);
+  }
+  return dir.join("/").replace(/\/index$/, "");
+}
 /** Suffixes tried when resolving a module path (bare, extensions, index files). */
 const RESOLVE_SUFFIXES = ["", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", "/index.js", "/index.ts", "/index.jsx", "/index.tsx"];
 /** Asset imports we don't treat as code modules (avoid false "missing" on css/json/images). */
@@ -90,6 +102,32 @@ export function checkRunnable(files: SourceFile[], allPaths: Set<string>): Runna
     const needsSecret = unitCode.some((f) => /process\.env\.(JWT_SECRET|SECRET|SESSION_SECRET|DATABASE_URL|DB_URL)/.test(f.content));
     if (needsSecret && !allPaths.has(prefix + ".env")) {
       issues.push({ kind: "missing-env", where: dir || ".", message: `${dir || "project"}: reads required secrets from process.env (e.g. JWT_SECRET) but there is no .env file${allPaths.has(prefix + ".env.example") ? " (only .env.example)" : ""} — create a real .env so it runs, and mention it in the README.` });
+    }
+  }
+
+  // unmounted-routes: a router file defines endpoints but the server never app.use()s it — the app
+  // boots but the API is dead (exactly the e2e failure: authRoutes/notesRoutes existed, server.js
+  // only served /health). A server that starts isn't enough; its routes must be wired in.
+  const routeFiles = code.filter(
+    (f) => /\brouter\.(get|post|put|patch|delete)\s*\(/i.test(f.content) && /(module\.exports\s*=\s*router|export\s+default\s+router|export\s*\{\s*router)/.test(f.content),
+  );
+  if (routeFiles.length > 0) {
+    const mountedTails = new Set<string>();
+    for (const f of code) {
+      const imported = new Map<string, string>();
+      for (const m of f.content.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*require\(\s*['"`]([^'"`]+)['"`]\s*\)/g)) imported.set(m[1]!, resolveTail(f.path, m[2]!));
+      for (const m of f.content.matchAll(/import\s+(\w+)\s+from\s+['"`]([^'"`]+)['"`]/g)) imported.set(m[1]!, resolveTail(f.path, m[2]!));
+      for (const m of f.content.matchAll(/\bapp\.use\(\s*(?:['"`][^'"`]+['"`]\s*,\s*)?(\w+)/g)) {
+        const tail = imported.get(m[1]!);
+        if (tail) mountedTails.add(tail);
+      }
+    }
+    for (const rf of routeFiles) {
+      const key = moduleKey(rf.path);
+      const mounted = [...mountedTails].some((t) => t === key || t.endsWith("/" + key) || key.endsWith("/" + t));
+      if (!mounted) {
+        issues.push({ kind: "unmounted-routes", where: rf.path, message: `${rf.path} defines API routes but the server never mounts it with app.use('/…', router) — its endpoints aren't reachable. Import and mount it in the server entry file.` });
+      }
     }
   }
 

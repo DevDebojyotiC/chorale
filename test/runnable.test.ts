@@ -66,6 +66,29 @@ describe("Phase 4 — runnability gate (fullstack lever #3)", () => {
     expect(checkRunnable(files, pathsOf(files, ["backend/.env"])).some((i) => i.kind === "missing-env")).toBe(false);
   });
 
+  it("flags route files that exist but are never mounted (the e2e 'boots but API is dead' failure)", () => {
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      // server boots (has .listen) but only serves /health — never mounts the routers
+      { path: "backend/server.js", content: "const express=require('express');const app=express();app.get('/health',(q,r)=>r.send('ok'));app.listen(5000);module.exports=app;" },
+      { path: "backend/routes/authRoutes.js", content: "const router=require('express').Router();router.post('/login',h);module.exports=router;" },
+      { path: "backend/routes/notesRoutes.js", content: "const router=require('express').Router();router.get('/',h);module.exports=router;" },
+    ];
+    const issues = checkRunnable(files, pathsOf(files));
+    const unmounted = issues.filter((i) => i.kind === "unmounted-routes");
+    expect(unmounted).toHaveLength(2); // both route files are unmounted
+    expect(issues.some((i) => i.kind === "no-entry")).toBe(false); // the server DOES start — that's not the problem
+  });
+
+  it("does not flag routers that ARE mounted", () => {
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "backend/server.js", content: "const express=require('express');const app=express();const authRoutes=require('./routes/authRoutes');app.use('/auth', authRoutes);app.listen(5000);" },
+      { path: "backend/routes/authRoutes.js", content: "const router=require('express').Router();router.post('/login',h);module.exports=router;" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "unmounted-routes")).toBe(false);
+  });
+
   it("runnableFeedback lists the issues as a fix instruction", () => {
     const files: SourceFile[] = [{ path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) }, { path: "backend/x.js", content: "1" }];
     const fb = runnableFeedback(checkRunnable(files, pathsOf(files)));
