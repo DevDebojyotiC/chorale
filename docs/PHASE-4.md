@@ -1,6 +1,6 @@
 # Phase 4 — Core Agents
 
-> **Status:** in progress · **Branch:** `phase-4` · **Tests:** 157 passing · **Last updated:** 2026-07-16
+> **Status:** in progress (Tasks 1–4 shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 210 passing · **Last updated:** 2026-07-16
 >
 > This is a **living document**. It records what Phase 4 set out to do, everything built so far,
 > and — most importantly — *why* each decision was made. It will be revised and finalized when
@@ -26,8 +26,8 @@ The ordering is by leverage (see [`ROADMAP.md`](ROADMAP.md)):
 
 1. **Reviewer / Verifier** ✅ — catches what the coder's mechanical checks can't.
 2. **Files / Docs specialist** (`scribe`) ✅ — grounded document generation, editing, and conversion.
-3. **Planner / Architect** 🔄 — decomposes complex requests into a plan; strengthens the orchestrator. *(in progress)*
-4. **Test-writer** ⏳ — generates and *runs* tests (the long-noted "test-execution verification" lever).
+3. **Planner / Architect** ✅ — decomposes complex requests into a grounded, validated plan; a generalized, composable **gate** framework; wired plan-first into the orchestrator.
+4. **Test-writer** ✅ — writes and *runs* tests, graded by **mutation** (tests must pass on correct code and fail on planted bugs).
 5. **Productivity** ⏳ — email/calendar/notes via MCP (the Claude-Desktop-replacement pillar).
 
 Phase 4 closes with a larger real-world codebase benchmark. The GUI is **Phase 5**, deliberately
@@ -186,11 +186,11 @@ to the assistant's long-term memory as standing preferences.
 
 ---
 
-## 4. Task 3 — Planner / Architect & the generalized gate framework 🔄 (in progress)
+## 4. Task 3 — Planner / Architect & the generalized gate framework ✅
 
-This is the task currently in flight. It has two intertwined deliverables: the **planner agent
-itself**, and a **generalized "gate" framework** that emerged from designing how the planner plugs in.
-The plumbing (the gate framework) is built and green; the planner brain is next.
+Two intertwined deliverables, both shipped: the **planner agent itself**, and a **generalized "gate"
+framework** that emerged from designing how the planner plugs in. The sections below record the design
+decisions and *why*; §4.6 lists exactly what was built.
 
 ### 4.1 What the Planner/Architect is for
 
@@ -294,18 +294,54 @@ this with a reframe and a two-part mechanism:
   it. The `gate()` tool (`src/tools/gate-tool.ts`) is allow-list-restricted; refusals degrade
   gracefully and record `unmetGates` that surface on the result. (commit `9e62a24`)
 
-**Left to build:**
+**Built — Phase B (the planner brain), green:**
 
-- **Phase B — the planner agent + `src/core/plan.ts`.** The Approach-B decomposition mechanism
-  (`decompose` → steps with assignment/deps/acceptance-criteria; `assessComplexity` → trivial|complex
-  by threshold; grounded against real repo files), the `agents/planner.md` persona + examples, and the
-  `eval/planner-*.ts` benchmark (plan/no-plan precision·recall, completeness, ordering, delegation, no
-  invented files). *This is the actual "brain"; everything above is the plumbing it plugs into.*
-- **Phase C — wire it up as pure config.** Add the `pre` lifecycle auto-gate hook, then give the
-  orchestrator `gates: [{agent: planner, mode: auto, when: pre}]` (guaranteed plan-first) and add
-  `planner` to the coder's gates (a plan-gate → an internal ordered checklist that feeds the coder's
-  existing verify). End-to-end benchmark: a complex request plans+executes; a simple one no-ops the
-  triage.
+- **B.1/B.2 — `src/core/plan.ts` + the planner agent.** A canonical `Plan`, a structured `plan` tool
+  (preferred output) + a tolerant Markdown fallback parser, `assessComplexity` (Approach B — measured
+  from the decomposition), and `validatePlan` (assignments, DAG, ordering, grounding). `agents/planner.md`
+  is read-only (grounds the plan; doesn't write). **A live-exposed gap fixed:** the validator was built
+  but *not wired* — added a **plan validate-repair loop** in the runtime, so a plan's grounding is
+  enforced, not just documented; plus fixes (preserve unresolvable deps so they're flagged; require
+  acceptance criteria; don't flag a file an earlier step creates; tighten the design-decision heuristic).
+- **B.3 — benchmark** (`eval/planner-*.ts`, `PLANNER-RESULTS.md`): graded on Complexity / Completeness /
+  Delegation / Structure. `planner-selftest.ts` proves the graders with **no model calls** (gold plans
+  pass; broken plans fail on exactly the broken dimension).
+
+**Built — Phase C (wiring, pure config):** a `pre` lifecycle auto-gate hook; the orchestrator runs the
+planner as an **auto `pre` gate** (guaranteed plan-first) and the coder can pull it **on-demand**;
+`formatPlan` renders the plan as a checklist injected into the executor.
+
+### 4.7 The fullstack capability experiment (levers #1–#3, #5)
+
+Probing the pipeline on a *real* production-grade fullstack prompt (not the demo) exposed that a cheap
+model + per-step delegation builds structured single-domain code well but not a complete, coherent,
+runnable multi-domain app. Four compensation levers were built, each deterministic + unit-tested and
+each validated against a real failure (full write-up: [`FULLSTACK-EXPERIMENT.md`](FULLSTACK-EXPERIMENT.md)):
+
+- **#1 plan execution across turns** (`src/core/plan-exec.ts`): run *every* step in dependency order,
+  delegating each with per-step file verification + retry — the app now *completes* (all layers).
+- **#2 shared project contract** (`src/core/contract.ts`): extract the real routes / base URL / tables /
+  exports from files built so far and thread them into later steps — so consumers build against reality.
+- **#3 runnability gate** (`src/core/runnable.ts`): statically catch no-entry / broken-start / missing-env
+  / missing-import / **unmounted-routes**, and loop a repair back to the coder.
+- **#5 escalation**: escalate the retry/repair to the stronger model (gpt-oss) only when the cheap one
+  already failed a step.
+
+**Milestone:** with all four, Chorale reliably builds a **complete, wired, booting fullstack skeleton whose
+backend serves its API**. A *fully working* app is still beyond reliable cheap-model reach; the remaining
+gaps (dynamic boot-and-smoke runnability; build ordering so producers are correct before consumers build)
+are characterized in the findings doc. All opt-in via `CHORALE_PLAN_EXEC=1` — default behavior unchanged.
+
+## 4b. Task 4 — Test-writer ✅
+
+`test-writer` writes **and runs** tests for existing code, graded by **mutation** — the honest metric:
+its tests must **pass on the correct implementation AND fail on every planted buggy mutant**. A
+green-but-worthless suite (trivial assertions / matching a bug) is exactly the failure the benchmark
+exposes. Persona rule: *never weaken a test to go green* — a test failing because the code is wrong is a
+**bug found**, reported, not papered over. Benchmark (`eval/testwriter-*.ts`, `TESTWRITER-RESULTS.md`)
+runs `node --test` on real files (execution-grading, no model calls in the self-test): gold suites kill
+all mutants; a trivial `assert.ok(true)` suite passes clean but kills nothing → graded not-good. The
+planner now routes test steps to it.
 
 ---
 
@@ -317,18 +353,21 @@ this with a reframe and a two-part mechanism:
 | Tests | **157 passing**, typecheck clean, `npm audit` 0 vulnerabilities |
 | Task 1 — Reviewer | ✅ shipped (5 suites green, 3 production modes) |
 | Task 2 — Scribe | ✅ shipped (22 capability checks green, multi-format I/O, 3 design tiers, 10 profiles, 3 permanent doc rules, `check_length`) |
-| Task 3 — Planner/Gates | 🔄 gate framework built (Phase A green); planner agent + wiring (Phases B, C) remaining |
-| Task 4 — Test-writer | ⏳ not started |
+| Task 3 — Planner/Gates | ✅ shipped — planner agent + `plan.ts` (validate-repair), generalized gates (ancestor-exclusion loop guard, on-demand + auto), benchmark, plan-first wiring |
+| Task 4 — Test-writer | ✅ shipped — writes+runs tests, mutation-graded |
+| Fullstack levers | ✅ #1 plan-exec · #2 shared contract · #3 runnability gate · #5 escalation (opt-in `CHORALE_PLAN_EXEC`) |
 | Task 5 — Productivity | ⏳ not started |
 | Default model | `hf:google/gemma-4-31B-it` (≈$0) · escalation `fireworks:…/gpt-oss-120b` |
 
 ### Key modules touched this phase
-- `agents/*.md` — reviewer, scribe personas + examples; `gates` allow-lists.
+- `agents/*.md` — reviewer/scribe/planner/test-writer personas + examples; `gates` allow-lists.
 - `src/agents/loader.ts` — `GateSpec` + `gates` parsing (+ legacy `reviewGate` translation).
 - `src/core/ground.ts` — `groundCheck`, meaning-preservation, `checkDesignFidelity`.
 - `src/core/gate.ts` — gate chain, ancestor-exclusion loop guard, depth cap.
-- `src/core/runtime.ts` — `runGate`, review gate, on-demand gate wiring, `RunResult.unmetGates`.
-- `src/tools/gate-tool.ts` — the on-demand `gate()` tool.
+- `src/core/plan.ts` / `plan-exec.ts` — plan model + validate-repair; deterministic plan execution.
+- `src/core/contract.ts` / `runnable.ts` — shared-contract extraction; runnability gate.
+- `src/core/runtime.ts` — `runGate`, gates, `RunResult.{unmetGates,plan}`, plan-exec + #2/#3/#5 wiring.
+- `src/tools/gate-tool.ts` / `plan-tool.ts` — the `gate()` and `plan` tools.
 - `src/tools/documents.ts` — `read_doc`/`write_doc`/`write_sheet`/`convert`/`check_length`.
 - `src/tools/doc-themes.ts`, `doc-profiles.ts`, `doc-pages.ts` — themes, 10 profiles, topic-length.
 

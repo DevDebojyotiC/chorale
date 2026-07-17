@@ -138,10 +138,37 @@ but are never `app.use`'d). Repairs loop back to the coder.
 gates can't fully overcome is the cheap model's **cross-file coherence inconsistency**. That points at
 the remaining quality lever:
 
-### #5 — model escalation for hard/failed steps (in progress)
-Use the cheap model first; **escalate the retry/repair to the stronger model** (gpt-oss-120B) when a
-step no-ops or the runnability gate keeps failing — the "compensation" philosophy applied per step. This
-targets exactly the coherence errors (unmounted routes, contract guesses) at their source, only paying
-for the stronger model when the cheap one already failed.
+### #5 — model escalation for hard/failed steps ✅
+Cheap model first; **escalate the retry/repair to the stronger model** (gpt-oss-120B) when a step
+no-ops or the runnability gate keeps failing — the compensation philosophy applied per step, paying for
+the strong model only when the cheap one already failed. `runSpecialist(agent, task, escalate)` forces
+`resolveModelPlan(spec).fallbacks[0]`; the per-step retry and the 2nd+ runnability-repair round escalate.
 
-*(Levers #4 scaffolding and #6 scaled budgets remain, lower priority.)*
+### All-four-levers run (#1+#2+#3+#5, live)
+All four fired visibly: plan executed 7/7 · `⤴ escalating test-writer → gpt-oss-120b` · the gate caught
+**5 issues → ✓ runnable after 1 fix round**. **Real, compounding progress:** for the first time the
+repair made a dead build *live* — `server.js` now mounts its routers (`app.use('/api/auth', …)`) and the
+booted backend actually **serves the `/api/auth` endpoints** (not the previous run's `/health`-only corpse).
+
+But still not a *working* app, exposing the next two frontiers:
+- **A runtime bug the static gate can't see:** `POST /api/auth/register` → **500**. `checkRunnable` is
+  static — it confirms routes are wired, not that a handler doesn't throw. → need **dynamic runnability**
+  (actually boot + smoke the flow).
+- **Build ordering:** the `/api` mounting was added by #3's *post-build* repair — *after* the frontend was
+  already built against the incomplete contract, so the frontend hardcodes `localhost:3000/register`
+  (root) while the backend serves `/api/auth/register`. Fixing a producer after its consumer is built
+  doesn't re-align the consumer. → need **producers correct before consumers build**, and/or the repair
+  to re-verify consumers.
+
+| Run | Levers | Outcome |
+|-----|--------|---------|
+| e2e | #1+#2+#3 | complete, boots, but routes unmounted (API dead) — closed the gate gap |
+| all-four | #1+#2+#3+#5 | complete, **routes mounted, backend serves `/api`**; register throws 500; frontend↔backend path mismatch |
+
+**Milestone reached:** Chorale reliably builds a **complete, wired, booting fullstack skeleton whose backend
+serves its API** — no earlier run did. A *fully working* app is still beyond reliable cheap-model reach; the
+remaining gaps (dynamic runnability, build ordering, model coherence-following) are genuine research
+problems, now clearly characterized.
+
+*(Next frontier: dynamic runnability [boot + smoke] and build-ordering. Levers #4 scaffolding and #6
+scaled budgets remain, lower priority.)*
