@@ -488,7 +488,11 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   let planExecBlock = "";
   if (process.env.CHORALE_PLAN_EXEC === "1" && preGatePlan && agent.tools.includes("delegate")) {
     preGateBlock = ""; // the plan is being executed for real — don't also tell the model to do it
-    const stepRunner: StepRunner = async (agentName, task, step) => {
+    const canEscalate = process.env.CHORALE_NO_ESCALATE !== "1";
+    // Lever #5: run a specialist on a task; when `escalate`, force the agent's stronger fallback model
+    // (gpt-oss). Compensation applied per step — pay for the strong model only when the cheap one has
+    // already failed this step (a no-op or a runnability defect), which is where it earns its cost.
+    const runSpecialist = async (agentName: string, task: string, escalate: boolean): Promise<{ ok: boolean; text: string }> => {
       const file = resolve(config.agents.dir, `${agentName}.md`);
       if (!existsSync(file)) return { ok: false, text: `unknown specialist "${agentName}"` };
       let spec: AgentSpec;
@@ -497,35 +501,42 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       } catch (e) {
         return { ok: false, text: `failed to load "${agentName}": ${e instanceof Error ? e.message : String(e)}` };
       }
-      const newFiles = step.files.filter((f) => f.status === "new").map((f) => f.path);
-      const missing = () => newFiles.filter((p) => !existsSync(resolve(cwd, p)));
-      const runOnce = (t: string) =>
-        runAgent({
+      const modelOverride = escalate && canEscalate ? resolveModelPlan(spec, config).fallbacks[0] : undefined;
+      if (modelOverride) log.info(`[chorale]   ⤴ escalating ${agentName} → ${modelOverride}\n`);
+      try {
+        const res = await runAgent({
           config,
           registry,
           agent: spec,
-          prompt: t,
+          prompt: task,
+          modelOverride,
           permissionMode,
           stream: process.env.CHORALE_TRACE === "1",
           depth: (opts.depth ?? 0) + 1,
           delegationPath: [...(opts.delegationPath ?? []), agentName],
         });
-      try {
-        let res = await runOnce(task);
-        // Verify the step actually produced its declared `new` files. A step that created NONE of
-        // them did not do its job (the sub-agent explored/no-opped) — retry once, pointed.
-        if (newFiles.length > 0 && missing().length === newFiles.length) {
-          log.info(`[chorale]   ↻ step ${step.id} wrote none of its files — retrying\n`);
-          res = await runOnce(
-            `${task}\n\nYou did not create any of the required files. Write the FULL contents of each one now with the write tool (it creates folders automatically — do not use mkdir or bash for this): ${missing().join(", ")}.`,
-          );
-        }
-        const still = missing();
-        const ok = newFiles.length === 0 || still.length < newFiles.length; // produced at least some deliverable
-        return { ok, text: res.text + (still.length ? `\n[incomplete — missing files: ${still.join(", ")}]` : "") };
+        return { ok: true, text: res.text };
       } catch (e) {
         return { ok: false, text: e instanceof Error ? e.message : String(e) };
       }
+    };
+    const stepRunner: StepRunner = async (agentName, task, step) => {
+      const newFiles = step.files.filter((f) => f.status === "new").map((f) => f.path);
+      const missing = () => newFiles.filter((p) => !existsSync(resolve(cwd, p)));
+      let r = await runSpecialist(agentName, task, false);
+      // Verify the step produced its declared `new` files; if it created NONE, retry — ESCALATED,
+      // since the cheap model just no-op'd this step.
+      if (newFiles.length > 0 && missing().length === newFiles.length) {
+        log.info(`[chorale]   ↻ step ${step.id} wrote none of its files — retrying (escalated)\n`);
+        r = await runSpecialist(
+          agentName,
+          `${task}\n\nYou did not create any of the required files. Write the FULL contents of each one now with the write tool (it creates folders automatically — do not use mkdir or bash for this): ${missing().join(", ")}.`,
+          true,
+        );
+      }
+      const still = missing();
+      const ok = newFiles.length === 0 || still.length < newFiles.length; // produced at least some deliverable
+      return { ok, text: r.text + (still.length ? `\n[incomplete — missing files: ${still.join(", ")}]` : "") };
     };
     log.info(`\n[chorale] ▶ executing ${preGatePlan.steps.length}-step plan deterministically…\n`);
     const results = await executePlan(preGatePlan, stepRunner, {
@@ -558,9 +569,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           log.info(`[chorale] ⚠ ${issues.length} runnability issue(s) remain after ${maxFix} fix round(s)\n`);
           break;
         }
-        log.info(`[chorale] ⚠ runnability: ${issues.length} issue(s) — asking the coder to fix…\n`);
+        log.info(`[chorale] ⚠ runnability: ${issues.length} issue(s) — asking the coder to fix${round >= 1 ? " (escalated)" : ""}…\n`);
         for (const i of issues.slice(0, 6)) log.info(`    ${i.message}\n`);
-        await stepRunner("coder", runnableFeedback(issues), { id: "runfix", agent: "coder", title: "make the project runnable", dependsOn: [], layer: "other", acceptance: "the app runs", files: [], designDecision: false });
+        // First fix round on the cheap model; escalate the repair once it persists (#5).
+        await runSpecialist("coder", runnableFeedback(issues), round >= 1);
       }
     }
 
