@@ -1,6 +1,6 @@
 # Phase 4 — Core Agents
 
-> **Status:** in progress (Tasks 1–4 + the escalate-last system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 289 passing · **Last updated:** 2026-07-18
+> **Status:** in progress (Tasks 1–4 + the escalate-last system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 295 passing · **Last updated:** 2026-07-18
 >
 > This is a **living document**. It records what Phase 4 set out to do, everything built so far,
 > and — most importantly — *why* each decision was made. It will be revised and finalized when
@@ -521,6 +521,20 @@ routes mounted) the build reached **0 issues and served register/login/bookings 
 wiring **surfaced three bugs the dead code had hidden** (a `JWT_SECRET`/`JWT_ACCESS_SECRET` name
 mismatch, dotenv loading after the module that read it, a phantom `../db.js` import). Dead code hides
 bugs; exposing it is what finds them.
+
+**Deterministic wire-up — code where the model keeps failing.** Detecting the gap wasn't enough:
+across three repair passes, gemma *and* gpt-oss reliably wrote a route file and then failed to make the
+coordinated edit to mount it in the app file (a multi-file edit the models botch even when the directive
+names the exact file and lines). But mounting an existing router is *mechanical*, so `planWireUp` does
+it as a pure transform — walk the app file's import graph, find every router file it doesn't already
+reach, and splice in the `import` + `app.use(...)` (mirroring the app's extension, quote, and
+prefix/bare mount style, placed after the import block and before the 404/error catch-all). It runs as a
+**pre-pass** before the model on any `unmounted-routes`/`unexposed-feature` tier: the tier often clears
+with **zero model calls**, and the model is left only with routes that genuinely need to be *generated*.
+Verified end to end — an unmounted-router fixture wires up deterministically to **0 issues and boots +
+serves the newly-mounted route** — and mirrors the `.js`-specifier/`.ts`-file convention so the edit
+survives `tsc`. This is the pattern the whole phase keeps arriving at: **deterministic transforms for
+the mechanical, the model only for genuine generation.**
 
 **Honest limits.** A *fully working* app from one cheap-model run remains out of reach, and the frontier
 keeps *moving* — every fix reveals the next class, and each of these checks is a heuristic that can only

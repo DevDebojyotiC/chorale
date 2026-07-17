@@ -12,7 +12,7 @@
  *   npx tsx eval/runnable-repair.ts [path-to-project]
  */
 import "dotenv/config";
-import { readdirSync, statSync, readFileSync } from "node:fs";
+import { readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { loadConfig } from "../src/core/config.js";
 import { buildRegistry } from "../src/core/model-registry.js";
@@ -22,7 +22,7 @@ import { resolveModelPlan } from "../src/core/model-policy.js";
 import { runRepairLadder } from "../src/core/repair.js";
 import { getPlaybook } from "../src/core/playbook.js";
 import { ensureSeeded } from "../src/core/playbook-seed.js";
-import { checkRunnable, tiersOf, directiveFor, type RunnableIssue } from "../src/core/runnable.js";
+import { checkRunnable, tiersOf, directiveFor, planWireUp, type RunnableIssue } from "../src/core/runnable.js";
 import { setLogLevel } from "../src/core/log.js";
 
 setLogLevel("debug");
@@ -107,6 +107,20 @@ for (let pass = 0; pass < 4; pass++) {
   if (issues.length === 0) break;
   const tier = tiersOf(issues)[0]!;
   const tierKinds = new Set(tier.map((i) => i.kind));
+
+  // Deterministic wire-up pre-pass (mount existing routers — no model call).
+  if (tierKinds.has("unmounted-routes") || tierKinds.has("unexposed-feature")) {
+    const proj = collect(cwd);
+    const edits = planWireUp(proj.files, proj.paths);
+    for (const e of edits) writeFileSync(join(cwd, e.path), e.content, "utf8");
+    const mounted = edits.reduce((n, e) => n + e.mounted.length, 0);
+    if (mounted > 0) say(`  ⚙ deterministic wire-up mounted ${mounted} router(s): ${edits.flatMap((e) => e.mounted.map((m) => m.varName)).join(", ")}`);
+    if (allIssues().filter((i) => tierKinds.has(i.kind)).length === 0) {
+      say(`  ✓ ${[...tierKinds].join("/")} tier cleared by wire-up (no model call)`);
+      continue;
+    }
+  }
+
   const { text: directive, note } = directiveFor(tier, issues, collect(cwd).files);
   const tierMessages = tier.map((i, idx) => i.message + (directive && idx === 0 ? "\n\n" + directive : ""));
   const fingerprint = (): string => {

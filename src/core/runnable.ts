@@ -685,6 +685,142 @@ export function directiveFor(tier: RunnableIssue[], allIssues: RunnableIssue[], 
   return { text: "", note: "" };
 }
 
+// ── deterministic wire-up (mount existing routers without a model call) ────────
+
+export interface WireUpEdit {
+  /** The app/entry file that was edited. */
+  path: string;
+  /** Its new content, with imports + app.use lines added. */
+  content: string;
+  mounted: { router: string; varName: string }[];
+}
+
+/** A file that exports an Express-style router (built with Router()/express.Router()). */
+function exportsRouter(content: string): boolean {
+  if (!/\b(?:express\.)?Router\s*\(/.test(content)) return false;
+  return /export\s+default\b/.test(content) || /module\.exports\s*=/.test(content) || /export\s*\{\s*router\b/.test(content);
+}
+
+/** A stable JS identifier for a route file: auth.routes.ts → authRoutes (deduped against `taken`). */
+function routerVarName(path: string, taken: Set<string>): string {
+  const base = (norm(path).split("/").pop() ?? "feature").replace(/\.\w+$/, "").replace(/\.(routes?|router)$/i, "") || "feature";
+  let name = base.replace(/[^a-zA-Z0-9]+([a-zA-Z0-9])?/g, (_, c: string | undefined) => (c ? c.toUpperCase() : ""));
+  if (!/^[a-zA-Z_]/.test(name)) name = "r" + name;
+  name = name + "Routes";
+  let out = name;
+  for (let n = 2; taken.has(out); n++) out = name + n;
+  taken.add(out);
+  return out;
+}
+
+/** Relative import spec from the app file to a target, mirroring the app's extension + quote style. */
+function relImport(appPath: string, targetPath: string, appContent: string): { spec: string; quote: string } {
+  const from = norm(appPath).split("/").slice(0, -1);
+  const to = norm(targetPath).split("/");
+  let i = 0;
+  while (i < from.length && i < to.length && from[i] === to[i]) i++;
+  let rel = [...from.slice(i).map(() => ".."), ...to.slice(i)].join("/");
+  if (!/^\.\.?\//.test(rel)) rel = "./" + rel;
+  // Mirror the extension the app WRITES in its relative import specifiers, not the target's real one:
+  // TS-ESM apps write `.js` specifiers that point at `.ts` files (a `.ts` specifier breaks under tsc).
+  const specExt = appContent.match(/from\s+['"]\.[^'"]*?(\.[a-z]+)['"]/)?.[1]?.toLowerCase();
+  if (specExt && /^\.(js|jsx|mjs|cjs)$/.test(specExt)) rel = rel.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, ".js");
+  else if (specExt && /^\.(ts|tsx)$/.test(specExt)) rel = rel.replace(/\.(js|jsx|mjs|cjs)$/, ".ts");
+  else if (!specExt) rel = rel.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, ""); // app writes extensionless specifiers
+  const quote = appContent.match(/import\s+[\w{},*\s]+from\s+(['"])/)?.[1] ?? "'";
+  return { spec: rel, quote };
+}
+
+/** Insert `import`/`app.use` lines into an app file — after the import block, before terminal middleware. */
+function applyMounts(content: string, appVar: string, importLines: string[], useLines: string[]): string {
+  const nl = content.includes("\r\n") ? "\r\n" : "\n";
+  const lines = content.split(/\r?\n/);
+  let lastImport = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*import\b/.test(lines[i]!) || /^\s*(?:const|let|var)\s+[^=]*=\s*require\s*\(/.test(lines[i]!)) lastImport = i;
+    else if (lastImport >= 0 && lines[i]!.trim() !== "" && !/^\s*\/\//.test(lines[i]!)) break;
+  }
+  // Mount BEFORE the first terminal middleware (a 404 catch-all or the error handler), else after the
+  // last existing `<app>.use(` line — so routes are always reachable ahead of the catch-all.
+  const useRe = new RegExp(`\\b${appVar}\\.use\\s*\\(`);
+  const termRe = new RegExp(`\\b${appVar}\\.use\\s*\\(\\s*(?:\\(|async\\b|function\\b|\\w*[Ee]rror\\w*|\\w*not[Ff]ound\\w*|handle404)`);
+  let mountIdx = lines.findIndex((l) => termRe.test(l));
+  if (mountIdx === -1) {
+    let lastUse = -1;
+    for (let i = 0; i < lines.length; i++) if (useRe.test(lines[i]!)) lastUse = i;
+    mountIdx = lastUse >= 0 ? lastUse + 1 : Math.max(0, lines.findIndex((l) => new RegExp(`\\b${appVar}\\s*=\\s*(?:express|fastify|koa)\\s*\\(`).test(l)) + 1) || lines.length;
+  }
+  lines.splice(mountIdx, 0, ...useLines); // insert body first — keeps the import index valid
+  lines.splice(lastImport + 1, 0, ...importLines);
+  return lines.join(nl);
+}
+
+/**
+ * Deterministic wire-up: mount every router file the app doesn't already import. Writing a route file
+ * and forgetting to wire it into the app is the failure the coder repeats even when told exactly what
+ * to do (it's a coordinated multi-file edit) — but mounting an existing router is purely mechanical, so
+ * a transform does it reliably and the model is left only with genuinely-missing routes to *generate*.
+ */
+export function planWireUp(files: SourceFile[], allPaths: Set<string>): WireUpEdit[] {
+  const code = files.filter((f) => isCode(f.path));
+  const byPath = new Map(code.map((f) => [norm(f.path), f]));
+  const serverDirs = files
+    .filter((f) => norm(f.path).endsWith("package.json"))
+    .flatMap((f) => {
+      try {
+        const pkg = JSON.parse(f.content) as Pkg;
+        const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+        return SERVER_FRAMEWORK_DEPS.some((d) => d in deps) ? [dirOf(f.path)] : [];
+      } catch {
+        return [];
+      }
+    });
+
+  const edits: WireUpEdit[] = [];
+  for (const dir of serverDirs) {
+    const prefix = dir && dir !== "." ? dir + "/" : "";
+    const app = mountFile(files, dir);
+    if (!app) continue;
+
+    // Reachable from the app file — a router transitively mounted via a barrel/index counts as wired.
+    const reachable = new Set<string>([norm(app.path)]);
+    const queue = [norm(app.path)];
+    while (queue.length) {
+      const f = byPath.get(queue.pop()!);
+      if (!f) continue;
+      for (const spec of localSpecs(f.content)) {
+        const t = resolveLocalImport(f.path, spec, allPaths);
+        if (t && !reachable.has(norm(t))) {
+          reachable.add(norm(t));
+          queue.push(norm(t));
+        }
+      }
+    }
+
+    const routers = code.filter((f) => norm(f.path).startsWith(prefix) && ROUTE_FILE_RE.test("/" + norm(f.path)) && exportsRouter(f.content) && !reachable.has(norm(f.path)) && norm(f.path) !== norm(app.path));
+    if (routers.length === 0) continue;
+
+    const taken = new Set<string>();
+    for (const m of app.content.matchAll(/(?:import\s+|(?:const|let|var|function|class)\s+)(\w+)/g)) taken.add(m[1]!);
+    const appVar = app.content.match(/(?:const|let|var)\s+(\w+)\s*=\s*(?:express|fastify|koa)\s*\(\s*\)/)?.[1] ?? "app";
+    const prefixed = new RegExp(`\\b${appVar}\\.use\\s*\\(\\s*['"\`]/`).test(app.content); // existing mounts use a path prefix?
+
+    const importLines: string[] = [];
+    const useLines: string[] = [];
+    const mounted: WireUpEdit["mounted"] = [];
+    for (const rf of routers) {
+      const v = routerVarName(rf.path, taken);
+      const { spec, quote } = relImport(app.path, rf.path, app.content);
+      const feature = (norm(rf.path).split("/").pop() ?? "").replace(/\.\w+$/, "").replace(/\.(routes?|router)$/i, "");
+      importLines.push(`import ${v} from ${quote}${spec}${quote};`);
+      useLines.push(prefixed ? `${appVar}.use(${quote}/api/${feature}${quote}, ${v});` : `${appVar}.use(${v});`);
+      mounted.push({ router: rf.path, varName: v });
+    }
+    edits.push({ path: app.path, content: applyMounts(app.content, appVar, importLines, useLines), mounted });
+  }
+  return edits;
+}
+
 /** Turn runnability issues into a repair instruction. */
 export function runnableFeedback(issues: RunnableIssue[]): string {
   if (issues.length === 0) return "";

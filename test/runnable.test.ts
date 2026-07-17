@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, missingEndpointDirective, unrunnableEntryDirective, unexposedFeatureDirective, directiveFor, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
+import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, missingEndpointDirective, unrunnableEntryDirective, unexposedFeatureDirective, planWireUp, directiveFor, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
+import type { SourceFile as SF } from "../src/core/contract";
+
+/** Apply planWireUp edits back onto a file set (what the repair loop does on disk). */
+function applyWireUp(files: SF[]): SF[] {
+  const edits = planWireUp(files, new Set(files.map((f) => f.path.replace(/\\/g, "/"))));
+  const map = new Map(edits.map((e) => [e.path.replace(/\\/g, "/"), e.content]));
+  return files.map((f) => (map.has(f.path.replace(/\\/g, "/")) ? { ...f, content: map.get(f.path.replace(/\\/g, "/"))! } : f));
+}
 import type { SourceFile } from "../src/core/contract";
 
 const pathsOf = (files: SourceFile[], extra: string[] = []): Set<string> => new Set([...files.map((f) => f.path), ...extra]);
@@ -431,6 +439,87 @@ describe("Phase 4 — unexposed features (build completeness, the BookIt gap)", 
     const { text, note } = directiveFor([issue], [issue], files);
     expect(note).toMatch(/expose the implemented features/i);
     expect(text).toMatch(/dead code/i);
+  });
+});
+
+describe("Phase 4 — deterministic wire-up (mount routers without a model)", () => {
+  const app = (imports: string, mounts: string) =>
+    `import express from 'express';\n${imports}import { errorHandler } from './middleware/error.ts';\nconst app = express();\napp.use(express.json());\n${mounts}app.use((req, res) => res.status(404).json({ message: 'Not Found' }));\napp.use(errorHandler);\nexport default app;`;
+
+  const base = (): SourceFile[] => [
+    { path: "server/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+    { path: "server/index.js", content: "const app = (await import('./src/app.ts')).default; app.listen(process.env.PORT);" },
+    { path: "server/src/app.ts", content: app("import providerRoutes from './routes/provider.routes.ts';\n", "app.use(providerRoutes);\n") },
+    { path: "server/src/routes/provider.routes.ts", content: "import { Router } from 'express'; const router = Router(); router.get('/services', (_q,r)=>r.json([])); export default router;" },
+    { path: "server/src/routes/auth.routes.ts", content: "import { Router } from 'express'; import { AuthService } from '../services/auth.service.ts'; const router = Router(); router.post('/auth/login', (_q,r)=>r.json({})); export default router;" },
+    { path: "server/src/services/auth.service.ts", content: "export class AuthService {}" },
+  ];
+
+  it("mounts an existing-but-unmounted router: adds the import and app.use, mirroring style", () => {
+    const files = base();
+    const edits = planWireUp(files, pathsOf(files));
+    expect(edits).toHaveLength(1);
+    expect(edits[0]!.path).toMatch(/app\.ts$/);
+    expect(edits[0]!.mounted.map((m) => m.varName)).toEqual(["authRoutes"]);
+    const c = edits[0]!.content;
+    expect(c).toMatch(/import authRoutes from '\.\/routes\/auth\.routes\.ts';/); // app writes .ts specifiers → mirror .ts
+    expect(c).toMatch(/app\.use\(authRoutes\);/); // bare mount, matching the existing app.use(providerRoutes)
+    // ordering: the new import sits in the import block; the mount is BEFORE the 404 handler
+    expect(c.indexOf("app.use(authRoutes)")).toBeLessThan(c.indexOf("res.status(404)"));
+    expect(c.indexOf("app.use(authRoutes)")).toBeGreaterThan(c.indexOf("app.use(express.json())"));
+    expect(c.indexOf("import authRoutes")).toBeLessThan(c.indexOf("const app = express()"));
+  });
+
+  it("wiring up clears both unmounted-routes AND the downstream dead feature — with no model call", () => {
+    const before = checkRunnable(base(), pathsOf(base()));
+    expect(before.some((i) => i.kind === "unmounted-routes")).toBe(true);
+    expect(before.some((i) => i.kind === "unexposed-feature")).toBe(true); // auth.service dead (auth.routes unmounted)
+    const after = applyWireUp(base());
+    const issues = checkRunnable(after, pathsOf(after));
+    expect(issues.some((i) => i.kind === "unmounted-routes")).toBe(false);
+    expect(issues.some((i) => i.kind === "unexposed-feature")).toBe(false);
+  });
+
+  it("does NOT touch a router already reachable via a mounted barrel/index (no double mount)", () => {
+    const files: SourceFile[] = [
+      { path: "server/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server/index.js", content: "const app = (await import('./src/app.ts')).default; app.listen(process.env.PORT);" },
+      { path: "server/src/app.ts", content: app("import routes from './routes/index.ts';\n", "app.use(routes);\n") },
+      { path: "server/src/routes/index.ts", content: "import { Router } from 'express'; import auth from './auth.routes.ts'; const router = Router(); router.use(auth); export default router;" },
+      { path: "server/src/routes/auth.routes.ts", content: "import { Router } from 'express'; const router = Router(); export default router;" },
+    ];
+    expect(planWireUp(files, pathsOf(files))).toHaveLength(0); // auth is reachable via the mounted index
+  });
+
+  it("mirrors a prefixed mount style and dedups variable-name collisions", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server.js", content: "const express=require('express');const authRoutes=1;const app=express();app.use('/api/users', require('./routes/users.js'));app.use((req,res)=>res.sendStatus(404));app.listen(process.env.PORT);" },
+      { path: "routes/users.js", content: "const r=require('express').Router();module.exports=r;" },
+      { path: "routes/auth.js", content: "const r=require('express').Router();r.post('/x',()=>{});module.exports=r;" },
+    ];
+    const edits = planWireUp(files, pathsOf(files));
+    const c = edits[0]!.content;
+    expect(c).toMatch(/app\.use\('\/api\/auth', authRoutes2\)/); // prefixed style mirrored; name deduped (authRoutes taken)
+    expect(c.indexOf("app.use('/api/auth'")).toBeLessThan(c.indexOf("res.sendStatus(404)")); // before the 404
+  });
+
+  it("returns nothing when there is nothing to mount (all routers already wired)", () => {
+    const files = base().filter((f) => !/auth/.test(f.path)); // only provider, already mounted
+    expect(planWireUp(files, pathsOf(files))).toHaveLength(0);
+  });
+
+  it("mirrors a .js-specifier / .ts-file convention (import written as .js — survives tsc)", () => {
+    // The standard TS-ESM pattern: the app imports './routes/x.js' but the file is x.ts.
+    const files: SourceFile[] = [
+      { path: "server/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server/index.js", content: "const app = (await import('./src/app.ts')).default; app.listen(process.env.PORT);" },
+      { path: "server/src/app.ts", content: "import express from 'express';\nimport providerRoutes from './routes/provider.routes.js';\nconst app = express();\napp.use(providerRoutes);\napp.use((req,res)=>res.sendStatus(404));\nexport default app;" },
+      { path: "server/src/routes/provider.routes.ts", content: "import { Router } from 'express'; const router = Router(); export default router;" },
+      { path: "server/src/routes/auth.routes.ts", content: "import { Router } from 'express'; const router = Router(); export default router;" },
+    ];
+    const c = planWireUp(files, pathsOf(files))[0]!.content;
+    expect(c).toMatch(/import authRoutes from '\.\/routes\/auth\.routes\.js';/); // .js specifier, not the file's real .ts
   });
 });
 

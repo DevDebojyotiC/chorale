@@ -1,6 +1,6 @@
 import { streamText, stepCountIs, NoSuchToolError } from "ai";
 import type { LanguageModelUsage, ToolSet } from "ai";
-import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { resolve, isAbsolute } from "node:path";
 import type { ChoraleConfig } from "./config.js";
 import type { Registry, ModelRef } from "./model-registry.js";
@@ -17,7 +17,7 @@ import { createPlanTool } from "../tools/plan-tool.js";
 import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./plan.js";
 import { executePlan, type StepRunner } from "./plan-exec.js";
 import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
-import { checkRunnable, tiersOf, directiveFor, type RunnableIssue } from "./runnable.js";
+import { checkRunnable, tiersOf, directiveFor, planWireUp, type RunnableIssue } from "./runnable.js";
 import { smokeRun, ensureServerDeps, detectServerEntry } from "./smoke-run.js";
 import { runRepairLadder } from "./repair.js";
 import { getPlaybook } from "./playbook.js";
@@ -616,6 +616,21 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           if (issues.length === 0) break;
           const tier = tiersOf(issues)[0]!; // the most-foundational remaining tier
           const tierKinds = new Set(tier.map((i) => i.kind));
+
+          // Deterministic pre-pass: mounting an existing router is a mechanical edit the model keeps
+          // botching. Do it in code first; only genuinely-missing routes should reach the model.
+          if (tierKinds.has("unmounted-routes") || tierKinds.has("unexposed-feature")) {
+            const proj = collectProject(cwd);
+            const edits = planWireUp(proj.files, proj.paths);
+            for (const e of edits) writeFileSync(resolve(cwd, e.path), e.content, "utf8");
+            const mounted = edits.reduce((n, e) => n + e.mounted.length, 0);
+            if (mounted > 0) log.info(`[chorale]   ⚙ deterministic wire-up mounted ${mounted} existing router(s)\n`);
+            if (allIssues().filter((i) => tierKinds.has(i.kind)).length === 0) {
+              log.info(`[chorale]   ✓ ${[...tierKinds].join("/")} tier cleared by wire-up (no model call)\n`);
+              continue;
+            }
+          }
+
           const { text: directive, note } = directiveFor(tier, issues, collectProject(cwd).files);
           const tierMessages = tier.map((i, idx) => i.message + (directive && idx === 0 ? "\n\n" + directive : ""));
           log.info(`[chorale]   ▸ fixing ${tier.length} ${[...tierKinds].join("/")} issue(s)${note}…\n`);
