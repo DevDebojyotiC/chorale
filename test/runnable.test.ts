@@ -126,6 +126,18 @@ describe("Phase 4 — runnability gate (fullstack lever #3)", () => {
     expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "frontend-backend-mismatch")).toBe(false);
   });
 
+  it("does not false-flag missing-env when a shared .env sits at the project root (multi-module)", () => {
+    // The BookIt layout: backend in server/, one shared .env at the root that dotenv loads from cwd.
+    const files: SourceFile[] = [
+      { path: "server/package.json", content: JSON.stringify({ dependencies: { express: "^4", dotenv: "^16" } }) },
+      { path: "server/src/app.js", content: "import 'dotenv/config'; const s=process.env.JWT_SECRET; const app=require('express')(); app.listen(process.env.PORT);" },
+    ];
+    // .env only at the ROOT, not server/.env
+    expect(checkRunnable(files, pathsOf(files, ["server/src/app.js", ".env"])).some((i) => i.kind === "missing-env")).toBe(false);
+    // but with no .env anywhere, it is still flagged
+    expect(checkRunnable(files, pathsOf(files, ["server/src/app.js"])).some((i) => i.kind === "missing-env")).toBe(true);
+  });
+
   it("flags a route the frontend needs but the backend never defined (base is correct)", () => {
     // The InventoryIQ/LedgerLite gap: login+register match, but /refresh is simply not implemented.
     // The app boots and serves fine, so no other gate can see this — it just 404s at runtime.

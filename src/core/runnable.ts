@@ -150,6 +150,16 @@ export function contractDirective(files: SourceFile[]): string {
 
 const norm = (p: string): string => p.replace(/\\/g, "/");
 const dirOf = (p: string): string => norm(p).split("/").slice(0, -1).join("/");
+
+/** Is `name` (e.g. ".env") present in `dir` or any ancestor directory up to the project root? */
+function envInDirOrAncestors(dir: string, allPaths: Set<string>, name: string): boolean {
+  const parts = dir ? norm(dir).split("/") : [];
+  for (let i = parts.length; i >= 0; i--) {
+    const p = parts.slice(0, i).join("/");
+    if (allPaths.has(p ? `${p}/${name}` : name)) return true;
+  }
+  return false;
+}
 const moduleKey = (p: string): string => norm(p).replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "").replace(/\/index$/, "");
 
 /** Resolve an import specifier against the importing file's dir, to a comparable module tail. */
@@ -268,10 +278,13 @@ export function checkRunnable(files: SourceFile[], allPaths: Set<string>): Runna
       issues.push({ kind: "no-entry", where: dir || ".", message: `${dir || "project"}: depends on a server framework but nothing calls .listen() and there is no start entry point — the server never boots, so the app can't run. Add a server entry (e.g. server.js/app.js) that mounts the routes and listens on a port.` });
     }
 
-    // missing-env: code needs env vars but only .env.example exists (the login/JWT_SECRET gap)
+    // missing-env: code needs env vars but only .env.example exists (the login/JWT_SECRET gap). A
+    // shared .env commonly sits at the PROJECT ROOT, not beside a sub-module's package.json, and
+    // dotenv loads it from the cwd — so accept a real .env in this dir OR any ancestor up to the root.
     const needsSecret = unitCode.some((f) => /process\.env\.(JWT_SECRET|SECRET|SESSION_SECRET|DATABASE_URL|DB_URL)/.test(f.content));
-    if (needsSecret && !allPaths.has(prefix + ".env")) {
-      issues.push({ kind: "missing-env", where: dir || ".", message: `${dir || "project"}: reads required secrets from process.env (e.g. JWT_SECRET) but there is no .env file${allPaths.has(prefix + ".env.example") ? " (only .env.example)" : ""} — create a real .env so it runs, and mention it in the README.` });
+    const hasEnv = envInDirOrAncestors(dir, allPaths, ".env");
+    if (needsSecret && !hasEnv) {
+      issues.push({ kind: "missing-env", where: dir || ".", message: `${dir || "project"}: reads required secrets from process.env (e.g. JWT_SECRET) but there is no .env file${envInDirOrAncestors(dir, allPaths, ".env.example") ? " (only .env.example)" : ""} — create a real .env so it runs, and mention it in the README.` });
     }
   }
 
