@@ -170,5 +170,46 @@ serves its API** — no earlier run did. A *fully working* app is still beyond r
 remaining gaps (dynamic runnability, build ordering, model coherence-following) are genuine research
 problems, now clearly characterized.
 
-*(Next frontier: dynamic runnability [boot + smoke] and build-ordering. Levers #4 scaffolding and #6
-scaled budgets remain, lower priority.)*
+*(Levers #4 scaffolding and #6 scaled budgets remain, lower priority.)*
+
+### Cross-consumer contract check ✅ (`checkFrontendBackendContract`)
+The all-four run built a frontend hardcoding `localhost:3000/login` while the backend served
+`/api/auth/login`. Added a deterministic check to the runnability gate: extract the backend's real
+endpoint paths and the frontend's called paths (axios/fetch/client, composed with any base URL); if
+the frontend matches **none** of them, flag `frontend-backend-mismatch` and loop a repair. Verified on
+the real all-four project.
+
+### Dynamic boot gate ✅ (`src/core/smoke-run.ts`, opt-in `CHORALE_SMOKE_RUN=1`)
+Static checks confirm *structural* runnability but can't catch a crash that only happens when Node runs
+the code (the e2e/all-four backends died on boot from a CJS/ESM export mismatch; a handler 500 slipped
+through). This gate **actually boots the assembled server** on an injected port, probes a base GET + a
+register/create POST, and flags **boot-failed** (crash on startup) or **server-error** (5xx). Escalated
+repair. Detection/selection/classification are pure + unit-tested; the boot is best-effort (returns
+nothing if the server neither binds nor crashes).
+
+**Boot-gate run (`CHORALE_PLAN_EXEC=1 CHORALE_SMOKE_RUN=1`):** the full loop ran and was visible — plan
+9/9 → static gate (3 issues, escalated fixes, 2 remained) → **boot gate caught 1 issue → escalated
+repair → `✓ boots + serves`**. Independently confirmed: `Server is running on …` — **the backend now
+boots** (vs the previous run's hard boot-crash). A real, demonstrable step.
+
+**Two honest defects this exposed:**
+1. **The boot gate false-passed** — it said "boots + serves" while `POST /register` actually 500'd (no
+   `.env` → `JWT_SECRET` missing). Cause: register inserts the user *then* signs the token, so it 500s
+   the first probe but 400s ("already exists") on retry, masking the bug. **Fixed:** unique probe
+   payload per boot (`pickProbes(contract, nonce)`) — now it catches the 500 every time.
+2. **The app still isn't fully working:** no `.env` was created (the static `missing-env` check flagged
+   it, but the coder couldn't fix it within the repair rounds *even escalated to gpt-oss*), and both
+   routers were mounted at `/` (collision).
+
+### The bottom line (honest)
+Every failure class we've hit — incomplete build, no-op steps, unmounted routes, contract mismatch,
+**boot crash**, **5xx** — now has a deterministic **catcher**, and the boot gate + escalated repair
+demonstrably get the server from *crashing* to *booting*. The deepest remaining limit is **repair
+reliability**: the gates surface a defect precisely, but fixing it depends on the model actually
+following the fix, which a cheap model (even escalated) sometimes can't for cross-file, config, or
+routing corrections. So Chorale reliably builds a **complete, wired, booting fullstack skeleton**; a
+**flawless, fully-working** app from a single run is a model-capability problem the gates expose but
+can't manufacture.
+
+*(Not yet closed: build-ordering [producers correct before consumers build]; repair reliability. Levers
+#4 scaffolding and #6 scaled budgets remain, lower priority.)*
