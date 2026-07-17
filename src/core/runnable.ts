@@ -13,7 +13,7 @@
 import { extractContract, type SourceFile } from "./contract.js";
 
 export interface RunnableIssue {
-  kind: "no-entry" | "broken-start" | "missing-import" | "missing-env" | "unmounted-routes" | "frontend-backend-mismatch";
+  kind: "no-entry" | "broken-start" | "unrunnable-entry" | "missing-import" | "missing-env" | "unmounted-routes" | "frontend-backend-mismatch" | "missing-endpoint";
   where?: string;
   message: string;
 }
@@ -94,14 +94,37 @@ function analyzeContract(files: SourceFile[]): ContractDetail | null {
  * pointed at the wrong base/prefix (the exact all-four-run failure: frontend called /login while the
  * backend served /api/auth/login) — the app can't work. Flag it so the repair aligns them.
  */
+/**
+ * Frontend calls the backend does not serve, when the base URL is otherwise CORRECT. Only counted for
+ * paths clearly aimed at this backend (sharing a top-level segment with a real route) so a call to an
+ * unrelated third-party URL is never mistaken for a missing route.
+ */
+function missingEndpoints(d: ContractDetail): string[] {
+  const prefixes = new Set([...d.backendPaths].map((p) => p.split("/")[1] ?? ""));
+  return [...d.frontendCalls].filter((c) => !d.backendPaths.has(c) && prefixes.has(c.split("/")[1] ?? ""));
+}
+
 function checkFrontendBackendContract(files: SourceFile[]): RunnableIssue[] {
   const d = analyzeContract(files);
-  if (!d || d.matched) return [];
+  if (!d) return [];
+  if (!d.matched) {
+    return [
+      {
+        kind: "frontend-backend-mismatch",
+        where: "frontend",
+        message: `the frontend calls API paths (${[...d.frontendCalls].slice(0, 4).join(", ")}) that match none of the backend's endpoints (${[...d.backendPaths].slice(0, 4).join(", ")}) — requests won't reach the server. Align the frontend's base URL and paths to the backend's actual routes.`,
+      },
+    ];
+  }
+  // The base is right, so the client is wired — but individual routes may simply not exist yet. These
+  // 404 at runtime and no other gate can see them (the app boots and serves perfectly well).
+  const missing = missingEndpoints(d);
+  if (missing.length === 0) return [];
   return [
     {
-      kind: "frontend-backend-mismatch",
-      where: "frontend",
-      message: `the frontend calls API paths (${[...d.frontendCalls].slice(0, 4).join(", ")}) that match none of the backend's endpoints (${[...d.backendPaths].slice(0, 4).join(", ")}) — requests won't reach the server. Align the frontend's base URL and paths to the backend's actual routes.`,
+      kind: "missing-endpoint",
+      where: "backend",
+      message: `the frontend calls ${missing.slice(0, 5).join(", ")}, which the backend does not serve — those requests will 404 at runtime. Add the missing route(s) to the backend, or correct the frontend path if it is the one that's wrong.`,
     },
   ];
 }
@@ -144,8 +167,8 @@ const ASSET_RE = /\.(css|scss|sass|less|json|svg|png|jpe?g|gif|webp|ico|md|txt|y
 
 const isCode = (p: string): boolean => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(p);
 
-/** Resolve a relative import against the importing file, testing whether the target file exists. */
-function localImportExists(fromPath: string, spec: string, allPaths: Set<string>): boolean {
+/** Resolve a relative import against the importing file to the ACTUAL file path, or null if none. */
+function resolveLocalImport(fromPath: string, spec: string, allPaths: Set<string>): string | null {
   const parts = norm(fromPath).split("/").slice(0, -1);
   for (const seg of norm(spec).split("/")) {
     if (seg === "." || seg === "") continue;
@@ -153,7 +176,20 @@ function localImportExists(fromPath: string, spec: string, allPaths: Set<string>
     else parts.push(seg);
   }
   const target = parts.join("/").replace(/\.(js|ts|jsx|tsx|mjs|cjs)$/, "");
-  return RESOLVE_SUFFIXES.some((s) => allPaths.has(target + s));
+  for (const s of RESOLVE_SUFFIXES) if (allPaths.has(target + s)) return target + s;
+  return null;
+}
+
+/** Resolve a relative import against the importing file, testing whether the target file exists. */
+function localImportExists(fromPath: string, spec: string, allPaths: Set<string>): boolean {
+  return resolveLocalImport(fromPath, spec, allPaths) !== null;
+}
+
+/** Every local (relative) import specifier in a file, excluding non-code assets. */
+function localSpecs(content: string): string[] {
+  const out: string[] = [];
+  for (const m of content.matchAll(/(?:\bfrom|\brequire\(|\bimport)\s*['"`](\.[^'"`]+)['"`]/g)) if (!ASSET_RE.test(m[1]!)) out.push(m[1]!);
+  return out;
 }
 
 interface Pkg {
@@ -195,6 +231,33 @@ export function checkRunnable(files: SourceFile[], allPaths: Set<string>): Runna
       const m = cmd.match(/\b(?:node|nodemon|ts-node|tsx|babel-node)\s+(?:--\S+\s+)*([^\s&|;]+)/);
       if (m && /[./]/.test(m[1]!) && !has(prefix + m[1]!.replace(/^\.\//, ""))) {
         issues.push({ kind: "broken-start", where: pkgFile.path, message: `${pkgFile.path}: the "${key}" script runs "${m[1]}", which does not exist — create it or fix the script.` });
+      }
+    }
+
+    // unrunnable-entry: the start command is plain `node`, but the code it must load is TypeScript.
+    // node cannot execute .ts — the app never starts. Skipped when a loader/transpiler is in play
+    // (tsx / ts-node / --loader / --experimental-strip-types), which CAN run TypeScript.
+    const startCmd = scripts.start ?? scripts.dev;
+    if (typeof startCmd === "string" && /\bnode\b/.test(startCmd) && !/tsx|ts-node|--loader|--import|--experimental-strip-types|swc|babel|nodemon/.test(startCmd)) {
+      const em = startCmd.match(/\bnode\s+(?:--\S+\s+)*([^\s&|;]+)/);
+      if (em && /[./]/.test(em[1]!)) {
+        const entryKey = (prefix + em[1]!.replace(/^\.\//, "")).replace(/\.(js|ts|mjs|cjs)$/, "");
+        const entryFile = RESOLVE_SUFFIXES.map((s) => entryKey + s).find((p) => allPaths.has(p));
+        const tsEntry = entryFile != null && /\.tsx?$/.test(entryFile);
+        // …or a plain-JS file in this unit importing a module that only exists as TypeScript
+        const jsImportsTs = unitCode.some(
+          (f) => /\.(js|mjs|cjs)$/.test(f.path) && localSpecs(f.content).some((spec) => /\.tsx?$/.test(resolveLocalImport(f.path, spec, allPaths) ?? "")),
+        );
+        if (tsEntry || jsImportsTs) {
+          issues.push({
+            kind: "unrunnable-entry",
+            where: dir || ".",
+            message:
+              `${pkgFile.path}: the start script runs plain node ("${startCmd}") but the code it loads is TypeScript` +
+              (tsEntry ? ` — the entry "${entryFile}" is a .ts file` : ` — a .js file in this unit imports .ts modules`) +
+              `. node cannot execute TypeScript, so the app never starts. Either write this unit in plain JavaScript, or add a build step (tsc) and point "start" at the compiled output, or run it through a loader (tsx / ts-node).`,
+          });
+        }
       }
     }
 
@@ -266,10 +329,12 @@ export function checkRunnable(files: SourceFile[], allPaths: Set<string>): Runna
 export const RUNNABLE_TIER: Record<RunnableIssue["kind"], number> = {
   "no-entry": 0,
   "broken-start": 0,
+  "unrunnable-entry": 0, // the start command cannot execute its own entry — nothing else matters
   "missing-import": 1,
   "missing-env": 1,
   "unmounted-routes": 2,
   "frontend-backend-mismatch": 3,
+  "missing-endpoint": 3, // the base is right; specific routes are absent (mutually exclusive with ↑)
 };
 
 /** Group issues into repair tiers, most-foundational first (each inner array is one tier). */
@@ -343,6 +408,48 @@ export function missingImportDirective(issues: RunnableIssue[], files: SourceFil
     );
   }
   return "These imports resolve to nothing, so the app crashes the moment it loads. Fix EACH — point the import at the real file, or create the missing module:\n" + lines.join("\n") + "\nWrite the corrected/created file(s) now with the write tool.";
+}
+
+/**
+ * Directive for routes the frontend needs but the backend never defined. The base URL is already
+ * correct, so this is not an alignment problem — a handler is genuinely missing. Name the exact gaps
+ * and what already exists, and steer the fix to the BACKEND (the frontend is expressing the spec).
+ */
+export function missingEndpointDirective(files: SourceFile[]): string {
+  const d = analyzeContract(files);
+  if (!d) return "";
+  const missing = missingEndpoints(d);
+  if (missing.length === 0) return "";
+  return (
+    `The frontend and backend agree on the base URL, but the frontend calls endpoints the backend never defines — those requests 404 at runtime and no boot check can catch it (the server starts fine).\n` +
+    `Missing (the frontend needs these): ${missing.join(", ")}.\n` +
+    `Backend currently serves: ${d.backendEndpoints.slice(0, 12).join("; ")}.\n` +
+    `ADD the missing route(s) on the backend: implement the handler in the matching router/controller and mount it so the path resolves exactly as the frontend calls it. Only change the frontend instead if one of its calls is genuinely wrong. Write the file(s) now with the write tool.`
+  );
+}
+
+/** Directive for a start command that cannot execute its own entry (JS/TS mixed with no runner). */
+export function unrunnableEntryDirective(issues: RunnableIssue[]): string {
+  const i = issues.find((x) => x.kind === "unrunnable-entry");
+  if (!i) return "";
+  return (
+    `This unit cannot start at all: its start script runs plain node, but the code it loads is TypeScript. Pick ONE coherent approach and make the start command able to run the entry:\n` +
+    `- simplest: write this unit in plain JavaScript (.js) and import .js files only; or\n` +
+    `- keep TypeScript and add a real build: a "build" script (tsc) plus "start": "node dist/index.js"; or\n` +
+    `- keep TypeScript and run it through a loader: "start": "tsx src/index.ts" (add tsx as a dependency).\n` +
+    `Do not leave a project whose start command cannot execute its own entry point. Write the corrected file(s)/package.json now.`
+  );
+}
+
+/** The right focused directive for a repair tier, plus a short note for the log. */
+export function directiveFor(tier: RunnableIssue[], allIssues: RunnableIssue[], files: SourceFile[]): { text: string; note: string } {
+  const has = (k: RunnableIssue["kind"]): boolean => tier.some((i) => i.kind === k);
+  if (has("no-entry") || has("broken-start")) return { text: foundationalDirective(allIssues, files), note: " (create the server entry that mounts every router)" };
+  if (has("unrunnable-entry")) return { text: unrunnableEntryDirective(tier), note: " (make the start command able to run its own entry)" };
+  if (has("missing-import")) return { text: missingImportDirective(tier, files), note: " (point each dangling import at the real file or create it)" };
+  if (has("frontend-backend-mismatch")) return { text: contractDirective(files), note: " (align the frontend API client to the backend's real routes)" };
+  if (has("missing-endpoint")) return { text: missingEndpointDirective(files), note: " (add the routes the frontend needs)" };
+  return { text: "", note: "" };
 }
 
 /** Turn runnability issues into a repair instruction. */

@@ -1,6 +1,6 @@
 # Phase 4 — Core Agents
 
-> **Status:** in progress (Tasks 1–4 shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 210 passing · **Last updated:** 2026-07-16
+> **Status:** in progress (Tasks 1–4 + the escalate-last system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 264 passing · **Last updated:** 2026-07-17
 >
 > This is a **living document**. It records what Phase 4 set out to do, everything built so far,
 > and — most importantly — *why* each decision was made. It will be revised and finalized when
@@ -471,13 +471,39 @@ inside the pipeline itself**, wrote a fix **back to the playbook in-run**, and d
 the first time. Most tiers cleared at the **cheap** rung; escalation was reserved for the genuinely hard
 cross-module edit.
 
-**Honest limits.** A *fully working* app from one cheap-model run remains out of reach: builds still
-produce logic-level bugs below these gates' scope (a route the frontend expects but the backend lacks;
-`.js`/`.ts` mixing that needs a build step). And the frontier keeps *moving* — each fix reveals the next
-class. What is now true: the pipeline reliably takes a real build to **runnable**, mostly cheaply, and
+### 4c.6 Chasing the moving frontier — two classes the gates couldn't see
+
+"Runnable" was not the same as "correct". Two defects sat *below* every gate — the app booted and
+served perfectly, so nothing caught them — and both were found by hand in the stress builds before
+being made into checks:
+
+- **`missing-endpoint`** — the contract check only fired when the frontend matched **nothing** (a wrong
+  base URL). A *partial* gap slipped straight through: LedgerLite's frontend called
+  `/api/auth/refresh` while the backend only ever defined `/login` + `/register`. The base was right,
+  so the check stayed silent — and the route simply 404s at runtime. Now, when the base *does* match,
+  each called path the backend never defines is flagged, and the directive steers the fix to the
+  **backend** (the frontend is expressing the required spec). Guarded against the obvious false
+  positive: a call is only considered if it shares a top-level segment with a real route, so a
+  third-party URL (`https://api.stripe.com/v1/charges`) is never mistaken for a missing route.
+- **`unrunnable-entry`** — InventoryIQ shipped a `.js` entry importing `.ts` route files with
+  `"start": "node src/index.js"`. **node cannot execute TypeScript**, so the app could never start —
+  yet every static check passed. Now flagged as **foundational** (tier 0: a start command that can't
+  run its own entry makes everything else moot), with the fix framed as a choice: plain JS, or a build
+  step (`tsc` → `node dist/index.js`), or a loader (`tsx`). Guarded: a start script using a
+  loader/transpiler, or pointing at compiled output, is correctly left alone.
+
+Both are seeded, and directive selection is centralized in `directiveFor` so the runtime and the eval
+harness cannot drift apart. Re-running the new checks over the three stress builds caught **exactly**
+the two hand-found defects and nothing else (TaskFlow: 0 issues) — which also corrects the record: the
+earlier "runnable" verdicts on LedgerLite and InventoryIQ were incomplete.
+
+**Honest limits.** A *fully working* app from one cheap-model run remains out of reach, and the frontier
+keeps *moving* — every fix reveals the next class, and each of these checks is a heuristic that can only
+see what it models (nothing here verifies business logic, auth correctness, or data integrity). What is
+now true: the pipeline reliably takes a real build to **runnable**, mostly at the cheap rung, and
 **remembers** how.
 
-### 4c.6 Seeing it — `chorale playbook`
+### 4c.7 Seeing it — `chorale playbook`
 
 Both score types are inspectable: every fix with its trust verdict/score, and the per-model capability
 profile by issue-class (`playbook 0/1  research 0/1 → ⚠ GAP → escalate this class`). Trust and
@@ -485,7 +511,7 @@ capability are **derived on read** from the recorded attempts, so the view alway
 The store lives at `data/playbook.json` (gitignored, like `lessons.sqlite`); override with
 `CHORALE_PLAYBOOK_DB`.
 
-### 4c.7 New env flags
+### 4c.8 New env flags
 
 | Flag | Effect |
 |---|---|
@@ -500,13 +526,13 @@ The store lives at `data/playbook.json` (gitignored, like `lessons.sqlite`); ove
 | Item | State |
 |------|-------|
 | Branch | `phase-4` |
-| Tests | **258 passing**, typecheck clean, `npm audit` 0 vulnerabilities |
+| Tests | **264 passing**, typecheck clean, `npm audit` 0 vulnerabilities |
 | Task 1 — Reviewer | ✅ shipped (5 suites green, 3 production modes) |
 | Task 2 — Scribe | ✅ shipped (22 capability checks green, multi-format I/O, 3 design tiers, 10 profiles, 3 permanent doc rules, `check_length`) |
 | Task 3 — Planner/Gates | ✅ shipped — planner agent + `plan.ts` (validate-repair), generalized gates (ancestor-exclusion loop guard, on-demand + auto), benchmark, plan-first wiring |
 | Task 4 — Test-writer | ✅ shipped — writes+runs tests, mutation-graded |
 | Fullstack levers | ✅ #1 plan-exec · #2 shared contract · #3 runnability gate · #5 escalation (opt-in `CHORALE_PLAN_EXEC`) |
-| Escalate-last system | ✅ shipped — Playbook (intelligent trust + per-model capability), repair ladder (recall → research → escalate, write-back), 16 seeded fixes, tiered foundational repair, no-op-write guard, dynamic boot gate w/ dep install, `chorale playbook` |
+| Escalate-last system | ✅ shipped — Playbook (intelligent trust + per-model capability), repair ladder (recall → research → escalate, write-back), 18 seeded fixes, tiered foundational repair, no-op-write guard, dynamic boot gate w/ dep install, `unrunnable-entry` + `missing-endpoint` checks, `chorale playbook` |
 | Task 5 — Productivity | ⏳ not started |
 | Default model | `hf:google/gemma-4-31B-it` (≈$0) · escalation `fireworks:…/gpt-oss-120b` |
 
@@ -516,9 +542,9 @@ The store lives at `data/playbook.json` (gitignored, like `lessons.sqlite`); ove
 - `src/core/ground.ts` — `groundCheck`, meaning-preservation, `checkDesignFidelity`.
 - `src/core/gate.ts` — gate chain, ancestor-exclusion loop guard, depth cap.
 - `src/core/plan.ts` / `plan-exec.ts` — plan model + validate-repair; deterministic plan execution.
-- `src/core/contract.ts` / `runnable.ts` — shared-contract extraction; runnability gate; repair **tiers**
-  (`tiersOf`) + the concrete `foundationalDirective` / `contractDirective` / `missingImportDirective`;
-  `findStubEntry`; centralized-client contract tracing.
+- `src/core/contract.ts` / `runnable.ts` — shared-contract extraction; runnability gate (incl.
+  `unrunnable-entry` + `missing-endpoint`); repair **tiers** (`tiersOf`) + the concrete directives,
+  dispatched by `directiveFor`; `findStubEntry`; centralized-client contract tracing.
 - `src/core/playbook.ts` / `playbook-seed.ts` — the growing knowledge base: rich entries, deterministic
   recall, intelligent trust (fair-failure attribution), per-model capability + gap detection; 16 seeds.
 - `src/core/repair.ts` — the repair ladder (recall → research → escalate), capability shortcuts,

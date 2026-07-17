@@ -138,6 +138,22 @@ const RUNNABLE_SEEDS: Omit<SeedSpec, "context">[] = [
       "Treat the backend's mounted routes as the source of truth. In the frontend API client, set ONE API base (e.g. baseURL = '/api') and rewrite each request path so it resolves to a real backend endpoint (base + path === a route the backend serves). Only call endpoints the backend actually has; if one is genuinely missing, add that route on the backend instead.",
   },
   {
+    sample: "the start script runs plain node but the code it loads is TypeScript — node cannot execute TypeScript, so the app never starts.",
+    title: "Start script runs plain node on TypeScript (no runner or build)",
+    keywords: ["start", "script", "node", "typescript", "execute", "loads"],
+    rootCause: "the unit mixes a .js entry with .ts sources (or the entry itself is .ts) while `start` is plain `node`, which cannot load TypeScript",
+    solution:
+      "Pick ONE approach and make the start command able to run the entry: (a) write the unit in plain JavaScript and import only .js files; (b) keep TypeScript and add a build — a \"build\": \"tsc\" script plus \"start\": \"node dist/index.js\"; or (c) keep TypeScript and use a loader — \"start\": \"tsx src/index.ts\" with tsx as a dependency. Never ship a project whose start command cannot execute its own entry.",
+  },
+  {
+    sample: "the frontend calls an endpoint the backend does not serve — the request 404s at runtime even though the server starts fine.",
+    title: "Frontend calls a route the backend never defined",
+    keywords: ["frontend", "calls", "endpoint", "backend", "serve", "404", "route"],
+    rootCause: "the base URL is correct and most routes match, but a specific endpoint the frontend needs was never implemented on the backend",
+    solution:
+      "Add the missing route on the BACKEND: implement the handler in the matching router/controller and mount it so the path resolves exactly as the frontend calls it (the frontend is expressing the required spec). Only change the frontend if one of its calls is genuinely wrong. A server that boots is not proof the API is complete.",
+  },
+  {
     sample: "npm install failed for the backend — No matching version found for a dependency (ETARGET) — package.json pins a version that was never published.",
     title: "Dependency pinned to a version that does not exist on npm",
     keywords: ["npm", "install", "matching", "version", "etarget", "dependency", "package"],

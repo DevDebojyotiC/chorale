@@ -17,7 +17,7 @@ import { createPlanTool } from "../tools/plan-tool.js";
 import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./plan.js";
 import { executePlan, type StepRunner } from "./plan-exec.js";
 import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
-import { checkRunnable, tiersOf, foundationalDirective, contractDirective, missingImportDirective, type RunnableIssue } from "./runnable.js";
+import { checkRunnable, tiersOf, directiveFor, type RunnableIssue } from "./runnable.js";
 import { smokeRun, ensureServerDeps, detectServerEntry } from "./smoke-run.js";
 import { runRepairLadder } from "./repair.js";
 import { getPlaybook } from "./playbook.js";
@@ -616,13 +616,8 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           if (issues.length === 0) break;
           const tier = tiersOf(issues)[0]!; // the most-foundational remaining tier
           const tierKinds = new Set(tier.map((i) => i.kind));
-          const foundational = tier.some((i) => i.kind === "no-entry" || i.kind === "broken-start");
-          const contract = !foundational && tier.some((i) => i.kind === "frontend-backend-mismatch");
-          const imports = !foundational && !contract && tier.some((i) => i.kind === "missing-import");
-          const projFiles = collectProject(cwd).files;
-          const directive = foundational ? foundationalDirective(issues, projFiles) : contract ? contractDirective(projFiles) : imports ? missingImportDirective(tier, projFiles) : "";
+          const { text: directive, note } = directiveFor(tier, issues, collectProject(cwd).files);
           const tierMessages = tier.map((i, idx) => i.message + (directive && idx === 0 ? "\n\n" + directive : ""));
-          const note = foundational ? " (create the server entry that mounts every router)" : contract ? " (align the frontend API client to the backend's real routes)" : imports ? " (point each dangling import at the real file or create it)" : "";
           log.info(`[chorale]   ▸ fixing ${tier.length} ${[...tierKinds].join("/")} issue(s)${note}…\n`);
           const r = await runRepairLadder(tierMessages, {
             attempt: ({ instruction, escalate }) => runSpecialist("coder", instruction, escalate),

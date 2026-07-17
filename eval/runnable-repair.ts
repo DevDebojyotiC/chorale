@@ -22,7 +22,7 @@ import { resolveModelPlan } from "../src/core/model-policy.js";
 import { runRepairLadder } from "../src/core/repair.js";
 import { getPlaybook } from "../src/core/playbook.js";
 import { ensureSeeded } from "../src/core/playbook-seed.js";
-import { checkRunnable, tiersOf, foundationalDirective, contractDirective, missingImportDirective, type RunnableIssue } from "../src/core/runnable.js";
+import { checkRunnable, tiersOf, directiveFor, type RunnableIssue } from "../src/core/runnable.js";
 import { setLogLevel } from "../src/core/log.js";
 
 setLogLevel("debug");
@@ -107,10 +107,7 @@ for (let pass = 0; pass < 4; pass++) {
   if (issues.length === 0) break;
   const tier = tiersOf(issues)[0]!;
   const tierKinds = new Set(tier.map((i) => i.kind));
-  const foundational = tier.some((i) => i.kind === "no-entry" || i.kind === "broken-start");
-  const contract = !foundational && tier.some((i) => i.kind === "frontend-backend-mismatch");
-  const imports = !foundational && !contract && tier.some((i) => i.kind === "missing-import");
-  const directive = foundational ? foundationalDirective(issues, collect(cwd).files) : contract ? contractDirective(collect(cwd).files) : imports ? missingImportDirective(tier, collect(cwd).files) : "";
+  const { text: directive, note } = directiveFor(tier, issues, collect(cwd).files);
   const tierMessages = tier.map((i, idx) => i.message + (directive && idx === 0 ? "\n\n" + directive : ""));
   const fingerprint = (): string => {
     let h = 5381;
@@ -120,7 +117,7 @@ for (let pass = 0; pass < 4; pass++) {
     }
     return String(h >>> 0);
   };
-  say(`\n${"·".repeat(4)} TIER [${[...tierKinds].join("/")}]${foundational ? " — create the server entry that mounts every router" : ""} ${"·".repeat(20)}`);
+  say(`\n${"·".repeat(4)} TIER [${[...tierKinds].join("/")}]${note ? " —" + note.replace(/^\s*\(|\)\s*$/g, "") : ""} ${"·".repeat(20)}`);
   const r = await runRepairLadder(tierMessages, {
     attempt: ({ instruction, escalate }) => runSpecialist("coder", instruction, escalate),
     recheck: () => allIssues().filter((i) => tierKinds.has(i.kind)).map((i) => i.message),

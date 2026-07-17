@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
+import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, missingEndpointDirective, unrunnableEntryDirective, directiveFor, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
 import type { SourceFile } from "../src/core/contract";
 
 const pathsOf = (files: SourceFile[], extra: string[] = []): Set<string> => new Set([...files.map((f) => f.path), ...extra]);
@@ -126,6 +126,59 @@ describe("Phase 4 — runnability gate (fullstack lever #3)", () => {
     expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "frontend-backend-mismatch")).toBe(false);
   });
 
+  it("flags a route the frontend needs but the backend never defined (base is correct)", () => {
+    // The InventoryIQ/LedgerLite gap: login+register match, but /refresh is simply not implemented.
+    // The app boots and serves fine, so no other gate can see this — it just 404s at runtime.
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "backend/server.js", content: "const express=require('express');const app=express();const a=require('./routes/auth');app.use('/api/auth',a);app.listen(3000);" },
+      { path: "backend/routes/auth.js", content: "const router=require('express').Router();router.post('/login',h);router.post('/register',h);module.exports=router;" },
+      { path: "frontend/src/api.js", content: "import axios from 'axios'; const api=axios.create({baseURL:'/'}); api.post('/api/auth/login',d); api.post('/api/auth/refresh',d);" },
+    ];
+    const issues = checkRunnable(files, pathsOf(files));
+    expect(issues.some((i) => i.kind === "frontend-backend-mismatch")).toBe(false); // base IS right
+    const miss = issues.find((i) => i.kind === "missing-endpoint");
+    expect(miss?.message).toMatch(/\/api\/auth\/refresh/);
+    expect(missingEndpointDirective(files)).toMatch(/ADD the missing route/);
+  });
+
+  it("does not mistake an unrelated third-party call for a missing backend route", () => {
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "backend/server.js", content: "const express=require('express');const app=express();const a=require('./routes/auth');app.use('/api/auth',a);app.listen(3000);" },
+      { path: "backend/routes/auth.js", content: "const router=require('express').Router();router.post('/login',h);module.exports=router;" },
+      // hits our backend AND an external service — the external one must not be reported as "missing"
+      { path: "frontend/src/api.js", content: "import axios from 'axios'; const api=axios.create({baseURL:'/'}); api.post('/api/auth/login',d); axios.post('https://api.stripe.com/v1/charges',d);" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "missing-endpoint")).toBe(false);
+  });
+
+  it("flags a start script that runs plain node on TypeScript (the InventoryIQ .js/.ts mix)", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ type: "module", scripts: { start: "node src/index.js" }, dependencies: { express: "^4" } }) },
+      { path: "src/index.js", content: "import express from 'express';\nimport authRoutes from './routes/auth.routes.ts';\nconst app=express();app.use('/api/auth',authRoutes);app.listen(process.env.PORT);" },
+      { path: "src/routes/auth.routes.ts", content: "const router = {}; export default router;" },
+    ];
+    const i = checkRunnable(files, pathsOf(files)).find((x) => x.kind === "unrunnable-entry");
+    expect(i?.message).toMatch(/node cannot execute TypeScript/);
+    expect(unrunnableEntryDirective([i!])).toMatch(/tsx src\/index\.ts|node dist\/index\.js/);
+  });
+
+  it("does NOT flag TypeScript that has a real runner or a build step", () => {
+    const withLoader: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ type: "module", scripts: { start: "tsx src/index.ts" }, dependencies: { express: "^4" } }) },
+      { path: "src/index.ts", content: "import express from 'express'; const app=express(); app.listen(process.env.PORT);" },
+    ];
+    expect(checkRunnable(withLoader, pathsOf(withLoader)).some((i) => i.kind === "unrunnable-entry")).toBe(false);
+    // compiled output: start points at plain .js that imports .js — perfectly runnable
+    const built: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ type: "module", scripts: { build: "tsc", start: "node dist/index.js" }, dependencies: { express: "^4" } }) },
+      { path: "dist/index.js", content: "import express from 'express'; const app=express(); app.listen(process.env.PORT);" },
+      { path: "src/index.ts", content: "import express from 'express'; const app=express(); app.listen(process.env.PORT);" },
+    ];
+    expect(checkRunnable(built, pathsOf(built)).some((i) => i.kind === "unrunnable-entry")).toBe(false);
+  });
+
   it("runnableFeedback lists the issues as a fix instruction", () => {
     const files: SourceFile[] = [{ path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) }, { path: "backend/x.js", content: "1" }];
     const fb = runnableFeedback(checkRunnable(files, pathsOf(files)));
@@ -175,6 +228,14 @@ describe("Phase 4 — tiered repair (foundational first)", () => {
     expect(d).toMatch(/REPLACE its entire contents/i);
     // a REAL entry (calls listen) is not a stub
     expect(findStubEntry([{ path: "src/server.js", content: "const app=require('express')();app.listen(process.env.PORT);" }])).toBeNull();
+  });
+
+  it("directiveFor picks the right focused directive for a tier, foundation first", () => {
+    const files: SourceFile[] = [{ path: "src/index.js", content: "// placeholder — implementation will follow" }];
+    // a tier holding the foundational kind wins, even alongside others
+    expect(directiveFor([mk("no-entry", "."), mk("broken-start")], [mk("no-entry", ".")], files).text).toMatch(/EMPTY PLACEHOLDER|server entry/i);
+    expect(directiveFor([mk("unrunnable-entry")], [mk("unrunnable-entry")], files).note).toMatch(/start command/i);
+    expect(directiveFor([mk("missing-env")], [mk("missing-env")], files).text).toBe(""); // no special directive
   });
 
   it("the missing-import directive hints a misplaced module and says CREATE for a truly missing one", () => {
