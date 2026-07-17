@@ -1,6 +1,6 @@
 # Phase 4 — Core Agents
 
-> **Status:** in progress (Tasks 1–4 + the escalate-last system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 264 passing · **Last updated:** 2026-07-17
+> **Status:** in progress (Tasks 1–4 + the escalate-last system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 289 passing · **Last updated:** 2026-07-18
 >
 > This is a **living document**. It records what Phase 4 set out to do, everything built so far,
 > and — most importantly — *why* each decision was made. It will be revised and finalized when
@@ -496,6 +496,31 @@ Both are seeded, and directive selection is centralized in `directiveFor` so the
 harness cannot drift apart. Re-running the new checks over the three stress builds caught **exactly**
 the two hand-found defects and nothing else (TaskFlow: 0 issues) — which also corrects the record: the
 earlier "runnable" verdicts on LedgerLite and InventoryIQ were incomplete.
+
+**`unexposed-feature` — dead feature layers (the deepest gap).** BookIt booted, its mounted routes
+worked, yet whole implemented features (an auth repo, a bookings service) were **dead code**: no route
+file was ever written to expose them, so `unmounted-routes` — which needs a router *file* to flag —
+couldn't see them. The check is **reachability-based**: from each backend unit's real entry points (the
+`.listen` file plus any `package.json` script/`main` target — a service wired only to a worker or seed
+is *not* dead), walk the local-import graph (static, dynamic `import()`, and CJS `require`, through
+barrel index files); any repository/service/controller module nothing reachable imports is flagged, in
+one grouped issue, with a directive that names each dead module, its exports, the exact app file that
+must mount it, and any route file that *already exists and only needs wiring in*.
+
+This check was **adversarially verified by a multi-agent workflow** (three lenses: algorithm review,
+an executing false-positive hunt, a test-gap critic) before shipping — a false positive here would make
+the ladder escalate against a check that can never pass, the failure that had already cost three earlier
+runs. It surfaced **17 execution-confirmed defects**, all fixed and pinned with regression tests:
+unresolvable `index.mjs`/`index.cjs` barrels; e2e tests that call `app.listen` masking every dead
+feature by counting as roots; `./x.ts` resolving to a stale `.js` sibling; package-less static
+frontends (`public/`) judged by backend rules; `.d.ts` files treated as features; `require (` with a
+space; commented-out wiring counted as live; path-alias imports (`@/…`) rendering a unit inconclusive;
+and a refined "zero reachable ⇒ inconclusive" guard that still flags a lone dead feature in a working
+graph. Validated end to end on BookIt: the check flagged five dead modules; once wired (auth + booking
+routes mounted) the build reached **0 issues and served register/login/bookings for real** — and the
+wiring **surfaced three bugs the dead code had hidden** (a `JWT_SECRET`/`JWT_ACCESS_SECRET` name
+mismatch, dotenv loading after the module that read it, a phantom `../db.js` import). Dead code hides
+bugs; exposing it is what finds them.
 
 **Honest limits.** A *fully working* app from one cheap-model run remains out of reach, and the frontier
 keeps *moving* — every fix reveals the next class, and each of these checks is a heuristic that can only

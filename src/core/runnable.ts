@@ -13,7 +13,7 @@
 import { extractContract, type SourceFile } from "./contract.js";
 
 export interface RunnableIssue {
-  kind: "no-entry" | "broken-start" | "unrunnable-entry" | "missing-import" | "missing-env" | "unmounted-routes" | "frontend-backend-mismatch" | "missing-endpoint";
+  kind: "no-entry" | "broken-start" | "unrunnable-entry" | "missing-import" | "missing-env" | "unmounted-routes" | "unexposed-feature" | "frontend-backend-mismatch" | "missing-endpoint";
   where?: string;
   message: string;
 }
@@ -172,8 +172,13 @@ function resolveTail(fromPath: string, spec: string): string {
   }
   return dir.join("/").replace(/\/index$/, "");
 }
-/** Suffixes tried when resolving a module path (bare, extensions, index files). */
-const RESOLVE_SUFFIXES = ["", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", "/index.js", "/index.ts", "/index.jsx", "/index.tsx"];
+/**
+ * Suffixes tried when resolving a module path (bare, extensions, index files). `.d.ts` and `.json`
+ * are legal import targets (`import type` of a declaration file; CJS `require('./config')` backed by
+ * config.json) — omitting them false-flagged both as missing imports. `/index.mjs` + `/index.cjs`
+ * matter for barrel dirs: `require('./services')` backed by services/index.cjs is real wiring.
+ */
+const RESOLVE_SUFFIXES = ["", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".d.ts", ".json", "/index.js", "/index.ts", "/index.jsx", "/index.tsx", "/index.mjs", "/index.cjs"];
 /** Asset imports we don't treat as code modules (avoid false "missing" on css/json/images). */
 const ASSET_RE = /\.(css|scss|sass|less|json|svg|png|jpe?g|gif|webp|ico|md|txt|yml|yaml)$/i;
 
@@ -187,7 +192,11 @@ function resolveLocalImport(fromPath: string, spec: string, allPaths: Set<string
     if (seg === "..") parts.pop();
     else parts.push(seg);
   }
-  const target = parts.join("/").replace(/\.(js|ts|jsx|tsx|mjs|cjs)$/, "");
+  const joined = parts.join("/");
+  // A spec with an explicit code extension names an exact file — honor it before suffix-cycling, or
+  // `./user.service.ts` would resolve to a stale sibling user.service.js and condemn the real .ts.
+  if (/\.(js|ts|jsx|tsx|mjs|cjs)$/.test(joined) && allPaths.has(joined)) return joined;
+  const target = joined.replace(/\.(js|ts|jsx|tsx|mjs|cjs)$/, "");
   for (const s of RESOLVE_SUFFIXES) if (allPaths.has(target + s)) return target + s;
   return null;
 }
@@ -199,9 +208,20 @@ function localImportExists(fromPath: string, spec: string, allPaths: Set<string>
 
 /** Every local (relative) import specifier in a file, excluding non-code assets. */
 function localSpecs(content: string): string[] {
+  // Drop line comments (line-start only — mid-line `//` may sit inside a URL string): commented-out
+  // wiring (`// import bookingRoutes …`) must not count as a live reachability edge.
+  const src = content.replace(/^[ \t]*\/\/.*$/gm, "");
   const out: string[] = [];
-  for (const m of content.matchAll(/(?:\bfrom|\brequire\(|\bimport)\s*['"`](\.[^'"`]+)['"`]/g)) if (!ASSET_RE.test(m[1]!)) out.push(m[1]!);
+  for (const m of src.matchAll(/(?:\bfrom|\brequire\s*\(|\bimport)\s*['"`](\.[^'"`]+)['"`]/g)) if (!ASSET_RE.test(m[1]!)) out.push(m[1]!);
+  // dynamic import("./x") — entry files commonly boot the app this way (`await import("./src/app.ts")`);
+  // missing this edge breaks reachability from the entry and would condemn the whole feature layer.
+  for (const m of src.matchAll(/\bimport\s*\(\s*['"`](\.[^'"`]+)['"`]/g)) if (!ASSET_RE.test(m[1]!)) out.push(m[1]!);
   return out;
+}
+
+/** Path-alias import specs (`@/x`, `~/x`, `#x`) the resolver cannot follow — the graph is unreliable. */
+function hasAliasImports(content: string): boolean {
+  return /(?:\bfrom|\brequire\s*\(|\bimport\s*\(?)\s*['"`](?:@\/|~\/|#)[^'"`]*['"`]/.test(content);
 }
 
 interface Pkg {
@@ -327,6 +347,9 @@ export function checkRunnable(files: SourceFile[], allPaths: Set<string>): Runna
     }
   }
 
+  // build completeness: implemented feature layers (repos/services/controllers) the API never serves
+  issues.push(...checkUnexposedFeatures(files, allPaths));
+
   // cross-consumer: does the frontend actually call the backend's routes?
   issues.push(...checkFrontendBackendContract(files));
 
@@ -348,6 +371,7 @@ export const RUNNABLE_TIER: Record<RunnableIssue["kind"], number> = {
   "missing-import": 1,
   "missing-env": 1,
   "unmounted-routes": 2,
+  "unexposed-feature": 2, // same family as unmounted-routes: implemented code the API never serves
   "frontend-backend-mismatch": 3,
   "missing-endpoint": 3, // the base is right; specific routes are absent (mutually exclusive with ↑)
 };
@@ -425,6 +449,199 @@ export function missingImportDirective(issues: RunnableIssue[], files: SourceFil
   return "These imports resolve to nothing, so the app crashes the moment it loads. Fix EACH — point the import at the real file, or create the missing module:\n" + lines.join("\n") + "\nWrite the corrected/created file(s) now with the write tool.";
 }
 
+// ── unexposed features (build completeness) ───────────────────────────────────
+
+const SERVER_FRAMEWORK_DEPS = ["express", "fastify", "koa", "@hapi/hapi", "@nestjs/core", "hapi"];
+const TESTISH_RE = /(^|\/)(test|tests|__tests__)\/|\.(test|spec|e2e)\./i;
+const FEATURE_PATH_RE = /(^|\/)(repositories|repos|controllers|services)\//i;
+const FEATURE_NAME_RE = /\.(repo|repository|controller|service)s?\.[a-z]+$/i;
+/** Conventional browser-served dirs — code here is fetched over HTTP, never imported by the server. */
+const STATIC_FRONTEND_RE = /(^|\/)(public|static|www|assets|client|frontend|web|ui|dist|build)\//i;
+
+export interface DeadFeatureReport {
+  unit: string;
+  /** Feature modules nothing reachable from the server entry imports — dead code. */
+  dead: { path: string; exports: string[] }[];
+  /** How many feature modules ARE reachable (0 ⇒ the import graph itself is suspect). */
+  reachableFeatures: number;
+  /** Import edges the walk successfully resolved — 0 means the graph never worked at all. */
+  edgesResolved: number;
+}
+
+/** Name a dead module's exports for the directive — ESM declarations, export lists, and CJS. */
+function exportedNames(content: string): string[] {
+  const names = new Set<string>();
+  for (const m of content.matchAll(/export\s+(?:default\s+)?(?:abstract\s+)?(?:async\s+)?(?:class|function\*?|const|let|var)\s+(\w+)/g)) names.add(m[1]!);
+  for (const m of content.matchAll(/export\s*\{\s*([^}]+)\}/g)) for (const part of m[1]!.split(",")) { const n = part.split(/\s+as\s+/i)[0]!.trim(); if (/^\w+$/.test(n)) names.add(n); }
+  for (const m of content.matchAll(/module\.exports\s*=\s*(?:new\s+)?(\w+)/g)) if (m[1] !== "module") names.add(m[1]!);
+  for (const m of content.matchAll(/(?:module\.)?exports\.(\w+)\s*=/g)) names.add(m[1]!);
+  return [...names].slice(0, 4);
+}
+
+/**
+ * Build completeness (the BookIt gap): a build can pass every other gate — it boots, its mounted
+ * routes work — while whole implemented features (an auth repo, a bookings service) are dead code,
+ * because no route file was ever written to expose them. `unmounted-routes` can't see this: there is
+ * no router file to flag. So walk the import graph from the server entry (the file that calls
+ * `.listen()`); any repository/service/controller module nothing reachable imports is a feature the
+ * API never serves. Scoped per backend unit, with files owned by a nested unit (e.g. the frontend's
+ * own package.json) excluded — a frontend `src/services/` must never be judged by backend rules.
+ */
+export function deadFeatures(files: SourceFile[], allPaths: Set<string>): DeadFeatureReport[] {
+  const code = files.filter((f) => isCode(f.path));
+  const byPath = new Map(code.map((f) => [norm(f.path), f]));
+  const units: { dir: string; server: boolean; pkg: Pkg }[] = [];
+  for (const pkgFile of files.filter((f) => norm(f.path).endsWith("package.json"))) {
+    try {
+      const pkg = JSON.parse(pkgFile.content) as Pkg;
+      const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+      units.push({ dir: dirOf(pkgFile.path), server: SERVER_FRAMEWORK_DEPS.some((d) => d in deps), pkg });
+    } catch {
+      units.push({ dir: dirOf(pkgFile.path), server: false, pkg: {} });
+    }
+  }
+  // The unit that owns a file is the DEEPEST package.json above it — so client/src/services/* belongs
+  // to the client unit, not to a backend unit at the project root.
+  const ownerOf = (p: string): string | null => {
+    let best: string | null = null;
+    for (const u of units) {
+      const pref = u.dir ? u.dir + "/" : "";
+      if (norm(p).startsWith(pref) && (best === null || u.dir.length > best.length)) best = u.dir;
+    }
+    return best;
+  };
+
+  const reports: DeadFeatureReport[] = [];
+  for (const u of units.filter((x) => x.server)) {
+    const prefix = u.dir ? u.dir + "/" : "";
+    const unitCode = code.filter((f) => norm(f.path).startsWith(prefix) && ownerOf(f.path) === u.dir);
+
+    // Path-alias imports (@/x, ~/x, #x) resolve through config the walker can't see — any conclusion
+    // drawn from a graph with invisible edges would be wrong, so the whole unit is inconclusive.
+    if (unitCode.some((f) => hasAliasImports(f.content))) continue;
+
+    // Roots: every way this unit's code actually gets executed — the server entry (`.listen`), plus
+    // any file a package.json script or `main` points at (workers, seeds, cron runners are real usage;
+    // a service wired only to a worker entry is NOT dead). Test files are never roots: a spun-up
+    // `app.listen` inside an e2e test would mark everything it imports "exposed" and mask the gap.
+    const rootPaths = new Set<string>(unitCode.filter((f) => /\.listen\s*\(/.test(f.content) && !TESTISH_RE.test(norm(f.path))).map((f) => norm(f.path)));
+    const scriptTargets: string[] = [...Object.values(u.pkg.scripts ?? {}), ...(u.pkg.main ? [`node ${u.pkg.main}`] : [])];
+    for (const cmd of scriptTargets) {
+      const m = String(cmd).match(/\b(?:node|nodemon|tsx|ts-node)\s+(?:--\S+\s+)*([^\s&|;]+)/);
+      if (!m || !/[./]/.test(m[1]!)) continue;
+      const resolved = resolveLocalImport(prefix + "package.json", "./" + m[1]!.replace(/^\.\//, ""), allPaths);
+      if (resolved && byPath.has(norm(resolved)) && !TESTISH_RE.test(norm(resolved))) rootPaths.add(norm(resolved));
+    }
+    if (rootPaths.size === 0) continue; // nothing boots — the no-entry check owns that failure
+
+    const reachable = new Set<string>();
+    let edgesResolved = 0;
+    const queue = [...rootPaths];
+    while (queue.length > 0) {
+      const p = queue.pop()!;
+      if (reachable.has(p)) continue;
+      reachable.add(p);
+      const f = byPath.get(p);
+      if (!f) continue;
+      for (const spec of localSpecs(f.content)) {
+        const target = resolveLocalImport(f.path, spec, allPaths);
+        if (!target) continue;
+        edgesResolved++;
+        if (!reachable.has(norm(target))) queue.push(norm(target));
+      }
+    }
+
+    const candidates = unitCode.filter(
+      (f) =>
+        (FEATURE_PATH_RE.test("/" + norm(f.path)) || FEATURE_NAME_RE.test(norm(f.path))) &&
+        !TESTISH_RE.test(norm(f.path)) &&
+        !STATIC_FRONTEND_RE.test("/" + norm(f.path).slice(prefix.length)) && // browser-served, not imported
+        !/\.d\.tsx?$/.test(norm(f.path)), // a type declaration is not a feature
+    );
+    const dead = candidates.filter((f) => !reachable.has(norm(f.path)));
+    if (dead.length === 0) continue;
+    reports.push({
+      unit: u.dir || ".",
+      reachableFeatures: candidates.length - dead.length,
+      edgesResolved,
+      dead: dead.map((f) => ({ path: f.path, exports: exportedNames(f.content) })),
+    });
+  }
+  return reports;
+}
+
+/**
+ * Is a report trustworthy enough to act on? When NOTHING in the feature layer is reachable, the graph
+ * is usually broken (dynamic route auto-loading, a build step) — unless the unit has exactly one
+ * feature module and the walk demonstrably resolved edges, in which case that one module really is dead.
+ */
+export function conclusiveDeadFeatures(r: DeadFeatureReport): boolean {
+  if (r.reachableFeatures > 0) return true;
+  return r.dead.length === 1 && r.edgesResolved > 0;
+}
+
+function checkUnexposedFeatures(files: SourceFile[], allPaths: Set<string>): RunnableIssue[] {
+  const issues: RunnableIssue[] = [];
+  for (const r of deadFeatures(files, allPaths)) {
+    // Sanity guard: an inconclusive import graph must not condemn the feature layer.
+    if (!conclusiveDeadFeatures(r)) continue;
+    issues.push({
+      kind: "unexposed-feature",
+      where: r.unit,
+      message: `${r.unit}: feature modules are implemented but never exposed — nothing reachable from the server entry imports ${r.dead.map((d) => d.path).join(", ")}. Those features are dead code: the API never serves them. Create the missing route(s) that use them and mount them in the server entry.`,
+    });
+  }
+  return issues;
+}
+
+/**
+ * Directive for dead feature modules. "Wire them up" is not enough — name each dead module, what it
+ * exports, and exactly where the wiring goes; and if the frontend already calls paths for these
+ * features, mount the new routes so those paths resolve.
+ */
+const ROUTE_FILE_RE = /(^|\/)routes?\//i;
+
+/** The file where routers are mounted (creates the framework app and calls `.use`), if any. */
+function mountFile(files: SourceFile[], unit: string): SourceFile | undefined {
+  const prefix = unit && unit !== "." ? unit + "/" : "";
+  const unitCode = files.filter((f) => isCode(f.path) && norm(f.path).startsWith(prefix));
+  return (
+    unitCode.find((f) => /\b(express|fastify|koa)\(\)|createServer\s*\(/.test(f.content) && /\.use\s*\(/.test(f.content)) ??
+    unitCode.find((f) => /\bapp\.use\s*\(/.test(f.content))
+  );
+}
+
+export function unexposedFeatureDirective(files: SourceFile[]): string {
+  const paths = new Set(files.map((f) => norm(f.path)));
+  const reports = deadFeatures(files, paths).filter(conclusiveDeadFeatures);
+  if (reports.length === 0) return "";
+  const d = analyzeContract(files);
+  const wanted = d ? [...d.frontendCalls].filter((c) => !d.backendPaths.has(c)).slice(0, 6) : [];
+
+  const blocks = reports.map((r) => {
+    const deadSet = new Set(r.dead.map((m) => norm(m.path)));
+    const app = mountFile(files, r.unit);
+    const appImports = app ? new Set(localSpecs(app.content).map((s) => resolveLocalImport(app.path, s, paths)).filter(Boolean).map((p) => norm(p!))) : new Set<string>();
+    // Route files that ALREADY exist and reach a dead module, but the app file never imports them —
+    // these just need MOUNTING (the coder keeps writing routes and forgetting to wire them in).
+    const routeFiles = files.filter((f) => isCode(f.path) && ROUTE_FILE_RE.test("/" + norm(f.path)) && norm(f.path).startsWith((r.unit === "." ? "" : r.unit + "/")));
+    const unmounted = routeFiles.filter((rf) => !appImports.has(norm(rf.path)) && localSpecs(rf.content).some((s) => deadSet.has(norm(resolveLocalImport(rf.path, s, paths) ?? ""))));
+    const lines = r.dead.map((m) => `  - ${m.path}${m.exports.length ? ` (exports: ${m.exports.join(", ")})` : ""}`).join("\n");
+    const mountLine = app
+      ? `The app file that mounts routers is "${app.path}". You MUST edit it: add an \`import\` and an \`app.use('/api/<feature>', <router>)\` for each router.`
+      : `Mount every router in the server entry file with \`app.use('/api/<feature>', router)\`.`;
+    const already = unmounted.length ? ` These route files ALREADY EXIST and only need mounting — do NOT rewrite them, just import and app.use each in the app file: ${unmounted.map((f) => f.path).join(", ")}.` : "";
+    return `Unit ${r.unit} — dead feature modules (imported by nothing reachable from the entry):\n${lines}\n${mountLine}${already}`;
+  });
+
+  return (
+    `The backend implements features its API never serves — these modules are dead code (nothing reachable from the server entry imports them):\n\n${blocks.join("\n\n")}\n\n` +
+    `For EACH dead module that has no route yet: create the matching route file (add a controller if this codebase uses controllers) with real REST endpoints backed by the module's exports, then import and mount it in the app file above. For modules whose route file already exists, just wire it into the app file.` +
+    (wanted.length ? ` The frontend already calls ${wanted.join(", ")} — mount so those exact paths resolve.` : "") +
+    ` The job is not done until the app file imports and mounts a router for every module listed. Write the new and updated files now with the write tool.`
+  );
+}
+
 /**
  * Directive for routes the frontend needs but the backend never defined. The base URL is already
  * correct, so this is not an alignment problem — a handler is genuinely missing. Name the exact gaps
@@ -462,6 +679,7 @@ export function directiveFor(tier: RunnableIssue[], allIssues: RunnableIssue[], 
   if (has("no-entry") || has("broken-start")) return { text: foundationalDirective(allIssues, files), note: " (create the server entry that mounts every router)" };
   if (has("unrunnable-entry")) return { text: unrunnableEntryDirective(tier), note: " (make the start command able to run its own entry)" };
   if (has("missing-import")) return { text: missingImportDirective(tier, files), note: " (point each dangling import at the real file or create it)" };
+  if (has("unexposed-feature")) return { text: unexposedFeatureDirective(files), note: " (expose the implemented features through mounted routes)" };
   if (has("frontend-backend-mismatch")) return { text: contractDirective(files), note: " (align the frontend API client to the backend's real routes)" };
   if (has("missing-endpoint")) return { text: missingEndpointDirective(files), note: " (add the routes the frontend needs)" };
   return { text: "", note: "" };

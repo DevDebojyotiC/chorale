@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, missingEndpointDirective, unrunnableEntryDirective, directiveFor, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
+import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, missingEndpointDirective, unrunnableEntryDirective, unexposedFeatureDirective, directiveFor, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
 import type { SourceFile } from "../src/core/contract";
 
 const pathsOf = (files: SourceFile[], extra: string[] = []): Set<string> => new Set([...files.map((f) => f.path), ...extra]);
@@ -210,6 +210,227 @@ describe("Phase 4 — runnability gate (fullstack lever #3)", () => {
     const fb = runnableFeedback(checkRunnable(files, pathsOf(files)));
     expect(fb).toMatch(/not runnable/i);
     expect(fb).toMatch(/\.listen\(\)/);
+  });
+});
+
+describe("Phase 4 — unexposed features (build completeness, the BookIt gap)", () => {
+  // The exact BookIt shape: a dynamic-import entry, provider routes wired, but user/booking repos
+  // implemented and never imported by anything reachable — dead features no other gate can see.
+  const bookitShape = (): SourceFile[] => [
+    { path: "server/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+    { path: "server/index.js", content: "const app = (await import('./src/app.ts')).default; app.listen(process.env.PORT);" },
+    { path: "server/src/app.ts", content: "import express from 'express'; import providerRoutes from './routes/provider.routes.ts'; const app = express(); app.use(providerRoutes); export default app;" },
+    { path: "server/src/routes/provider.routes.ts", content: "import { ServiceRepository } from '../repositories/service.repo.ts'; const router = {}; export default router;" },
+    { path: "server/src/repositories/service.repo.ts", content: "export class ServiceRepository {}" },
+    { path: "server/src/repositories/booking.repo.ts", content: "export class BookingRepository {}" },
+    { path: "server/src/repositories/user.repo.ts", content: "export class UserRepository {}" },
+  ];
+
+  it("flags implemented-but-never-exposed feature modules (and follows dynamic imports)", () => {
+    const files = bookitShape();
+    const issues = checkRunnable(files, pathsOf(files)).filter((i) => i.kind === "unexposed-feature");
+    expect(issues).toHaveLength(1); // one grouped issue, not one per module
+    expect(issues[0]!.message).toMatch(/booking\.repo\.ts/);
+    expect(issues[0]!.message).toMatch(/user\.repo\.ts/);
+    const deadList = issues[0]!.message.match(/imports (.+?)\. Those/)![1]!;
+    expect(deadList).not.toContain("service.repo.ts"); // the reachable one is not in the dead list
+    const d = unexposedFeatureDirective(files);
+    expect(d).toMatch(/exports: BookingRepository/); // names what to expose
+    expect(d).toMatch(/app\.use\(/);
+    expect(d).toMatch(/app file/i); // names the file that must be edited to mount
+    expect(d).toMatch(/server\/src\/app\.ts/); // the actual mount file
+  });
+
+  it("the directive tells the coder to MOUNT an existing-but-unmounted route (the BookIt stall)", () => {
+    // auth.routes.ts exists and reaches auth.service, but app.ts never mounts it → the coder keeps
+    // rewriting routes instead of wiring them. The directive must say: this file exists, just mount it.
+    const files: SourceFile[] = [
+      { path: "server/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server/index.js", content: "const app = (await import('./src/app.ts')).default; app.listen(process.env.PORT);" },
+      { path: "server/src/app.ts", content: "import express from 'express'; import providerRoutes from './routes/provider.routes.ts'; const app = express(); app.use(providerRoutes); export default app;" },
+      { path: "server/src/routes/provider.routes.ts", content: "import { ServiceRepository } from '../services/service.service.ts'; const router = {}; export default router;" },
+      { path: "server/src/routes/auth.routes.ts", content: "import { AuthService } from '../services/auth.service.ts'; const router = {}; export default router;" },
+      { path: "server/src/services/service.service.ts", content: "export class ServiceRepository {}" },
+      { path: "server/src/services/auth.service.ts", content: "export class AuthService {}" }, // dead: auth.routes exists but is unmounted
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "unexposed-feature")).toBe(true);
+    const d = unexposedFeatureDirective(files);
+    expect(d).toMatch(/ALREADY EXIST/);
+    expect(d).toMatch(/server\/src\/routes\/auth\.routes\.ts/);
+    expect(d).toMatch(/do NOT rewrite/i);
+  });
+
+  it("an e2e test that boots the server is NOT a reachability root (would mask every dead feature)", () => {
+    // The masking repro: a normal e2e test imports app + both repos and calls app.listen. If tests
+    // counted as roots, booking/user would look "exposed" and the check would silently no-op.
+    const files = [
+      ...bookitShape(),
+      { path: "server/test/e2e.test.ts", content: "import app from '../src/app.ts'; import { BookingRepository } from '../src/repositories/booking.repo.ts'; import { UserRepository } from '../src/repositories/user.repo.ts'; const srv = app.listen(0);" },
+    ];
+    const issues = checkRunnable(files, pathsOf(files)).filter((i) => i.kind === "unexposed-feature");
+    expect(issues[0]?.message).toMatch(/booking\.repo\.ts/);
+    expect(issues[0]?.message).toMatch(/user\.repo\.ts/);
+  });
+
+  it("commented-out wiring is not a live edge — the dead feature is still flagged", () => {
+    const files = bookitShape().map((f) =>
+      f.path === "server/src/app.ts"
+        ? { ...f, content: "import express from 'express'; import providerRoutes from './routes/provider.routes.ts';\n// import bookingRoutes from './routes/booking.routes.ts';\nconst app = express(); app.use(providerRoutes); export default app;" }
+        : f,
+    );
+    files.push({ path: "server/src/routes/booking.routes.ts", content: "import { BookingRepository } from '../repositories/booking.repo.ts'; const r={}; export default r;" });
+    const issues = checkRunnable(files, pathsOf(files)).filter((i) => i.kind === "unexposed-feature");
+    expect(issues[0]?.message).toMatch(/booking\.repo\.ts/); // the commented import didn't rescue it
+  });
+
+  it("follows CJS require() chains, barrel index files, and explicit-extension imports precisely", () => {
+    // All-CJS backend wired through a services/index.cjs barrel + `require (` with a space; one
+    // service is genuinely dead. Only the dead one may be flagged.
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server.js", content: "const express = require('express'); const svcs = require ('./services'); const app = express(); app.listen(process.env.PORT);" },
+      { path: "services/index.cjs", content: "module.exports = { user: require('./user.service.js') };" },
+      { path: "services/user.service.js", content: "class UserService {}\nmodule.exports = UserService;" },
+      { path: "services/dead.service.js", content: "class DeadService {}\nmodule.exports = DeadService;" },
+    ];
+    const issues = checkRunnable(files, pathsOf(files)).filter((i) => i.kind === "unexposed-feature");
+    expect(issues).toHaveLength(1);
+    const deadList = issues[0]!.message.match(/imports (.+?)\. Those/)![1]!;
+    expect(deadList).toContain("dead.service.js");
+    expect(deadList).not.toContain("user.service.js"); // wired via the index.cjs barrel
+    expect(unexposedFeatureDirective(files)).toMatch(/exports: DeadService/); // CJS exports named too
+  });
+
+  it("an explicit './x.ts' import marks the .ts reachable even when a stale .js sibling exists", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server.ts", content: "import express from 'express'; import { UserService } from './services/user.service.ts'; const app = express(); app.listen(process.env.PORT);" },
+      { path: "services/user.service.ts", content: "export class UserService {}" },
+      { path: "services/user.service.js", content: "class Old {}\nmodule.exports = Old;" }, // stale leftover
+      { path: "services/other.service.ts", content: "export class OtherService {}" },
+    ];
+    const issues = checkRunnable(files, pathsOf(files)).filter((i) => i.kind === "unexposed-feature");
+    const deadList = issues[0]!.message.match(/imports (.+?)\. Those/)![1]!;
+    expect(deadList).not.toContain("user.service.ts"); // the file the entry literally names is reachable
+  });
+
+  it("a service wired only to a worker/seed script entry is real usage, not dead code", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" }, scripts: { start: "node server.js", worker: "node worker.js" } }) },
+      { path: "server.js", content: "const express=require('express');const {UserService}=require('./services/user.service.js');const app=express();app.listen(process.env.PORT);" },
+      { path: "worker.js", content: "const { QueueService } = require('./services/queue.service.js'); QueueService.run();" },
+      { path: "services/user.service.js", content: "exports.UserService = class {};" },
+      { path: "services/queue.service.js", content: "exports.QueueService = class {};" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "unexposed-feature")).toBe(false);
+  });
+
+  it("path-alias imports make the unit inconclusive (invisible edges must not condemn features)", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      // routes are imported via a tsconfig alias the resolver can't follow — plus one relative import
+      { path: "server.ts", content: "import express from 'express'; import routes from '@/routes/index.ts'; import { db } from './db.ts'; const app=express(); app.use(routes); app.listen(process.env.PORT);" },
+      { path: "db.ts", content: "export const db = {};" },
+      { path: "routes/index.ts", content: "import { UserService } from '../services/user.service.ts'; export default {};" },
+      { path: "services/user.service.ts", content: "export class UserService {}" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "unexposed-feature")).toBe(false);
+  });
+
+  it("a package-less static frontend (public/) is never judged by backend feature rules", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server.js", content: "const express=require('express');const {Core}=require('./services/core.service.js');const app=express();app.use(express.static('public'));app.listen(process.env.PORT);" },
+      { path: "services/core.service.js", content: "exports.Core = class {};" },
+      // browser code, served over HTTP — no package.json of its own, and never imported by the server
+      { path: "public/services/api.service.js", content: "const api = { get: (u) => fetch(u) };" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "unexposed-feature")).toBe(false);
+  });
+
+  it("a .d.ts declaration file is neither a missing import nor a feature candidate", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server.ts", content: "import express from 'express'; import type { Cfg } from './services/types'; import { UserService } from './services/user.service.ts'; const app=express(); app.listen(process.env.PORT);" },
+      { path: "services/types.d.ts", content: "export interface Cfg { port: number }" },
+      { path: "services/user.service.ts", content: "export class UserService {}" },
+    ];
+    const issues = checkRunnable(files, pathsOf(files));
+    expect(issues.some((i) => i.kind === "missing-import")).toBe(false); // ./services/types resolves to the .d.ts
+    expect(issues.some((i) => i.kind === "unexposed-feature")).toBe(false); // types.d.ts is not a feature
+  });
+
+  it("a single dead feature in a demonstrably-working graph IS flagged (no blanket zero-guard)", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server.js", content: "const app = require('./app.js'); app.listen(process.env.PORT);" }, // graph resolves
+      { path: "app.js", content: "const express = require('express'); module.exports = express();" },
+      { path: "services/booking.service.js", content: "exports.BookingService = class {};" }, // the unit's only feature — dead
+    ];
+    const issues = checkRunnable(files, pathsOf(files)).filter((i) => i.kind === "unexposed-feature");
+    expect(issues[0]?.message).toMatch(/booking\.service\.js/);
+  });
+
+  it("the directive cross-references paths the frontend already calls for the dead feature", () => {
+    const files: SourceFile[] = [
+      ...bookitShape(),
+      { path: "client/package.json", content: JSON.stringify({ dependencies: { react: "^18", axios: "^1" } }) },
+      { path: "client/src/api.js", content: "import axios from 'axios'; const api = axios.create({ baseURL: '/' }); api.post('/api/bookings', {});" },
+    ];
+    // give the backend a matching endpoint so the contract analysis has a working base to compare against
+    const withRoute = files.map((f) => (f.path === "server/src/routes/provider.routes.ts" ? { ...f, content: "import { ServiceRepository } from '../repositories/service.repo.ts'; const router = require('express').Router(); router.get('/api/services', h); module.exports = router;" } : f));
+    const d = unexposedFeatureDirective(withRoute);
+    expect(d).toMatch(/booking\.repo\.ts/);
+  });
+
+  it("does not flag when every feature module is reachable from the entry", () => {
+    const files = bookitShape().filter((f) => !/booking\.repo|user\.repo/.test(f.path));
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "unexposed-feature")).toBe(false);
+  });
+
+  it("suppresses flags when the import graph is inconclusive (zero reachable features)", () => {
+    // Entry imports the app via a path alias the resolver can't follow — nothing in the feature layer
+    // is reachable. That means the GRAPH is broken, not that every feature is dead: don't flag.
+    const files: SourceFile[] = [
+      { path: "server/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server/index.js", content: "const app = (await import('#app')).default; app.listen(process.env.PORT);" },
+      { path: "server/src/repositories/user.repo.ts", content: "export class UserRepository {}" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "unexposed-feature")).toBe(false);
+  });
+
+  it("never judges a frontend's services/ directory by backend rules (nested unit ownership)", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server.js", content: "const e=require('express');const app=e();const r=require('./services/core.service.js');app.use(r);app.listen(process.env.PORT);" },
+      { path: "services/core.service.js", content: "module.exports = {};" },
+      // the client owns its own package.json — its services dir belongs to IT, not the backend unit
+      { path: "client/package.json", content: JSON.stringify({ dependencies: { react: "^18" } }) },
+      { path: "client/src/services/api.service.ts", content: "export const api = {};" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "unexposed-feature")).toBe(false);
+  });
+
+  it("a module imported only by tests is still dead (tests are not the API)", () => {
+    const files = [...bookitShape(), { path: "server/test/booking.test.ts", content: "import { BookingRepository } from '../src/repositories/booking.repo.ts';" }];
+    const issues = checkRunnable(files, pathsOf(files)).filter((i) => i.kind === "unexposed-feature");
+    expect(issues[0]?.message).toMatch(/booking\.repo\.ts/);
+  });
+
+  it("skips entirely when there is no server entry (the no-entry check owns that)", () => {
+    const files = bookitShape().filter((f) => f.path !== "server/index.js");
+    const issues = checkRunnable(files, pathsOf(files));
+    expect(issues.some((i) => i.kind === "unexposed-feature")).toBe(false);
+    expect(issues.some((i) => i.kind === "no-entry")).toBe(true);
+  });
+
+  it("sits in tier 2 and directiveFor picks the expose directive", () => {
+    const files = bookitShape();
+    expect(RUNNABLE_TIER["unexposed-feature"]).toBe(2);
+    const issue: RunnableIssue = { kind: "unexposed-feature", where: "server", message: "m" };
+    const { text, note } = directiveFor([issue], [issue], files);
+    expect(note).toMatch(/expose the implemented features/i);
+    expect(text).toMatch(/dead code/i);
   });
 });
 

@@ -158,6 +158,14 @@ const RUNNABLE_SEEDS: Omit<SeedSpec, "context">[] = [
       "Pick ONE approach and make the start command able to run the entry: (a) write the unit in plain JavaScript and import only .js files; (b) keep TypeScript and add a build — a \"build\": \"tsc\" script plus \"start\": \"node dist/index.js\"; or (c) keep TypeScript and use a loader — \"start\": \"tsx src/index.ts\" with tsx as a dependency. Never ship a project whose start command cannot execute its own entry.",
   },
   {
+    sample: "feature modules are implemented but never exposed — nothing reachable from the server entry imports them, so the API never serves those features (dead code).",
+    title: "Feature layer implemented but never exposed by any route",
+    keywords: ["feature", "modules", "implemented", "exposed", "reachable", "entry", "dead", "route"],
+    rootCause: "repositories/services/controllers were written for a feature but no route file uses them and nothing mounts such a route, so the feature is dead code the API never serves",
+    solution:
+      "For each dead module, create the matching router (and controller if the codebase uses that pattern) with real REST endpoints backed by the module's exports, import it in the server entry/app file, and mount it with app.use('/api/<feature>', router) — under the paths the frontend already calls when it does. Every implemented feature must be reachable from the server entry.",
+  },
+  {
     sample: "the frontend calls an endpoint the backend does not serve — the request 404s at runtime even though the server starts fine.",
     title: "Frontend calls a route the backend never defined",
     keywords: ["frontend", "calls", "endpoint", "backend", "serve", "404", "route"],
