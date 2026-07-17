@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, missingEndpointDirective, unrunnableEntryDirective, unexposedFeatureDirective, planWireUp, directiveFor, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
+import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, missingEndpointDirective, unrunnableEntryDirective, unexposedFeatureDirective, planWireUp, scaffoldRoutes, directiveFor, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
 import type { SourceFile as SF } from "../src/core/contract";
 
 /** Apply planWireUp edits back onto a file set (what the repair loop does on disk). */
@@ -368,15 +368,29 @@ describe("Phase 4 — unexposed features (build completeness, the BookIt gap)", 
     expect(issues.some((i) => i.kind === "unexposed-feature")).toBe(false); // types.d.ts is not a feature
   });
 
-  it("a single dead feature in a demonstrably-working graph IS flagged (no blanket zero-guard)", () => {
+  it("an all-dead feature layer in a demonstrably-working graph IS flagged (no blanket zero-guard)", () => {
     const files: SourceFile[] = [
       { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
       { path: "server.js", content: "const app = require('./app.js'); app.listen(process.env.PORT);" }, // graph resolves
       { path: "app.js", content: "const express = require('express'); module.exports = express();" },
-      { path: "services/booking.service.js", content: "exports.BookingService = class {};" }, // the unit's only feature — dead
+      { path: "services/booking.service.js", content: "exports.BookingService = class {};" }, // dead
+      { path: "services/user.service.js", content: "exports.UserService = class {};" }, // also dead — zero reachable
     ];
     const issues = checkRunnable(files, pathsOf(files)).filter((i) => i.kind === "unexposed-feature");
     expect(issues[0]?.message).toMatch(/booking\.service\.js/);
+    expect(issues[0]?.message).toMatch(/user\.service\.js/);
+  });
+
+  it("suppresses when routes are loaded DYNAMICALLY (readdir + import) — the static graph is blind", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server.js", content: "const app = require('./app.js'); app.listen(process.env.PORT);" },
+      // app auto-loads every router in routes/ at runtime — the walker can't follow that edge
+      { path: "app.js", content: "const express=require('express');const fs=require('fs');const app=express();for(const f of fs.readdirSync('./routes')) app.use(require('./routes/'+f));module.exports=app;" },
+      { path: "services/order.service.js", content: "exports.OrderService = class {};" },
+      { path: "routes/order.routes.js", content: "const r=require('express').Router();module.exports=r;" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "unexposed-feature")).toBe(false);
   });
 
   it("the directive cross-references paths the frontend already calls for the dead feature", () => {
@@ -520,6 +534,70 @@ describe("Phase 4 — deterministic wire-up (mount routers without a model)", ()
     ];
     const c = planWireUp(files, pathsOf(files))[0]!.content;
     expect(c).toMatch(/import authRoutes from '\.\/routes\/auth\.routes\.js';/); // .js specifier, not the file's real .ts
+  });
+});
+
+describe("Phase 4 — scaffold missing route files (deterministic generation)", () => {
+  // BookIt's remaining gap: services with NO route file at all. Static + instance methods, a repo
+  // imported transitively by a service (must NOT get its own route).
+  const noRouteShape = (): SourceFile[] => [
+    { path: "server/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+    { path: "server/index.js", content: "const app = (await import('./src/app.ts')).default; app.listen(process.env.PORT);" },
+    { path: "server/src/app.ts", content: "import express from 'express'; import providerRoutes from './routes/provider.routes.js'; const app = express(); app.use(providerRoutes); app.use((req,res)=>res.sendStatus(404)); export default app;" },
+    { path: "server/src/routes/provider.routes.ts", content: "import { Router } from 'express'; const router = Router(); export default router;" },
+    { path: "server/src/services/booking.service.ts", content: "import { BookingRepository } from '../repositories/booking.repo.js';\nexport class BookingService {\n  static async bookSlot(customerId, serviceId, start) { return {}; }\n  static async cancelBooking(id) { return {}; }\n  static async getCustomerBookings(customerId) { return []; }\n}" },
+    { path: "server/src/repositories/booking.repo.ts", content: "export class BookingRepository { static create(b) {} static findById(id) {} }" },
+    { path: "server/src/services/auth.service.ts", content: "export class AuthService {\n  async register(email, password) { return {}; }\n  async login(email, password) { return {}; }\n}" },
+  ];
+
+  it("scaffolds a router only for top-level dead services (repo exposed transitively)", () => {
+    const edits = scaffoldRoutes(noRouteShape(), pathsOf(noRouteShape()));
+    const modules = edits.map((e) => e.module.replace(/\\/g, "/")).sort();
+    expect(modules).toEqual(["server/src/services/auth.service.ts", "server/src/services/booking.service.ts"]);
+    expect(edits.some((e) => /booking\.repo/.test(e.module))).toBe(false); // transitively exposed, no own route
+    expect(edits.every((e) => /\/routes\/\w+\.routes\.ts$/.test(e.path.replace(/\\/g, "/")))).toBe(true); // placed in routes/, .ts
+  });
+
+  it("the scaffolded router imports the module and maps methods to sensible REST endpoints", () => {
+    const booking = scaffoldRoutes(noRouteShape(), pathsOf(noRouteShape())).find((e) => /booking/.test(e.module))!;
+    const c = booking.content;
+    expect(c).toMatch(/import \{ BookingService \} from '\.\.\/services\/booking\.service\.js'/); // .js specifier learned from the graph
+    expect(c).toMatch(/router\.post\('\/', async/); // bookSlot → POST /
+    expect(c).toMatch(/router\.delete\('\/:id', async/); // cancelBooking → DELETE /:id
+    expect(c).toMatch(/router\.get\('\/', async/); // getCustomerBookings (plural) → GET /
+    expect(c).toMatch(/await BookingService\.bookSlot\(req\.body\.customerId, req\.body\.serviceId, req\.body\.start\)/); // static call, args by name
+    expect(c).toMatch(/export default router/);
+  });
+
+  it("instance methods get a `new` controller; DELETE ends with 204", () => {
+    const auth = scaffoldRoutes(noRouteShape(), pathsOf(noRouteShape())).find((e) => /auth/.test(e.module))!;
+    expect(auth.content).toMatch(/const controller = new AuthService\(\);/);
+    expect(auth.content).toMatch(/await controller\.register\(req\.body\.email, req\.body\.password\)/);
+    const booking = scaffoldRoutes(noRouteShape(), pathsOf(noRouteShape())).find((e) => /booking/.test(e.module))!;
+    expect(booking.content).toMatch(/res\.status\(204\)\.end\(\);/); // cancelBooking
+  });
+
+  it("scaffold + wire-up together take a no-route project to 0 issues", () => {
+    let files = noRouteShape();
+    // 1. scaffold missing routers
+    for (const e of scaffoldRoutes(files, pathsOf(files))) files = [...files, { path: e.path, content: e.content }];
+    // 2. wire them up
+    const edits = planWireUp(files, new Set(files.map((f) => f.path.replace(/\\/g, "/"))));
+    const map = new Map(edits.map((e) => [e.path.replace(/\\/g, "/"), e.content]));
+    files = files.map((f) => (map.has(f.path.replace(/\\/g, "/")) ? { ...f, content: map.get(f.path.replace(/\\/g, "/"))! } : f));
+    const issues = checkRunnable(files, pathsOf(files));
+    expect(issues.some((i) => i.kind === "unexposed-feature")).toBe(false);
+    expect(issues.some((i) => i.kind === "unmounted-routes")).toBe(false);
+  });
+
+  it("does not scaffold when a route file already imports the dead module (wire-up handles it)", () => {
+    const files = [
+      ...noRouteShape().filter((f) => !/auth\.service|booking/.test(f.path)),
+      { path: "server/src/services/notify.service.ts", content: "export class NotifyService { send(x) {} }" },
+      { path: "server/src/routes/notify.routes.ts", content: "import { NotifyService } from '../services/notify.service.js'; import { Router } from 'express'; const router = Router(); export default router;" },
+    ];
+    // notify.service IS imported by an (unmounted) route file → scaffolding must not duplicate it
+    expect(scaffoldRoutes(files, pathsOf(files)).some((e) => /notify/.test(e.module))).toBe(false);
   });
 });
 

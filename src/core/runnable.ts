@@ -466,7 +466,12 @@ export interface DeadFeatureReport {
   reachableFeatures: number;
   /** Import edges the walk successfully resolved — 0 means the graph never worked at all. */
   edgesResolved: number;
+  /** A reachable file loads routes dynamically (readdir + import, or a non-literal import/require). */
+  dynamicLoading: boolean;
 }
+
+/** Directory-scan or non-literal import/require — routes may be loaded at runtime, so the graph is blind. */
+const DYNAMIC_LOAD_RE = /\b(?:readdirSync|readdir|globSync)\b|\bglob\s*\(|\b(?:require|import)\s*\(\s*[^'"`)\s]/;
 
 /** Name a dead module's exports for the directive — ESM declarations, export lists, and CJS. */
 function exportedNames(content: string): string[] {
@@ -560,10 +565,12 @@ export function deadFeatures(files: SourceFile[], allPaths: Set<string>): DeadFe
     );
     const dead = candidates.filter((f) => !reachable.has(norm(f.path)));
     if (dead.length === 0) continue;
+    const dynamicLoading = [...reachable].some((p) => DYNAMIC_LOAD_RE.test(byPath.get(p)?.content ?? ""));
     reports.push({
       unit: u.dir || ".",
       reachableFeatures: candidates.length - dead.length,
       edgesResolved,
+      dynamicLoading,
       dead: dead.map((f) => ({ path: f.path, exports: exportedNames(f.content) })),
     });
   }
@@ -571,13 +578,13 @@ export function deadFeatures(files: SourceFile[], allPaths: Set<string>): DeadFe
 }
 
 /**
- * Is a report trustworthy enough to act on? When NOTHING in the feature layer is reachable, the graph
- * is usually broken (dynamic route auto-loading, a build step) — unless the unit has exactly one
- * feature module and the walk demonstrably resolved edges, in which case that one module really is dead.
+ * Is a report trustworthy enough to act on? Suppress when routes may be loaded dynamically (the static
+ * graph can't see those edges) or when the walk resolved no edges at all (a broken/empty graph). If the
+ * walk demonstrably traversed a working graph, an all-dead feature layer is a real, actionable gap.
  */
 export function conclusiveDeadFeatures(r: DeadFeatureReport): boolean {
-  if (r.reachableFeatures > 0) return true;
-  return r.dead.length === 1 && r.edgesResolved > 0;
+  if (r.dynamicLoading) return false; // routes may be auto-loaded at runtime — the static graph is blind
+  return r.reachableFeatures > 0 || r.edgesResolved > 0; // the walk actually traversed a working graph
 }
 
 function checkUnexposedFeatures(files: SourceFile[], allPaths: Set<string>): RunnableIssue[] {
@@ -817,6 +824,155 @@ export function planWireUp(files: SourceFile[], allPaths: Set<string>): WireUpEd
       mounted.push({ router: rf.path, varName: v });
     }
     edits.push({ path: app.path, content: applyMounts(app.content, appVar, importLines, useLines), mounted });
+  }
+  return edits;
+}
+
+// ── scaffold a route file from a template (for a dead module with no route) ────
+
+export interface ScaffoldEdit {
+  path: string;
+  content: string;
+  feature: string;
+  module: string;
+}
+
+interface ModuleApi {
+  className: string;
+  isDefault: boolean;
+  methods: { name: string; isStatic: boolean; params: string[] }[];
+}
+
+/** Parse a service/repo/controller module: its exported class and public methods. */
+function parseModuleApi(content: string): ModuleApi | null {
+  let m = content.match(/export\s+default\s+class\s+(\w+)/);
+  let className: string | undefined;
+  let isDefault = false;
+  if (m) {
+    className = m[1];
+    isDefault = true;
+  } else if ((m = content.match(/export\s+class\s+(\w+)/))) {
+    className = m[1];
+  } else if ((m = content.match(/\bclass\s+(\w+)/)) && new RegExp(`export\\s+default\\s+${m[1]}\\b|module\\.exports\\s*=\\s*${m[1]}\\b`).test(content)) {
+    className = m[1];
+    isDefault = true;
+  } else if ((m = content.match(/module\.exports\s*=\s*(\w+)/))) {
+    className = m[1];
+    isDefault = true;
+  }
+  if (!className) return null;
+  const methods: ModuleApi["methods"] = [];
+  const seen = new Set<string>();
+  const re = /(?:^|\n)[ \t]*(public\s+|private\s+|protected\s+)?(static\s+)?(?:async\s+)?(\w+)\s*\(([^)]*)\)\s*[:{]/g;
+  let mm: RegExpExecArray | null;
+  while ((mm = re.exec(content))) {
+    const [, vis, stat, name, rawParams] = mm;
+    if (name === "constructor" || /^(if|for|while|switch|catch|return|function)$/.test(name!) || vis?.startsWith("private") || vis?.startsWith("protected") || seen.has(name!)) continue;
+    seen.add(name!);
+    const params = rawParams!
+      .split(",")
+      .map((p) => p.trim().replace(/\.\.\./, "").split(/[?:=]/)[0]!.trim())
+      .filter((p) => /^\w+$/.test(p));
+    methods.push({ name: name!, isStatic: !!stat, params });
+  }
+  return methods.length ? { className, isDefault, methods } : null;
+}
+
+/** Map a method name to an HTTP verb, path, and success status. */
+function routeForMethod(name: string): { verb: "get" | "post" | "put" | "delete"; path: string; status: number } {
+  const m = name.toLowerCase();
+  if (/^(create|add|insert|register|book|new|make|save|submit|login|signup)/.test(m)) return { verb: "post", path: "/", status: 201 };
+  if (/^(update|edit|modify|patch|change|set)/.test(m)) return { verb: "put", path: "/:id", status: 200 };
+  if (/^(delete|remove|cancel|destroy|revoke)/.test(m)) return { verb: "delete", path: "/:id", status: 204 };
+  if (/^(list|getall|findall|all|search|index|query|browse)/.test(m)) return { verb: "get", path: "/", status: 200 };
+  if (/^(get|find|fetch|show|read|by|detail|load)/.test(m)) {
+    // a plural / collection-shaped name (getCustomerBookings, findUsers) is a list → GET /; else GET /:id
+    return /s$/.test(name) || /\b(all|list|many)\b/i.test(name) ? { verb: "get", path: "/", status: 200 } : { verb: "get", path: "/:id", status: 200 };
+  }
+  return { verb: "post", path: "/" + name, status: 200 };
+}
+
+/** Where each method pulls its argument from (path param, body, or query) — best-effort by name. */
+function argExpr(param: string, verb: string, path: string): string {
+  if (path.includes(":id") && /^id$|Id$/.test(param)) return "req.params.id";
+  return verb === "get" || verb === "delete" ? `req.query.${param}` : `req.body.${param}`;
+}
+
+function renderRouteFile(api: ModuleApi, spec: string, quote: string): string {
+  const q = (s: string): string => quote + s + quote;
+  const importStmt = api.isDefault ? `import ${api.className} from ${q(spec)};` : `import { ${api.className} } from ${q(spec)};`;
+  const needsInstance = api.methods.some((m) => !m.isStatic);
+  const usedPaths = new Set<string>();
+  const handlers = api.methods.slice(0, 8).map((mth) => {
+    let { verb, path, status } = routeForMethod(mth.name);
+    let key = `${verb} ${path}`;
+    if (usedPaths.has(key)) {
+      path = path.includes(":id") ? `/${mth.name}/:id` : `/${mth.name}`;
+      key = `${verb} ${path}`;
+    }
+    usedPaths.add(key);
+    const base = mth.isStatic ? api.className : "controller";
+    const args = mth.params.map((p) => argExpr(p, verb, path)).join(", ");
+    const send = status === 204 ? "res.status(204).end();" : `res.status(${status}).json(result ?? { ok: true });`;
+    return (
+      `// ${mth.name} — scaffolded; refine the argument mapping and status as needed\n` +
+      `router.${verb}(${q(path)}, async (req, res, next) => {\n` +
+      `  try {\n    const result = await ${base}.${mth.name}(${args});\n    ${send}\n  } catch (err) {\n    next(err);\n  }\n});`
+    );
+  });
+  return (
+    `import { Router } from ${quote}express${quote};\n${importStmt}\n\n` +
+    `// Auto-scaffolded router exposing ${api.className}. Endpoints are a starting point — adjust paths,\n` +
+    `// verbs, auth, and argument wiring to match the real contract.\n` +
+    `const router = Router();\n${needsInstance ? `const controller = new ${api.className}();\n` : ""}\n` +
+    handlers.join("\n\n") +
+    `\n\nexport default router;\n`
+  );
+}
+
+/**
+ * Scaffold a route file for every dead feature module that has NO route at all — the piece the model
+ * couldn't reliably generate. It writes a real router that imports the module and exposes its public
+ * methods as REST endpoints (verb/path inferred from the method name, args mapped by parameter name).
+ * Only "top-level" dead modules get a route: a repo imported by a dead service is exposed transitively
+ * once the service's route exists, so it isn't given its own. The subsequent wire-up pass mounts them.
+ */
+export function scaffoldRoutes(files: SourceFile[], allPaths: Set<string>): ScaffoldEdit[] {
+  const reports = deadFeatures(files, allPaths).filter(conclusiveDeadFeatures);
+  if (reports.length === 0) return [];
+  const code = files.filter((f) => isCode(f.path));
+  const byPath = new Map(code.map((f) => [norm(f.path), f]));
+  const routeFiles = code.filter((f) => ROUTE_FILE_RE.test("/" + norm(f.path)) && exportsRouter(f.content));
+  const routerImports = new Set<string>();
+  for (const rf of routeFiles) for (const s of localSpecs(rf.content)) { const t = resolveLocalImport(rf.path, s, allPaths); if (t) routerImports.add(norm(t)); }
+  // Learn the import-extension convention from a file that actually has a relative import with an
+  // extension (an empty router reveals nothing) — else the scaffold would strip a needed `.js`.
+  const styleSample = code.map((f) => f.content).find((c) => /from\s+['"]\.[^'"]*\.(?:ts|tsx|js|jsx|mjs|cjs)['"]/.test(c) || /require\s*\(\s*['"]\.[^'"]*\.(?:ts|tsx|js|jsx|mjs|cjs)['"]/.test(c)) ?? "";
+
+  const edits: ScaffoldEdit[] = [];
+  const taken = new Set<string>([...allPaths].map(norm));
+  for (const r of reports) {
+    const deadPaths = new Set(r.dead.map((d) => norm(d.path)));
+    // modules imported by another dead module are exposed transitively — don't give them their own route
+    const importedByDead = new Set<string>();
+    for (const d of r.dead) { const f = byPath.get(norm(d.path)); if (f) for (const s of localSpecs(f.content)) { const t = resolveLocalImport(f.path, s, allPaths); if (t && deadPaths.has(norm(t))) importedByDead.add(norm(t)); } }
+    const routeDir = routeFiles.find((f) => norm(f.path).startsWith((r.unit === "." ? "" : r.unit + "/")))?.path.replace(/\/[^/]+$/, "") ?? null;
+
+    for (const d of r.dead) {
+      if (importedByDead.has(norm(d.path)) || routerImports.has(norm(d.path))) continue;
+      const mod = byPath.get(norm(d.path));
+      if (!mod) continue;
+      const api = parseModuleApi(mod.content);
+      if (!api) continue; // not a parseable class → leave to the model
+      const feature = (norm(d.path).split("/").pop() ?? "feature").replace(/\.\w+$/, "").replace(/\.(service|repo|repository|controller)s?$/i, "") || "feature";
+      const dir = routeDir ?? norm(d.path).replace(/\/[^/]+$/, "").replace(/\/(repositories|repos|services|controllers)$/i, "/routes");
+      const ext = /\.tsx?$/.test(mod.path) ? "ts" : "js";
+      const routePath = `${dir}/${feature}.routes.${ext}`;
+      if (taken.has(norm(routePath))) continue;
+      const { spec, quote } = relImport(routePath, mod.path, styleSample);
+      edits.push({ path: routePath, content: renderRouteFile(api, spec, quote), feature, module: mod.path });
+      taken.add(norm(routePath));
+    }
   }
   return edits;
 }

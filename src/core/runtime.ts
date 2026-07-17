@@ -17,7 +17,7 @@ import { createPlanTool } from "../tools/plan-tool.js";
 import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./plan.js";
 import { executePlan, type StepRunner } from "./plan-exec.js";
 import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
-import { checkRunnable, tiersOf, directiveFor, planWireUp, type RunnableIssue } from "./runnable.js";
+import { checkRunnable, tiersOf, directiveFor, planWireUp, scaffoldRoutes, type RunnableIssue } from "./runnable.js";
 import { smokeRun, ensureServerDeps, detectServerEntry } from "./smoke-run.js";
 import { runRepairLadder } from "./repair.js";
 import { getPlaybook } from "./playbook.js";
@@ -617,16 +617,20 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           const tier = tiersOf(issues)[0]!; // the most-foundational remaining tier
           const tierKinds = new Set(tier.map((i) => i.kind));
 
-          // Deterministic pre-pass: mounting an existing router is a mechanical edit the model keeps
-          // botching. Do it in code first; only genuinely-missing routes should reach the model.
+          // Deterministic pre-pass: scaffolding a router from a module's methods and mounting it are
+          // mechanical edits the model keeps botching. Do them in code first — scaffold missing routes,
+          // then wire every unmounted router into the app — so only genuine generation reaches the model.
           if (tierKinds.has("unmounted-routes") || tierKinds.has("unexposed-feature")) {
+            const scaffolds = scaffoldRoutes(collectProject(cwd).files, collectProject(cwd).paths);
+            for (const s of scaffolds) writeFileSync(resolve(cwd, s.path), s.content, "utf8");
+            if (scaffolds.length > 0) log.info(`[chorale]   ⚙ scaffolded ${scaffolds.length} route file(s): ${scaffolds.map((s) => s.feature).join(", ")}\n`);
             const proj = collectProject(cwd);
             const edits = planWireUp(proj.files, proj.paths);
             for (const e of edits) writeFileSync(resolve(cwd, e.path), e.content, "utf8");
             const mounted = edits.reduce((n, e) => n + e.mounted.length, 0);
-            if (mounted > 0) log.info(`[chorale]   ⚙ deterministic wire-up mounted ${mounted} existing router(s)\n`);
+            if (mounted > 0) log.info(`[chorale]   ⚙ wire-up mounted ${mounted} router(s)\n`);
             if (allIssues().filter((i) => tierKinds.has(i.kind)).length === 0) {
-              log.info(`[chorale]   ✓ ${[...tierKinds].join("/")} tier cleared by wire-up (no model call)\n`);
+              log.info(`[chorale]   ✓ ${[...tierKinds].join("/")} tier cleared deterministically (no model call)\n`);
               continue;
             }
           }

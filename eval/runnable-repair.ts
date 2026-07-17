@@ -22,7 +22,7 @@ import { resolveModelPlan } from "../src/core/model-policy.js";
 import { runRepairLadder } from "../src/core/repair.js";
 import { getPlaybook } from "../src/core/playbook.js";
 import { ensureSeeded } from "../src/core/playbook-seed.js";
-import { checkRunnable, tiersOf, directiveFor, planWireUp, type RunnableIssue } from "../src/core/runnable.js";
+import { checkRunnable, tiersOf, directiveFor, planWireUp, scaffoldRoutes, type RunnableIssue } from "../src/core/runnable.js";
 import { setLogLevel } from "../src/core/log.js";
 
 setLogLevel("debug");
@@ -108,15 +108,18 @@ for (let pass = 0; pass < 4; pass++) {
   const tier = tiersOf(issues)[0]!;
   const tierKinds = new Set(tier.map((i) => i.kind));
 
-  // Deterministic wire-up pre-pass (mount existing routers — no model call).
+  // Deterministic pre-pass: scaffold missing route files, then wire up every unmounted router.
   if (tierKinds.has("unmounted-routes") || tierKinds.has("unexposed-feature")) {
+    const scaffolds = scaffoldRoutes(collect(cwd).files, collect(cwd).paths);
+    for (const s of scaffolds) writeFileSync(join(cwd, s.path), s.content, "utf8");
+    if (scaffolds.length > 0) say(`  ⚙ scaffolded ${scaffolds.length} route file(s): ${scaffolds.map((s) => s.feature).join(", ")}`);
     const proj = collect(cwd);
     const edits = planWireUp(proj.files, proj.paths);
     for (const e of edits) writeFileSync(join(cwd, e.path), e.content, "utf8");
     const mounted = edits.reduce((n, e) => n + e.mounted.length, 0);
-    if (mounted > 0) say(`  ⚙ deterministic wire-up mounted ${mounted} router(s): ${edits.flatMap((e) => e.mounted.map((m) => m.varName)).join(", ")}`);
+    if (mounted > 0) say(`  ⚙ wire-up mounted ${mounted} router(s): ${edits.flatMap((e) => e.mounted.map((m) => m.varName)).join(", ")}`);
     if (allIssues().filter((i) => tierKinds.has(i.kind)).length === 0) {
-      say(`  ✓ ${[...tierKinds].join("/")} tier cleared by wire-up (no model call)`);
+      say(`  ✓ ${[...tierKinds].join("/")} tier cleared deterministically (no model call)`);
       continue;
     }
   }

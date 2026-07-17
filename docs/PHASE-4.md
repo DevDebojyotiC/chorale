@@ -1,6 +1,6 @@
 # Phase 4 — Core Agents
 
-> **Status:** in progress (Tasks 1–4 + the escalate-last system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 295 passing · **Last updated:** 2026-07-18
+> **Status:** in progress (Tasks 1–4 + the escalate-last system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 301 passing · **Last updated:** 2026-07-18
 >
 > This is a **living document**. It records what Phase 4 set out to do, everything built so far,
 > and — most importantly — *why* each decision was made. It will be revised and finalized when
@@ -533,8 +533,26 @@ prefix/bare mount style, placed after the import block and before the 404/error 
 with **zero model calls**, and the model is left only with routes that genuinely need to be *generated*.
 Verified end to end — an unmounted-router fixture wires up deterministically to **0 issues and boots +
 serves the newly-mounted route** — and mirrors the `.js`-specifier/`.ts`-file convention so the edit
-survives `tsc`. This is the pattern the whole phase keeps arriving at: **deterministic transforms for
-the mechanical, the model only for genuine generation.**
+survives `tsc`.
+
+**Scaffold the missing route too.** Wire-up mounts routers that *exist*; when the route file itself was
+never written, `scaffoldRoutes` generates one from a template: parse the dead module's class + public
+methods, and emit a real router that imports it and maps each method to a REST endpoint — verb and path
+inferred from the method name (`create*`→`POST /`, `cancel*`→`DELETE /:id`, a plural `get*`→`GET /`
+collection vs singular→`GET /:id`), arguments mapped from `req.body`/`req.params`/`req.query` **by
+parameter name**, static vs instance calls handled, `.js`-specifier convention preserved. Only
+top-level dead modules get a route (a repo imported by a dead service is exposed transitively). The two
+run as a combined pre-pass — **scaffold → wire-up → re-check** — so an `unmounted-routes`/
+`unexposed-feature` tier often clears with **zero model calls**, leaving the model only truly novel
+generation. Proven end to end: a dead `NoteService` with no route went **scaffold → mount → boot →
+`POST /` created a note (`201`) and `GET /` listed it (`200`)** — the transform produced a *working*
+router, not just a valid-looking one. This is the pattern the whole phase keeps arriving at:
+**deterministic transforms for the mechanical, the model only for genuine generation.**
+
+That guard also got sharper here: "all features dead" is only suppressed when the walk resolved *no*
+edges (a broken/empty graph) or when the reachable code **loads routes dynamically** (`readdirSync` +
+`import`, or a non-literal `require`) — the one case a static graph genuinely cannot see. A working
+graph whose reachable code simply never touches the feature layer is a real, actionable gap, flagged.
 
 **Honest limits.** A *fully working* app from one cheap-model run remains out of reach, and the frontier
 keeps *moving* — every fix reveals the next class, and each of these checks is a heuristic that can only
