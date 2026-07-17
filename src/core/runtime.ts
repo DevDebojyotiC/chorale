@@ -1,6 +1,6 @@
 import { streamText, stepCountIs, NoSuchToolError } from "ai";
 import type { LanguageModelUsage, ToolSet } from "ai";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { resolve, isAbsolute } from "node:path";
 import type { ChoraleConfig } from "./config.js";
 import type { Registry, ModelRef } from "./model-registry.js";
@@ -16,6 +16,7 @@ import { createGateTool } from "../tools/gate-tool.js";
 import { createPlanTool } from "../tools/plan-tool.js";
 import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./plan.js";
 import { executePlan, type StepRunner } from "./plan-exec.js";
+import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
@@ -285,6 +286,45 @@ export interface RunEvent {
  * This is the minimal self-healing behavior; richer failover (cooldowns,
  * credential rotation) lands in a later phase.
  */
+/** Source extensions worth scanning for the project contract (routes, schema, exports). */
+const CONTRACT_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sql"]);
+const CONTRACT_SKIP_DIRS = new Set(["node_modules", ".git", "data", "dist", "build", ".next", "coverage"]);
+
+/** Walk a project directory collecting source files for contract extraction (bounded, skips deps). */
+function collectSources(root: string, maxFiles = 200, maxBytes = 40_000): SourceFile[] {
+  const out: SourceFile[] = [];
+  const walk = (dir: string): void => {
+    if (out.length >= maxFiles) return;
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of entries) {
+      if (out.length >= maxFiles) return;
+      const full = resolve(dir, name);
+      let st;
+      try {
+        st = statSync(full);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (!CONTRACT_SKIP_DIRS.has(name) && !name.startsWith(".")) walk(full);
+      } else if (st.size <= maxBytes && CONTRACT_EXTS.has(full.slice(full.lastIndexOf(".")).toLowerCase())) {
+        try {
+          out.push({ path: full.slice(root.length + 1), content: readFileSync(full, "utf8") });
+        } catch {
+          /* skip unreadable */
+        }
+      }
+    }
+  };
+  walk(root);
+  return out;
+}
+
 export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const { config, registry, agent, prompt, modelOverride } = opts;
   const stream = opts.stream ?? true;
@@ -480,6 +520,13 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     const results = await executePlan(preGatePlan, stepRunner, {
       goal: prompt,
       onStep: (r, i, total) => log.info(`[chorale]   step ${i + 1}/${total} [${r.agent}] ${r.title} — ${r.ok ? "✓" : "✗ " + r.text.slice(0, 80)}\n`),
+      // Shared project contract (lever #2): read the files built so far and extract the real routes /
+      // base URL / tables / exports, so each next step builds against the actual earlier work — not a
+      // prose guess (this is what stops the frontend calling /api/… when the backend serves /…).
+      context: () => {
+        const contract = extractContract(collectSources(cwd));
+        return hasContract(contract) ? formatContract(contract) : "";
+      },
     });
     const failed = results.filter((r) => !r.ok).length;
     log.info(`[chorale] ✓ plan executed: ${results.length - failed}/${results.length} steps ok\n`);
