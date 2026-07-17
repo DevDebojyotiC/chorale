@@ -61,11 +61,15 @@ export interface Probe {
 /** Turn an endpoint string ("POST /api/auth/login") path into a probeable path (params → 1). */
 const toProbePath = (p: string): string => "/" + p.replace(/^https?:\/\/[^/]+/i, "").replace(/^\/+/, "").replace(/\/(?::\w+|\$\{[^}]+\}|\d+)(?=\/|$)/g, "/1").replace(/\/+$/, "");
 
-/** Pick a small set of endpoints to hit: the base, and the first register/create POST. */
-export function pickProbes(contract: ProjectContract): Probe[] {
+/**
+ * Pick a small set of endpoints to hit: the base, and the first register/create POST. `nonce` makes
+ * the payload unique so a persisted DB can't mask a 500 behind an "already exists" 400 on retry — a
+ * register that 500s the first time (after inserting the row) would otherwise 400 the second time.
+ */
+export function pickProbes(contract: ProjectContract, nonce = "smoketest"): Probe[] {
   const probes: Probe[] = [{ method: "GET", path: "/" }]; // a crash/500 here is telling; 404 is fine
   const reg = contract.endpoints.find((e) => /^POST\s+\S*(register|signup|users?)\b/i.test(e)) ?? contract.endpoints.find((e) => /^POST\s/.test(e));
-  if (reg) probes.push({ method: "POST", path: toProbePath(reg.replace(/^\w+\s+/, "")), body: { username: "smoketest", email: "smoke@test.dev", password: "smoketest12345", name: "Smoke Test", title: "t", content: "c" } });
+  if (reg) probes.push({ method: "POST", path: toProbePath(reg.replace(/^\w+\s+/, "")), body: { username: `sm_${nonce}`, email: `sm_${nonce}@test.dev`, password: "smoketest12345", name: `Smoke ${nonce}`, title: `t_${nonce}`, content: "c" } });
   return probes;
 }
 
@@ -180,8 +184,9 @@ export async function bootAndProbe(cwd: string, entry: string, contract: Project
       }
       return []; // never bound but didn't crash — inconclusive (build step / deps?); don't block
     }
+    const nonce = Date.now().toString(36) + Math.random().toString(36).slice(2, 6); // unique per boot (no stale-DB masking)
     const results = [];
-    for (const p of pickProbes(contract)) results.push(await httpProbe(port, p));
+    for (const p of pickProbes(contract, nonce)) results.push(await httpProbe(port, p));
     return classifyProbes(results);
   } finally {
     killTree(child);
