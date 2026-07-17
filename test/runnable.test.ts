@@ -89,6 +89,29 @@ describe("Phase 4 — runnability gate (fullstack lever #3)", () => {
     expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "unmounted-routes")).toBe(false);
   });
 
+  it("flags a frontend that calls paths the backend doesn't serve (the all-four-run mismatch)", () => {
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "backend/server.js", content: "const express=require('express');const app=express();const a=require('./routes/auth');app.use('/api/auth',a);app.listen(3000);" },
+      { path: "backend/routes/auth.js", content: "const router=require('express').Router();router.post('/login',h);router.post('/register',h);module.exports=router;" },
+      // frontend calls root /login (no /api/auth prefix) → matches nothing the backend serves
+      { path: "frontend/src/Login.js", content: "import axios from 'axios'; axios.post('http://localhost:3000/login', data);" },
+    ];
+    const issues = checkRunnable(files, pathsOf(files));
+    expect(issues.some((i) => i.kind === "frontend-backend-mismatch")).toBe(true);
+  });
+
+  it("does not flag a frontend that DOES call the backend's routes", () => {
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "backend/server.js", content: "const express=require('express');const app=express();const a=require('./routes/auth');app.use('/api/auth',a);app.listen(3000);" },
+      { path: "backend/routes/auth.js", content: "const router=require('express').Router();router.post('/login',h);module.exports=router;" },
+      { path: "frontend/src/api.js", content: "import axios from 'axios'; const API_BASE_URL='http://localhost:3000/api/auth'; export const login=(d)=>axios.post('/login', d, {baseURL: API_BASE_URL});" },
+    ];
+    // frontend base /api/auth + /login = /api/auth/login → matches the backend
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "frontend-backend-mismatch")).toBe(false);
+  });
+
   it("runnableFeedback lists the issues as a fix instruction", () => {
     const files: SourceFile[] = [{ path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) }, { path: "backend/x.js", content: "1" }];
     const fb = runnableFeedback(checkRunnable(files, pathsOf(files)));

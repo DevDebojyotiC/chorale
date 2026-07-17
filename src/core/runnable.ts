@@ -10,12 +10,64 @@
  * .env, and any local import that resolves to nothing (incoherence). Pure/testable — no execution.
  */
 
-import type { SourceFile } from "./contract.js";
+import { extractContract, type SourceFile } from "./contract.js";
 
 export interface RunnableIssue {
-  kind: "no-entry" | "broken-start" | "missing-import" | "missing-env" | "unmounted-routes";
+  kind: "no-entry" | "broken-start" | "missing-import" | "missing-env" | "unmounted-routes" | "frontend-backend-mismatch";
   where?: string;
   message: string;
+}
+
+/** Reduce a URL or path to a comparable path: strip scheme+host, query/hash; params → :p. */
+function pathOnly(u: string): string {
+  let p = u.replace(/^https?:\/\/[^/]+/i, "").replace(/[?#].*$/, "");
+  if (!p.startsWith("/")) p = "/" + p;
+  p = p.replace(/\/(?::\w+|\$\{[^}]+\}|\d+)(?=\/|$)/g, "/:p").replace(/\/+$/, "");
+  return p || "/";
+}
+
+/**
+ * Cross-consumer contract check (fullstack frontier): the backend serves a set of endpoints; the
+ * frontend calls a set of URLs. If the frontend's paths match NONE of the backend's, the frontend is
+ * pointed at the wrong base/prefix (the exact all-four-run failure: frontend called /login while the
+ * backend served /api/auth/login) — the app can't work. Flag it so the repair aligns them.
+ */
+function checkFrontendBackendContract(files: SourceFile[]): RunnableIssue[] {
+  const backendPaths = new Set(
+    extractContract(files).endpoints
+      .filter((e) => /^(GET|POST|PUT|PATCH|DELETE)\s/.test(e))
+      .map((e) => pathOnly(e.replace(/^\w+\s+/, ""))),
+  );
+  if (backendPaths.size === 0) return [];
+  const feFiles = files.filter((f) => isCode(f.path) && /\b(axios|fetch)\b/.test(f.content) && !/\bexpress\b|\.listen\s*\(/.test(f.content));
+  if (feFiles.length === 0) return [];
+
+  const basePaths = new Set<string>();
+  for (const f of feFiles) for (const m of f.content.matchAll(/\b(?:API_BASE_URL|API_URL|BASE_URL|baseURL)\b\s*[:=]\s*['"`]([^'"`]+)['"`]/g)) basePaths.add(pathOnly(m[1]!));
+  const bases = basePaths.size ? [...basePaths] : ["/"];
+
+  const called = new Set<string>();
+  const addCall = (u: string): void => {
+    if (/^https?:\/\//i.test(u)) called.add(pathOnly(u));
+    else for (const b of bases) called.add(pathOnly((b === "/" ? "" : b) + "/" + u.replace(/^\//, "")));
+  };
+  for (const f of feFiles) {
+    for (const m of f.content.matchAll(/\b(?:axios|fetch|\w*[Cc]lient|api)\.(?:get|post|put|patch|delete)\(\s*['"`]([^'"`]+)['"`]/gi)) addCall(m[1]!);
+    for (const m of f.content.matchAll(/\bfetch\(\s*['"`]([^'"`]+)['"`]/g)) addCall(m[1]!);
+  }
+  if (called.size === 0) return [];
+
+  const matched = [...called].some((c) => backendPaths.has(c));
+  if (!matched) {
+    return [
+      {
+        kind: "frontend-backend-mismatch",
+        where: "frontend",
+        message: `the frontend calls API paths (${[...called].slice(0, 4).join(", ")}) that match none of the backend's endpoints (${[...backendPaths].slice(0, 4).join(", ")}) — requests won't reach the server. Align the frontend's base URL and paths to the backend's actual routes.`,
+      },
+    ];
+  }
+  return [];
 }
 
 const norm = (p: string): string => p.replace(/\\/g, "/");
@@ -143,6 +195,9 @@ export function checkRunnable(files: SourceFile[], allPaths: Set<string>): Runna
       }
     }
   }
+
+  // cross-consumer: does the frontend actually call the backend's routes?
+  issues.push(...checkFrontendBackendContract(files));
 
   // de-dupe by message
   const seen = new Set<string>();
