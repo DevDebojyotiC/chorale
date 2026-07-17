@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { detectServerEntry, pickProbes, classifyProbes, smokeRunFeedback, ensureServerDeps, npmError, type Probe } from "../src/core/smoke-run";
 import type { SourceFile } from "../src/core/contract";
 
@@ -43,6 +46,19 @@ describe("Phase 4 — dynamic boot gate (fullstack frontier)", () => {
     const r = ensureServerDeps("/nonexistent-cwd", files);
     expect(r.installed).toBe(false);
     expect(r.reason).toMatch(/no server/i); // returns cleanly, never throws or shells out
+  });
+
+  it("ensureServerDeps NEVER runs npm in a directory without its own package.json", () => {
+    // Guard against polluting a parent repo: `npm install` in a dir with no package.json walks UP and
+    // installs into whatever manifest sits above it. The install must be refused before it shells out.
+    const dir = mkdtempSync(join(tmpdir(), "nopkg-")); // exists on disk, but has NO package.json
+    const files: SourceFile[] = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) }, // claimed, not on disk
+      { path: "server.js", content: "const app=require('express')(); app.listen(process.env.PORT);" },
+    ];
+    const r = ensureServerDeps(dir, files);
+    expect(r.installed).toBe(false);
+    expect(r.reason).toBe("no package.json"); // refused at the guard — npm was never invoked
   });
 
   it("npmError extracts the actionable npm failure and drops boilerplate", () => {
