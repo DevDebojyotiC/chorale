@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import http from "node:http";
 import { detectServerEntry, pickProbes, classifyProbes, smokeRunFeedback, ensureServerDeps, npmError, type Probe } from "../src/core/smoke-run";
 import type { SourceFile } from "../src/core/contract";
 
@@ -30,6 +31,20 @@ describe("Phase 4 — dynamic boot gate (fullstack frontier)", () => {
   it("params in a probed path are made concrete", () => {
     const probes = pickProbes({ endpoints: ["POST /users/:id/notes"], tables: [], exports: [] });
     expect(probes.find((p) => p.method === "POST")!.path).toBe("/users/1/notes");
+  });
+
+  it("strips extractContract's human-readable note so the probe path is a legal URL", () => {
+    // The real SupportDesk endpoint. The note's spaces/parens made http.request throw
+    // "Request path contains unescaped characters" — which killed an entire 89-minute run.
+    const probes = pickProbes({ endpoints: ["POST /  (defined in backend/src/routes/ticket.routes)", "GET /tickets/:id  (defined in backend/src/routes/ticket.routes)"], tables: [], exports: [] });
+    for (const p of probes) {
+      expect(p.path).not.toMatch(/\s|\(|\)/); // no whitespace or parens ever reach http.request
+      expect(() => {
+        const req = http.request({ host: "127.0.0.1", port: 1, path: p.path, method: p.method });
+        req.on("error", () => {}); // nothing is listening on port 1 — we only care that it didn't THROW
+        req.destroy();
+      }).not.toThrow();
+    }
   });
 
   it("classifies only 5xx as a server bug (4xx and unreachable are fine)", () => {

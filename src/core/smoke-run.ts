@@ -60,8 +60,19 @@ export interface Probe {
   body?: unknown;
 }
 
-/** Turn an endpoint string ("POST /api/auth/login") path into a probeable path (params → 1). */
-const toProbePath = (p: string): string => "/" + p.replace(/^https?:\/\/[^/]+/i, "").replace(/^\/+/, "").replace(/\/(?::\w+|\$\{[^}]+\}|\d+)(?=\/|$)/g, "/1").replace(/\/+$/, "");
+/**
+ * Turn an endpoint string ("POST /api/auth/login") path into a probeable path (params → 1).
+ * extractContract may append a human-readable note ("GET /  (defined in src/routes/x)"); keep only the
+ * first whitespace-delimited token, or the note's spaces/parens land in the URL and http.request throws
+ * "Request path contains unescaped characters" — which once killed an entire 89-minute build.
+ */
+const toProbePath = (p: string): string =>
+  "/" +
+  (p.trim().split(/\s+/)[0] ?? "")
+    .replace(/^https?:\/\/[^/]+/i, "")
+    .replace(/^\/+/, "")
+    .replace(/\/(?::\w+|\$\{[^}]+\}|\d+)(?=\/|$)/g, "/1")
+    .replace(/\/+$/, "");
 
 /**
  * Pick a small set of endpoints to hit: the base, and the first register/create POST. `nonce` makes
@@ -135,21 +146,27 @@ function waitForPort(port: number, timeoutMs: number, crashed: () => boolean): P
 
 function httpProbe(port: number, probe: Probe): Promise<{ probe: Probe; status?: number; error?: string }> {
   return new Promise((resolve) => {
-    const body = probe.body != null ? JSON.stringify(probe.body) : undefined;
-    const req = http.request(
-      { host: "127.0.0.1", port, path: probe.path, method: probe.method, timeout: 5000, headers: body ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } : {} },
-      (res) => {
-        res.resume();
-        resolve({ probe, status: res.statusCode });
-      },
-    );
-    req.on("error", (e) => resolve({ probe, error: e.message }));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve({ probe, error: "timeout" });
-    });
-    if (body) req.write(body);
-    req.end();
+    // http.request throws SYNCHRONOUSLY on a malformed path/header. This gate is diagnostic — it must
+    // never be able to crash the build it is inspecting, so nothing here may escape as an exception.
+    try {
+      const body = probe.body != null ? JSON.stringify(probe.body) : undefined;
+      const req = http.request(
+        { host: "127.0.0.1", port, path: probe.path, method: probe.method, timeout: 5000, headers: body ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } : {} },
+        (res) => {
+          res.resume();
+          resolve({ probe, status: res.statusCode });
+        },
+      );
+      req.on("error", (e) => resolve({ probe, error: e.message }));
+      req.on("timeout", () => {
+        req.destroy();
+        resolve({ probe, error: "timeout" });
+      });
+      if (body) req.write(body);
+      req.end();
+    } catch (e) {
+      resolve({ probe, error: e instanceof Error ? e.message : String(e) }); // unreachable path → inconclusive, not fatal
+    }
   });
 }
 

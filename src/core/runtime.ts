@@ -646,7 +646,11 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     // Dynamic boot gate (fullstack frontier, opt-in via CHORALE_SMOKE_RUN): actually boot the
     // assembled server and probe it — catches crash-on-boot (e.g. a CJS/ESM export mismatch) and 5xx
     // handler bugs that static checks can't. Best-effort; repaired via the same ladder. Needs deps.
+    // The boot gate is a DIAGNOSTIC: it may report, but it must never destroy the build it inspects.
+    // (A malformed probe path once threw out of http.request and killed an 89-minute run at the very
+    // last step.) Any failure here degrades to "inconclusive" and the run continues.
     if (process.env.CHORALE_SMOKE_RUN === "1") {
+      try {
       const bootFiles = collectProject(cwd).files;
       if (!detectServerEntry(bootFiles)) {
         log.info(`[chorale] · boot gate: no bootable server detected — skipped\n`);
@@ -692,6 +696,9 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           const ready = !doInstall || dep.installed || dep.reason === "already installed";
           log.info(ready ? `[chorale] ✓ dynamic boot: server installs, starts and serves\n` : `[chorale] · boot gate: inconclusive — backend deps unavailable (${dep.reason})\n`);
         }
+      }
+      } catch (e) {
+        log.info(`[chorale] · boot gate: inconclusive — the check itself failed (${e instanceof Error ? e.message : String(e)})\n`);
       }
     }
 
@@ -763,6 +770,9 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           messages,
           tools,
           ...(temperature !== undefined ? { temperature } : {}),
+          // Without this the provider's default cap applies and long output is silently truncated
+          // mid-token — which is exactly how a complex project's plan died: the JSON just stopped.
+          maxOutputTokens: config.defaults.maxOutputTokens,
           abortSignal: AbortSignal.timeout(timeoutMs),
           stopWhen: stepCountIs(opts.maxSteps ?? config.defaults.maxSteps),
           // Recover a doubly-JSON-encoded argument string before it's rejected.

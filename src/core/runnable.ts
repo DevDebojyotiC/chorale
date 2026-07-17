@@ -45,7 +45,9 @@ interface ContractDetail {
 /** Extract both sides of the frontend↔backend API contract, or null if one side is absent. */
 function analyzeContract(files: SourceFile[]): ContractDetail | null {
   const backendEndpoints = extractContract(files).endpoints.filter((e) => /^(GET|POST|PUT|PATCH|DELETE)\s/.test(e));
-  const backendPaths = new Set(backendEndpoints.map((e) => pathOnly(e.replace(/^\w+\s+/, ""))));
+  // extractContract may append a note ("GET /  (defined in src/routes/x)") — keep only the path token,
+  // else the note becomes part of the "path" and every comparison against it silently fails.
+  const backendPaths = new Set(backendEndpoints.map((e) => pathOnly(e.replace(/^\w+\s+/, "").trim().split(/\s+/)[0] ?? "")));
   if (backendPaths.size === 0) return null;
   const feFiles = files.filter((f) => isCode(f.path) && /\b(axios|fetch)\b/.test(f.content) && !/\bexpress\b|\.listen\s*\(/.test(f.content));
   if (feFiles.length === 0) return null;

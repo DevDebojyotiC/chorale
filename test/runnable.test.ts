@@ -142,6 +142,20 @@ describe("Phase 4 — runnability gate (fullstack lever #3)", () => {
     expect(missingEndpointDirective(files)).toMatch(/ADD the missing route/);
   });
 
+  it("ignores extractContract's note when matching paths (an unresolved mount must not false-flag)", () => {
+    // When the mount can't be resolved, extractContract annotates: "GET /health  (defined in src)".
+    // If the note is treated as part of the path, every comparison silently fails and a correct
+    // frontend gets reported as calling routes that "don't exist".
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "backend/src/index.js", content: "const express=require('express');const app=express();app.get('/health',h);app.listen(process.env.PORT);" },
+      { path: "frontend/src/api.js", content: "import axios from 'axios'; const api=axios.create({baseURL:'/'}); api.get('/health');" },
+    ];
+    const issues = checkRunnable(files, pathsOf(files));
+    expect(issues.some((i) => i.kind === "frontend-backend-mismatch")).toBe(false);
+    expect(issues.some((i) => i.kind === "missing-endpoint")).toBe(false); // /health IS served
+  });
+
   it("does not mistake an unrelated third-party call for a missing backend route", () => {
     const files: SourceFile[] = [
       { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },

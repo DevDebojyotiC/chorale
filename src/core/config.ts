@@ -74,8 +74,14 @@ const ChoraleConfigSchema = z.object({
       requestTimeoutMs: z.number().int().positive().default(180_000),
       /** Retries of the SAME model on fast transient errors (429 / 5xx / connection resets) before falling back. */
       maxRetries: z.number().int().min(0).max(5).default(2),
+      /**
+       * Max tokens the model may emit per step. Left unset, the provider's own (often small) default
+       * applies and silently TRUNCATES long output mid-token — a large structured plan or a big file
+       * write just stops, producing unparseable JSON with no error anywhere. Explicit and generous.
+       */
+      maxOutputTokens: z.number().int().positive().default(8192),
     })
-    .default({ maxSteps: 8, maxDelegationDepth: 2, maxVerifyRounds: 5, requestTimeoutMs: 180_000, maxRetries: 2 }),
+    .default({ maxSteps: 8, maxDelegationDepth: 2, maxVerifyRounds: 5, requestTimeoutMs: 180_000, maxRetries: 2, maxOutputTokens: 8192 }),
 });
 
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;

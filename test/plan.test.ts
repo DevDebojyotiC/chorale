@@ -14,6 +14,38 @@ describe("Phase 4 — plan tool schema tolerance", () => {
     expect(normalizePlan({ steps: [{ title: "Scaffold the backend", agent: "coder" }] }).summary).toBe("");
   });
 
+  it("parses a plan the model wrote as a fenced JSON block instead of calling the tool", () => {
+    // The SupportDesk no-op: the planner emitted a perfect plan in the tool's exact shape, but as
+    // text. parsePlan only understood Markdown lists, so the plan was thrown away, plan-exec was
+    // skipped, and the whole build collapsed into direct delegation.
+    const text = [
+      "Here is the plan:",
+      "```json",
+      JSON.stringify({
+        summary: "Build SupportDesk: a full-stack ticketing system.",
+        steps: [
+          { title: "Initialize project structure and database schema", agent: "coder", dependsOn: [], layer: "infra", acceptance: "migrations runnable", files: [{ path: "backend/package.json", status: "new" }] },
+          { title: "Implement the ticket state machine", agent: "coder", dependsOn: [1], layer: "api", acceptance: "invalid transitions rejected", files: [{ path: "backend/src/services/ticket.ts", status: "new" }] },
+        ],
+      }, null, 2),
+      "```",
+      "I will hand this to the coder.",
+    ].join("\n");
+    const plan = parsePlan(text);
+    expect(plan).not.toBeNull();
+    expect(plan!.steps).toHaveLength(2);
+    expect(plan!.steps[0]!.agent).toBe("coder");
+    expect(plan!.steps[0]!.files[0]!.path).toBe("backend/package.json");
+    expect(plan!.steps[1]!.dependsOn).toEqual(["s1"]); // numeric refs mapped to canonical ids
+    expect(plan!.summary).toMatch(/SupportDesk/);
+  });
+
+  it("parses bare JSON with no fence, and still returns null for prose with no plan", () => {
+    const bare = parsePlan('{"steps":[{"title":"Do it","agent":"coder"}]}');
+    expect(bare!.steps).toHaveLength(1);
+    expect(parsePlan("I need more information before I can plan this.")).toBeNull();
+  });
+
   it("still accepts the full shape and rejects a non-object", () => {
     expect(PLAN_TOOL_SCHEMA.safeParse({ summary: "s", steps: [{ title: "t", agent: "coder", dependsOn: [1], layer: "api", acceptance: "a", files: [{ path: "x.js", status: "new" }] }] }).success).toBe(true);
     expect(PLAN_TOOL_SCHEMA.safeParse("{\"steps\":[]}").success).toBe(false); // a stringified plan is still invalid

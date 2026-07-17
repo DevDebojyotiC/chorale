@@ -128,16 +128,67 @@ export function normalizePlan(input: { summary?: unknown; steps?: unknown }): Pl
   return plan;
 }
 
-// ── Tolerant Markdown fallback parser ─────────────────────────────────────────
+// ── Tolerant text fallback parsers ────────────────────────────────────────────
+
+/** Scan from the first `{` to its balanced `}`, ignoring braces inside strings. */
+function balancedObject(s: string): string | null {
+  const start = s.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i]!;
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return s.slice(start, i + 1);
+  }
+  return null;
+}
+
+/**
+ * A plan the model wrote as JSON *text* instead of calling the tool — typically a fenced ```json
+ * block holding exactly the tool's schema. It is a perfectly good plan delivered on the wrong
+ * channel; parsing it beats throwing it away (a discarded plan skips plan-exec and collapses the
+ * whole build into direct delegation). Returns the raw object for normalizePlan, or null.
+ */
+export function extractJsonPlan(text: string): { summary?: unknown; steps?: unknown } | null {
+  const candidates: string[] = [];
+  for (const m of text.matchAll(/```(?:json|jsonc)?\s*\r?\n([\s\S]*?)```/g)) candidates.push(m[1]!);
+  candidates.push(text); // bare JSON with no fence
+  for (const c of candidates) {
+    const obj = balancedObject(c);
+    if (!obj) continue;
+    try {
+      const parsed: unknown = JSON.parse(obj);
+      if (parsed && typeof parsed === "object" && Array.isArray((parsed as { steps?: unknown }).steps)) {
+        return parsed as { summary?: unknown; steps?: unknown };
+      }
+    } catch {
+      /* not JSON — try the next candidate */
+    }
+  }
+  return null;
+}
 
 /**
  * Best-effort parse of a plan a model wrote as text (the fallback when it didn't call the
- * tool). Recognizes numbered/bulleted steps of the shape:
+ * tool). Tries structured JSON first (the model usually emits the tool's exact shape in a fenced
+ * block), then falls back to numbered/bulleted Markdown steps of the shape:
  *   1. [coder] Create the schema (schema)
  *      depends: none · accept: … · files: a.ts (new)
  * Tolerant of missing sub-lines and minor format drift. Returns null if no steps are found.
  */
 export function parsePlan(text: string): Plan | null {
+  const asJson = extractJsonPlan(text);
+  if (asJson) return normalizePlan(asJson);
+
   const lines = text.split(/\r?\n/);
   const summaryMatch = text.match(/^\s*(?:##\s*)?(?:summary|goal)\s*[:\-]\s*(.+)$/im);
   const summary = summaryMatch ? summaryMatch[1]!.trim() : "";
