@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectServerEntry, pickProbes, classifyProbes, smokeRunFeedback, type Probe } from "../src/core/smoke-run";
+import { detectServerEntry, pickProbes, classifyProbes, smokeRunFeedback, ensureServerDeps, npmError, type Probe } from "../src/core/smoke-run";
 import type { SourceFile } from "../src/core/contract";
 
 describe("Phase 4 — dynamic boot gate (fullstack frontier)", () => {
@@ -36,6 +36,27 @@ describe("Phase 4 — dynamic boot gate (fullstack frontier)", () => {
     expect(classifyProbes([{ probe: p, status: 201 }])).toEqual([]);
     expect(classifyProbes([{ probe: p, error: "ECONNREFUSED" }])).toEqual([]); // path not served — don't over-flag
     expect(classifyProbes([{ probe: p, status: 502 }])[0]!.kind).toBe("server-error");
+  });
+
+  it("ensureServerDeps skips (no install) when there is no server module to boot", () => {
+    const files: SourceFile[] = [{ path: "frontend/package.json", content: JSON.stringify({ dependencies: { react: "^18" } }) }];
+    const r = ensureServerDeps("/nonexistent-cwd", files);
+    expect(r.installed).toBe(false);
+    expect(r.reason).toMatch(/no server/i); // returns cleanly, never throws or shells out
+  });
+
+  it("npmError extracts the actionable npm failure and drops boilerplate", () => {
+    // Without this, the repair only sees "Command failed: npm.cmd install" and cannot know what to fix.
+    const stderr = [
+      "npm error code ETARGET",
+      "npm error notarget No matching version found for bcryptjs@^2.4.10.",
+      "npm error notarget In most cases you or one of your dependencies are",
+      "npm error A complete log of this run can be found in: C:\\Users\\x\\npm-cache\\_logs\\2026-07-17T06_07_05_335Z-debug-0.log",
+    ].join("\n");
+    const e = npmError(stderr);
+    expect(e).toMatch(/No matching version found for bcryptjs@\^2\.4\.10/); // names the actual bad dep
+    expect(e).not.toMatch(/complete log/i); // boilerplate dropped
+    expect(e).not.toMatch(/npm error/); // prefix stripped
   });
 
   it("smokeRunFeedback turns issues into a fix instruction", () => {

@@ -345,17 +345,168 @@ planner now routes test steps to it.
 
 ---
 
+## 4c. Escalation as a *last resort* — the Playbook + repair ladder ✅
+
+### 4c.1 The thesis
+
+Escalating to a bigger model was, until now, the *immediate* response to a failure. That is the wrong
+instinct — and the analogy that drove this design: **if a junior developer is stuck, you don't hand the
+task to a senior. You give the junior the runbook, the research, and a debugging method — and only if
+all of that is exhausted do you escalate, and then you escalate *with everything already learned*.**
+
+Small models often lack **know-how**, not capability. Given tools, accumulated fixes, and a method, they
+solve problems a bigger model would. So: **escalation is the last rung, not the first response** — and
+every fix found along the way becomes permanent, shared know-how.
+
+This distinction is load-bearing, and the runs proved both halves of it:
+
+- **Know-how gap** — the model doesn't *know* the fix. Recall/research fixes it cheaply.
+- **Capability / instruction-following gap** — the model is handed the *exact* fix and still doesn't
+  execute it (it explains instead of writing the file). Research doesn't help; more context doesn't
+  help. This needed its own mechanism (§4c.5).
+
+### 4c.2 The Playbook (`src/core/playbook.ts`)
+
+A persistent, self-growing knowledge base of *{issue → verified fix}*, plus a per-model capability
+profile. Entries record the **whole episode**, not a one-line hint: symptom, root cause, the solution
+that verifiably worked, **the dead ends already tried**, and context.
+
+Two design ideas make it intelligent rather than a scoreboard:
+
+**Intelligent trust — trust the *fix*, not the applier.** A naive `wins/uses` ratio is wrong: if an
+issue was met 3× and solved once, the two misses may be *the model's* limitation, not a bad fix. So a
+failure only counts against a fix when it was a **fair test** — the escalated attempt failed *with the
+fix in hand*, or a model already **proven capable** of that class still failed. Weak-model-at-thin-
+context failures are attributed to capability and ignored. Verdicts: `trusted` / `unproven`
+(capability-limited — explicitly *not* the fix's fault) / `suspect` (a fair test failed → the fix is
+probably wrong, and `recall()` stops offering it).
+
+**Capability profile — per model, per issue-class.** Every attempt logs a `SolveEvent`
+(model, issue-class, context level, outcome, project, step). From the log we derive, for each model and
+class: success at each context level, the **cheapest level it succeeds at**, and a **gap** (tried hard —
+research/escalated — and never solved → beyond this model, route elsewhere). The two systems feed each
+other: the capability profile is exactly what tells the trust score whether a failure was fair.
+
+*Decision — score each attempt under the model that actually ran it.* The escalate rung is a
+**different** model. Initially every rung was logged under the cheap model, which both **falsely
+credited the junior with the senior's win** and left the strong model with no profile at all. Fixed:
+the escalated attempt is scored under `escalateModel`.
+
+*Decision — the store is global, pinned to the launch directory.* It is cross-project know-how by
+definition. The default relative path resolved against the *build* cwd (the runner `chdir`s into the
+generated project), which silently scattered a separate playbook into every generated app. Now pinned
+to the launch dir at module load, before any `chdir`.
+
+### 4c.3 The repair ladder (`src/core/repair.ts`)
+
+When a gate flags a failure, climb — verifying after every rung, escalating only when the cheap rungs
+are exhausted:
+
+| Rung | What it does |
+|---|---|
+| **playbook** | recall verified fixes for this issue-class + `diagnose()` hints + a **debugging method** (reproduce → localize → hypothesize → smallest fix → confirm); cheap model retries |
+| **research** | known fixes didn't take → **delegate to the `research` agent** for real, feed its findings to the coder, carrying forward what already failed |
+| **escalate** | LAST resort — the stronger model, handed *everything already tried* so it doesn't restart |
+
+Capability-aware shortcuts: **start high** on a proven gap (skip the cheap rungs when there's nothing
+new to inject), and **bail early** — if a *trusted* fix was handed over and still didn't take, that's a
+capability gap, not a knowledge gap, so skip research and escalate. But **new information wins**: a
+freshly-recalled fix *always* earns the cheap rung, even if the profile historically wanted a higher one
+(the playbook has since grown — the old verdict is stale).
+
+**Write-back closes the loop.** A win from research/escalate is recorded as a new entry — so the next
+time that class appears, the *cheap* model gets the senior's fix injected and solves it at rung 0. A win
+at the playbook rung mints nothing (the fix was already there); it just bumps that entry's trust.
+
+### 4c.4 Never cold — seeding (`src/core/playbook-seed.ts`)
+
+A knowledge base that starts empty is useless on the failure that matters most: the first one. The
+hand-written `diagnose.ts` registry already encodes fixes for our most common error classes, so those
+are **seeded as entries on first use** (idempotent), alongside explicit seeds for every **runnability**
+class (missing entry point, broken start script, unmounted routers, missing `.env`, frontend/backend
+mismatch, dangling import, unresolvable dependency version). 16 fixes, so the very first occurrence of a
+known class already has a concrete, verified fix to recall.
+
+### 4c.5 What the live stress tests actually taught us
+
+Three production-grade fullstack builds (LedgerLite · InventoryIQ · TaskFlow), each run end-to-end.
+Every one found a *different* defect — and almost none of them were in the ladder itself:
+
+- **Repair the foundation first, in isolation.** A build with no server entry produces a *cascade*: the
+  missing entry is *why* the routers are unmounted. Handing the coder all 7 symptoms at once buried the
+  one fix that mattered — even gpt-oss failed. **Tiered repair** (`tiersOf`) fixes foundational issues
+  (`no-entry`/`broken-start`) alone, and the downstream tier collapses on its own. This flipped the
+  outcome: what escalation couldn't fix became a **cheap-rung** fix.
+- **Concrete directives beat "fix it".** `foundationalDirective` (create/replace ONE entry, mount *these
+  named* routers, fix the start script), `contractDirective` (the backend serves *these* endpoints, the
+  frontend calls *these* — align it, here's the client file), `missingImportDirective` (per import:
+  point at the real file, or create it).
+- **The no-op-write guard — the single highest-value fix.** The coder frequently *explained* the fix
+  instead of writing it, and the ladder silently climbed. Now a rung whose attempt leaves the project
+  **byte-for-byte unchanged** is detected as a no-op and force-retried write-only. It fired at the
+  playbook rung *and* on gpt-oss, repeatedly converting a silent failure into a real fix.
+- **Placeholder stubs.** The coder scaffolds `// implementation will follow in subsequent steps` and
+  never returns. `findStubEntry` detects it so the directive says **replace** it, not "create" one.
+- **A check that can't be satisfied is worse than no check.** The frontend/backend contract check
+  false-flagged *correct* code: it couldn't resolve `${BASE_URL}` template constants, and it only
+  scanned files literally containing `axios`/`fetch` — missing every `api.post(...)` call in page files
+  of a modern centralized-client SPA. The ladder burned playbook→research→**escalate** against a check
+  that could never pass. Now it resolves string constants and traces the `axios.create` instance across
+  the app.
+- **Never fail a build over a cosmetic field.** `PLAN_TOOL_SCHEMA` required `summary`. A planner that
+  emitted `{steps:[…]}` without it had **every** tool call rejected before `execute()` ran → no plan
+  captured → plan-exec skipped → **an entire production build silently produced nothing** (12 wasted
+  plan calls, ~6 min, zero output). `normalizePlan` already defaulted the field, so the strictness
+  bought nothing. Now optional — and the same build then reached `✓ plan valid` on the first call.
+- **Boot honestly, and don't repair a non-bug.** The boot gate needs the backend's dependencies, so it
+  now installs them (`ensureServerDeps`) — and it must never claim "server starts and serves" when it
+  actually skipped. A failed install is only handed to the ladder when npm genuinely **cannot resolve** a
+  dependency (a hallucinated version — a real code bug); a **timeout** or toolchain failure is reported
+  as inconclusive, because telling the coder to "fix package.json" when the versions are fine sends both
+  models chasing a bug that doesn't exist. npm's real stderr is now captured (`npmError`) so the repair
+  names the actual bad package instead of "Command failed".
+
+**Milestone (TaskFlow):** a fresh production-grade build reached **`✓ runnable (all tiers cleared)`
+inside the pipeline itself**, wrote a fix **back to the playbook in-run**, and drove the boot gate for
+the first time. Most tiers cleared at the **cheap** rung; escalation was reserved for the genuinely hard
+cross-module edit.
+
+**Honest limits.** A *fully working* app from one cheap-model run remains out of reach: builds still
+produce logic-level bugs below these gates' scope (a route the frontend expects but the backend lacks;
+`.js`/`.ts` mixing that needs a build step). And the frontier keeps *moving* — each fix reveals the next
+class. What is now true: the pipeline reliably takes a real build to **runnable**, mostly cheaply, and
+**remembers** how.
+
+### 4c.6 Seeing it — `chorale playbook`
+
+Both score types are inspectable: every fix with its trust verdict/score, and the per-model capability
+profile by issue-class (`playbook 0/1  research 0/1 → ⚠ GAP → escalate this class`). Trust and
+capability are **derived on read** from the recorded attempts, so the view always reflects reality.
+The store lives at `data/playbook.json` (gitignored, like `lessons.sqlite`); override with
+`CHORALE_PLAYBOOK_DB`.
+
+### 4c.7 New env flags
+
+| Flag | Effect |
+|---|---|
+| `CHORALE_NO_LADDER=1` | disable the repair ladder (gates still report) |
+| `CHORALE_BOOT_INSTALL=0` | don't install backend deps before the boot gate |
+| `CHORALE_PLAYBOOK_DB` | override the playbook store path |
+
+---
+
 ## 5. Current state at a glance
 
 | Item | State |
 |------|-------|
 | Branch | `phase-4` |
-| Tests | **157 passing**, typecheck clean, `npm audit` 0 vulnerabilities |
+| Tests | **258 passing**, typecheck clean, `npm audit` 0 vulnerabilities |
 | Task 1 — Reviewer | ✅ shipped (5 suites green, 3 production modes) |
 | Task 2 — Scribe | ✅ shipped (22 capability checks green, multi-format I/O, 3 design tiers, 10 profiles, 3 permanent doc rules, `check_length`) |
 | Task 3 — Planner/Gates | ✅ shipped — planner agent + `plan.ts` (validate-repair), generalized gates (ancestor-exclusion loop guard, on-demand + auto), benchmark, plan-first wiring |
 | Task 4 — Test-writer | ✅ shipped — writes+runs tests, mutation-graded |
 | Fullstack levers | ✅ #1 plan-exec · #2 shared contract · #3 runnability gate · #5 escalation (opt-in `CHORALE_PLAN_EXEC`) |
+| Escalate-last system | ✅ shipped — Playbook (intelligent trust + per-model capability), repair ladder (recall → research → escalate, write-back), 16 seeded fixes, tiered foundational repair, no-op-write guard, dynamic boot gate w/ dep install, `chorale playbook` |
 | Task 5 — Productivity | ⏳ not started |
 | Default model | `hf:google/gemma-4-31B-it` (≈$0) · escalation `fireworks:…/gpt-oss-120b` |
 
@@ -365,8 +516,18 @@ planner now routes test steps to it.
 - `src/core/ground.ts` — `groundCheck`, meaning-preservation, `checkDesignFidelity`.
 - `src/core/gate.ts` — gate chain, ancestor-exclusion loop guard, depth cap.
 - `src/core/plan.ts` / `plan-exec.ts` — plan model + validate-repair; deterministic plan execution.
-- `src/core/contract.ts` / `runnable.ts` — shared-contract extraction; runnability gate.
-- `src/core/runtime.ts` — `runGate`, gates, `RunResult.{unmetGates,plan}`, plan-exec + #2/#3/#5 wiring.
+- `src/core/contract.ts` / `runnable.ts` — shared-contract extraction; runnability gate; repair **tiers**
+  (`tiersOf`) + the concrete `foundationalDirective` / `contractDirective` / `missingImportDirective`;
+  `findStubEntry`; centralized-client contract tracing.
+- `src/core/playbook.ts` / `playbook-seed.ts` — the growing knowledge base: rich entries, deterministic
+  recall, intelligent trust (fair-failure attribution), per-model capability + gap detection; 16 seeds.
+- `src/core/repair.ts` — the repair ladder (recall → research → escalate), capability shortcuts,
+  no-op-write guard, verified write-back.
+- `src/core/smoke-run.ts` — dynamic boot gate; `ensureServerDeps` (install + failure classification),
+  `npmError`.
+- `src/core/runtime.ts` — `runGate`, gates, `RunResult.{unmetGates,plan}`, plan-exec + #2/#3/#5 wiring,
+  tiered runnability repair + boot gate wired to the ladder.
+- `src/index.ts` — `chorale playbook` (fix trust + per-model capability view).
 - `src/tools/gate-tool.ts` / `plan-tool.ts` — the `gate()` and `plan` tools.
 - `src/tools/documents.ts` — `read_doc`/`write_doc`/`write_sheet`/`convert`/`check_length`.
 - `src/tools/doc-themes.ts`, `doc-profiles.ts`, `doc-pages.ts` — themes, 10 profiles, topic-length.
@@ -390,6 +551,19 @@ planner now routes test steps to it.
   checks (references exist / facts preserved across edits / no invented numbers in bespoke HTML).
 - **Compensation mechanisms** — per-model rules, few-shot, self-heal (self-critique), self-learn:
   structure that lets the cheap default model match a costlier one.
+- **Playbook** — the growing, cross-project knowledge base of *{issue → verified fix}* (whole episodes:
+  symptom, root cause, the fix that worked, the dead ends), plus the per-model capability profile.
+- **Repair ladder** — recall → research → **escalate last**, verifying after each rung; a win from
+  research/escalate is written back so the cheap model inherits it next time.
+- **Intelligent trust** — a fix's trust is only lowered by a *fair* test (the escalated attempt failed
+  with the fix in hand, or a proven-capable model failed). Weak-model-at-thin-context failures are
+  attributed to capability, not the fix.
+- **Capability gap** — a model that tried hard (research/escalated) on an issue-class and never solved
+  it → route past the cheap rungs. Distinct from a **know-how gap**, which recall/research fixes.
+- **No-op-write guard** — a repair attempt that leaves the project byte-for-byte unchanged (the model
+  explained instead of writing) is detected and force-retried write-only.
+- **Tiered repair** — fix foundational issues (a missing server entry) alone and first; the downstream
+  cascade (unmounted routers, etc.) collapses once the foundation exists.
 - **Topic-aware length** — per-topic default page targets with a user override, plus `check_length`
   to verify a rendered document against its target.
 

@@ -21,6 +21,7 @@ import { estimateCost } from "./core/costs.js";
 import { closeLessonStore } from "./core/lessons.js";
 import { checkProviders } from "./core/doctor.js";
 import { LessonStore } from "./core/lessons.js";
+import { getPlaybook, capabilityProfile, classMatch, CONTEXT_LEVELS, type PlaybookEntry, type SolveEvent } from "./core/playbook.js";
 
 interface CliArgs {
   agent?: string;
@@ -54,6 +55,7 @@ Commands:
   sessions prune [--keep N]     keep the N most-recent sessions (default 20)
   cost [session]                token usage + estimated spend per model
   lessons [agent]               show what agents learned from past repairs
+  playbook                      show the escalate-last knowledge base: fix trust + per-model capability
   doctor                        ping every configured provider for reachability
   review [--staged] [paths…]    review your git diff (or the given files) with the reviewer agent
 
@@ -188,6 +190,58 @@ function printLessons(agent?: string): void {
     }
   } finally {
     store.close();
+  }
+}
+
+const clip = (s: string, n = 66): string => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);
+
+/** A short, human label for an issue-class signature: the matching fix's title, else a snippet. */
+function classLabel(sig: string, entries: readonly PlaybookEntry[]): string {
+  const hit = entries.find((e) => classMatch(e.signature, sig));
+  return clip(hit ? hit.title : sig.split(/\s+/).slice(0, 8).join(" "));
+}
+
+/** `chorale playbook` — the escalate-last knowledge base: fix trust + per-model capability profiles. */
+function printPlaybook(): void {
+  const pb = getPlaybook();
+  const entries = pb.entries();
+  const events = pb.allEvents();
+  if (entries.length === 0 && events.length === 0) {
+    process.stderr.write("Playbook is empty — it seeds known fixes on first use and grows as the repair ladder resolves failures.\n");
+    return;
+  }
+
+  // Fixes, ranked by trust (learned/researched before seeded, higher score first).
+  const rank = { trusted: 0, unproven: 1, suspect: 2 } as const;
+  const sorted = [...entries].sort((a, b) => {
+    const ta = pb.trust(a.id)!;
+    const tb = pb.trust(b.id)!;
+    return rank[ta.verdict] - rank[tb.verdict] || tb.score - ta.score;
+  });
+  process.stderr.write(`Playbook — ${entries.length} fix(es), ${events.length} recorded attempt(s):\n\n`);
+  for (const e of sorted) {
+    const t = pb.trust(e.id)!;
+    process.stderr.write(`  ▸ [${t.verdict} ${t.score.toFixed(2)}] ${clip(e.title)}\n`);
+    process.stderr.write(`        ${e.source} · ${e.context} · ${t.note}\n`);
+  }
+
+  // Per-model capability, by issue-class — the capability-gap detector, made visible.
+  const models = [...new Set(events.map((e: SolveEvent) => e.model))].sort();
+  if (models.length) {
+    process.stderr.write(`\nModel capability (per issue-class):\n\n`);
+    for (const m of models) {
+      process.stderr.write(`  ▸ ${m}\n`);
+      const sigs = [...new Set(events.filter((e) => e.model === m).map((e) => e.signature))];
+      for (const sig of sigs) {
+        const p = capabilityProfile(events as SolveEvent[], m, sig);
+        const cells = CONTEXT_LEVELS.filter((l) => p.byLevel[l].tried > 0)
+          .map((l) => `${l} ${p.byLevel[l].worked}/${p.byLevel[l].tried}`)
+          .join("  ");
+        const verdict = p.gap ? "⚠ GAP → escalate this class" : p.canHandle ? `✓ can handle (from "${p.minSuccessLevel}")` : "unproven";
+        process.stderr.write(`        ${classLabel(sig, entries)}\n`);
+        process.stderr.write(`            ${cells}   → ${verdict}\n`);
+      }
+    }
   }
 }
 
@@ -414,6 +468,11 @@ async function main(): Promise<void> {
 
   if (argv[0] === "lessons") {
     printLessons(argv[1]);
+    return;
+  }
+
+  if (argv[0] === "playbook") {
+    printPlaybook();
     return;
   }
 

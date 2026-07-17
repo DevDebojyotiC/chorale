@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkRunnable, runnableFeedback } from "../src/core/runnable";
+import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
 import type { SourceFile } from "../src/core/contract";
 
 const pathsOf = (files: SourceFile[], extra: string[] = []): Set<string> => new Set([...files.map((f) => f.path), ...extra]);
@@ -101,6 +101,20 @@ describe("Phase 4 — runnability gate (fullstack lever #3)", () => {
     expect(issues.some((i) => i.kind === "frontend-backend-mismatch")).toBe(true);
   });
 
+  it("does NOT false-flag a centralized axios client (baseURL const + api.get across page files)", () => {
+    // The exact modern-SPA shape that used to false-flag: BASE_URL constant, an axios.create instance,
+    // and page files that call api.post('/api/auth/login') without ever mentioning axios themselves.
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "server.js", content: "const express=require('express');const app=express();const a=require('./routes/auth');app.use('/api/auth',a);app.listen(process.env.PORT);" },
+      { path: "routes/auth.js", content: "const router=require('express').Router();router.post('/login',h);router.post('/register',h);module.exports=router;" },
+      { path: "frontend/src/api/client.ts", content: 'import axios from "axios";\nconst BASE_URL = "http://localhost:3000";\nconst api = axios.create({ baseURL: BASE_URL });\nexport const refresh = () => axios.post(`${BASE_URL}/api/auth/refresh`);\nexport default api;' },
+      { path: "frontend/src/pages/Login.tsx", content: 'import api from "../api/client";\nexport function Login(){ return api.post("/api/auth/login", {}); }' },
+    ];
+    // login call resolves to /api/auth/login = a real backend route → the client is aligned, no flag
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "frontend-backend-mismatch")).toBe(false);
+  });
+
   it("does not flag a frontend that DOES call the backend's routes", () => {
     const files: SourceFile[] = [
       { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
@@ -117,5 +131,79 @@ describe("Phase 4 — runnability gate (fullstack lever #3)", () => {
     const fb = runnableFeedback(checkRunnable(files, pathsOf(files)));
     expect(fb).toMatch(/not runnable/i);
     expect(fb).toMatch(/\.listen\(\)/);
+  });
+});
+
+describe("Phase 4 — tiered repair (foundational first)", () => {
+  const mk = (kind: RunnableIssue["kind"], where = ""): RunnableIssue => ({ kind, where, message: `${kind} at ${where}` });
+
+  it("groups issues into tiers with the missing entry point first", () => {
+    const issues = [mk("unmounted-routes", "routes/a.js"), mk("frontend-backend-mismatch"), mk("no-entry", "backend"), mk("missing-env")];
+    const tiers = tiersOf(issues);
+    // tier 0 must be the foundational no-entry; unmounted-routes (downstream) must NOT be in tier 0
+    expect(tiers[0]!.every((i) => RUNNABLE_TIER[i.kind] === 0)).toBe(true);
+    expect(tiers[0]!.some((i) => i.kind === "no-entry")).toBe(true);
+    expect(tiers[0]!.some((i) => i.kind === "unmounted-routes")).toBe(false);
+    expect(tiers.at(-1)!.some((i) => i.kind === "frontend-backend-mismatch")).toBe(true); // contract check is last
+  });
+
+  it("the foundational directive names the exact routers to mount and the code location", () => {
+    // the exact LedgerLite-run cascade: no entry + a start script pointing nowhere + three unmounted routers
+    const issues = [
+      mk("no-entry", "backend"),
+      mk("broken-start", "package.json"),
+      mk("unmounted-routes", "backend/routes/auth.js"),
+      mk("unmounted-routes", "backend/routes/analytics.js"),
+      mk("unmounted-routes", "backend/routes/import.js"),
+    ];
+    const d = foundationalDirective(issues);
+    expect(d).toMatch(/mount every router/i);
+    expect(d).toMatch(/backend\/routes\/auth\.js/);
+    expect(d).toMatch(/backend\/routes\/analytics\.js/);
+    expect(d).toMatch(/process\.env\.PORT/);
+    expect(d).toMatch(/near backend/); // tells the coder to put the entry where the code actually lives
+  });
+
+  it("detects a placeholder-stub entry and tells the coder to REPLACE it (the InventoryIQ failure)", () => {
+    const stubFiles: SourceFile[] = [
+      { path: "src/index.js", content: "// This file marks the entry point for the backend.\n// Actual implementation will follow in subsequent steps.\n" },
+      { path: "src/routes/products.js", content: "const r=require('express').Router();r.get('/',h);module.exports=r;" },
+    ];
+    expect(findStubEntry(stubFiles)).toBe("src/index.js");
+    const d = foundationalDirective([mk("no-entry", "."), mk("unmounted-routes", "src/routes/products.js")], stubFiles);
+    expect(d).toMatch(/already exists but is an EMPTY PLACEHOLDER/i);
+    expect(d).toMatch(/REPLACE its entire contents/i);
+    // a REAL entry (calls listen) is not a stub
+    expect(findStubEntry([{ path: "src/server.js", content: "const app=require('express')();app.listen(process.env.PORT);" }])).toBeNull();
+  });
+
+  it("the missing-import directive hints a misplaced module and says CREATE for a truly missing one", () => {
+    const files: SourceFile[] = [
+      // imports ../db/pool.js — no such file, but a 'pool' module exists elsewhere → hint to point there
+      { path: "src/repositories/order.repo.ts", content: "import { pool } from '../db/pool.js';" },
+      { path: "src/database/pool.ts", content: "export const pool = {};" },
+      // imports ../utils/errors.js — genuinely never created → CREATE
+      { path: "src/services/order.service.ts", content: "import { AppError } from '../utils/errors.js';" },
+    ];
+    const issues = checkRunnable(files, pathsOf(files)).filter((i) => i.kind === "missing-import");
+    const d = missingImportDirective(issues, files);
+    expect(d).toMatch(/A module named the same exists at "src\/database\/pool\.ts"/); // misplaced → point there
+    expect(d).toMatch(/utils\/errors\.js", which was never created — CREATE/); // genuinely missing → create
+  });
+
+  it("the contract directive gives BOTH sides concretely and names the frontend client to edit", () => {
+    // backend serves /api/auth/login; frontend calls root /login → mismatch (the proven-triggering setup)
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "backend/server.js", content: "const express=require('express');const app=express();const a=require('./routes/auth');app.use('/api/auth',a);app.listen(3000);" },
+      { path: "backend/routes/auth.js", content: "const router=require('express').Router();router.post('/login',h);router.post('/register',h);module.exports=router;" },
+      { path: "frontend/src/Login.js", content: "import axios from 'axios'; axios.post('http://localhost:3000/login', data);" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "frontend-backend-mismatch")).toBe(true); // precondition
+    const d = contractDirective(files);
+    expect(d).toMatch(/source of truth/i);
+    expect(d).toMatch(/Backend actually serves:/);
+    expect(d).toMatch(/\/api\/auth\/login/); // the real backend path, concretely
+    expect(d).toMatch(/frontend\/src\/Login\.js/); // the file to edit
   });
 });

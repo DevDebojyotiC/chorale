@@ -14,6 +14,8 @@
 
 import net from "node:net";
 import http from "node:http";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { spawn, execFileSync } from "node:child_process";
 import { extractContract, type ProjectContract, type SourceFile } from "./contract.js";
 
@@ -190,6 +192,69 @@ export async function bootAndProbe(cwd: string, entry: string, contract: Project
     return classifyProbes(results);
   } finally {
     killTree(child);
+  }
+}
+
+export interface DepInstall {
+  installed: boolean;
+  reason?: string;
+  dir?: string;
+  /**
+   * Why it failed. Only "resolution" (a dependency/version that cannot be resolved) is a code bug the
+   * coder can repair. A "timeout" (slow native build) or "other" (network, toolchain) is NOT — sending
+   * those to the repair ladder makes it chase a package.json bug that isn't there.
+   */
+  kind?: "resolution" | "timeout" | "other";
+}
+
+/** Pull the meaningful npm error lines out of its stderr (drop boilerplate/log-path noise). */
+export function npmError(stderr: string): string {
+  const lines = stderr
+    .split("\n")
+    .map((l) => l.replace(/^npm (error|ERR!)\s?/, "").trim())
+    .filter((l) => l && !/^A complete log|^\s*$|node_modules\/\.package-lock|^gyp |^prebuild/i.test(l));
+  return [...new Set(lines)].slice(0, 8).join("; ").slice(0, 400);
+}
+
+/**
+ * Install the backend server's dependencies so the boot gate can actually run it. A build produces a
+ * package.json but no node_modules — `node server.js` then dies on the first `import express`, which
+ * is a missing-deps artifact, not a real bug. Booting a server without its deps is meaningless, so
+ * (opt-in, before the boot gate) we `npm install` in the detected server's module. Bounded + best-
+ * effort: a failed/slow install just leaves the boot gate inconclusive, it never throws.
+ */
+export function ensureServerDeps(cwd: string, files: SourceFile[], opts: { timeoutMs?: number } = {}): DepInstall {
+  const server = detectServerEntry(files);
+  if (!server) return { installed: false, reason: "no server module" };
+  const dir = join(cwd, server.dir);
+  if (existsSync(join(dir, "node_modules"))) return { installed: false, reason: "already installed", dir };
+  const pkgPath = join(dir, "package.json");
+  if (!existsSync(pkgPath)) return { installed: false, reason: "no package.json", dir };
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { dependencies?: object; devDependencies?: object };
+    if (!pkg.dependencies && !pkg.devDependencies) return { installed: false, reason: "no dependencies to install", dir };
+  } catch {
+    return { installed: false, reason: "unreadable package.json", dir };
+  }
+  const timeoutMs = opts.timeoutMs ?? 240000;
+  try {
+    execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"], {
+      cwd: dir,
+      timeout: timeoutMs,
+      stdio: ["ignore", "ignore", "pipe"], // capture npm's stderr — "Command failed" alone is unactionable
+      shell: process.platform === "win32",
+    });
+    return { installed: true, dir };
+  } catch (e) {
+    const err = e as { stderr?: Buffer | string; signal?: string; message?: string };
+    const stderr = err.stderr ? String(err.stderr) : "";
+    const detail = npmError(stderr);
+    if (err.signal === "SIGTERM" || /ETIMEDOUT|timed out/i.test(String(err.message ?? ""))) {
+      return { installed: false, kind: "timeout", reason: `npm install timed out after ${Math.round(timeoutMs / 1000)}s (often a slow native build) — not a code problem`, dir };
+    }
+    // Only a dependency/version that npm cannot resolve is something the coder can fix in package.json.
+    const resolution = /ETARGET|notarget|No matching version|404 Not Found|ERESOLVE|EUNSUPPORTEDPROTOCOL|Invalid package name/i.test(stderr);
+    return { installed: false, kind: resolution ? "resolution" : "other", reason: detail || String(err.message ?? "").slice(0, 200), dir };
   }
 }
 

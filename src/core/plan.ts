@@ -54,7 +54,11 @@ export interface Plan {
 /** Zod schema for the `plan` tool. Loose on optionals so a model retry isn't triggered by
  *  a missing acceptance line; normalizePlan fills the gaps. */
 export const PLAN_TOOL_SCHEMA = z.object({
-  summary: z.string().describe("One-line summary of the goal"),
+  // Optional on purpose: `steps` is the only thing that matters and normalizePlan defaults the rest.
+  // When this was required, a planner that emitted {steps:[...]} without it had EVERY tool call
+  // rejected before execute() — so no plan was ever captured, plan-exec was skipped, and a whole
+  // production build silently produced nothing. Never fail a plan over a cosmetic field.
+  summary: z.string().optional().describe("One-line summary of the goal"),
   steps: z
     .array(
       z.object({

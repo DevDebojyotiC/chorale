@@ -17,8 +17,11 @@ import { createPlanTool } from "../tools/plan-tool.js";
 import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./plan.js";
 import { executePlan, type StepRunner } from "./plan-exec.js";
 import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
-import { checkRunnable, runnableFeedback } from "./runnable.js";
-import { smokeRun, smokeRunFeedback } from "./smoke-run.js";
+import { checkRunnable, tiersOf, foundationalDirective, contractDirective, missingImportDirective, type RunnableIssue } from "./runnable.js";
+import { smokeRun, ensureServerDeps, detectServerEntry } from "./smoke-run.js";
+import { runRepairLadder } from "./repair.js";
+import { getPlaybook } from "./playbook.js";
+import { ensureSeeded } from "./playbook-seed.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
@@ -554,47 +557,146 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     const failed = results.filter((r) => !r.ok).length;
     log.info(`[chorale] ✓ plan executed: ${results.length - failed}/${results.length} steps ok\n`);
 
+    // Repair ladder (Phase 4 · escalate-last): both gates below hand their failures to the same ladder
+    // — recall a known fix from the playbook → research → escalate — instead of jumping to the strong
+    // model. The coder's cheap base model is what the capability profile is keyed on; a research
+    // researcher agent, if present, unlocks the middle rung.
+    const { coderModel, escalateModel } = (() => {
+      try {
+        const plan = resolveModelPlan(loadAgent(resolve(config.agents.dir, "coder.md")), config);
+        return { coderModel: plan.model, escalateModel: plan.fallbacks[0] };
+      } catch {
+        return { coderModel: "coder", escalateModel: undefined };
+      }
+    })();
+    // A content hash of the project — lets the ladder detect a repair attempt that wrote NOTHING (the
+    // model explained instead of writing) and force a write-only retry.
+    const projectFingerprint = (): string => {
+      let h = 5381;
+      for (const f of [...collectProject(cwd).files].sort((a, b) => a.path.localeCompare(b.path))) {
+        const s = f.path + "\0" + f.content;
+        for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+      }
+      return String(h >>> 0);
+    };
+    const researchAgent = ["research", "researcher"].find((n) => existsSync(resolve(config.agents.dir, `${n}.md`)));
+    const hasResearch = researchAgent != null;
+    // The middle rung: delegate investigation to the research agent (read/search only) and hand its
+    // findings back to the coder — so the junior gets a senior's *research*, not just a retry prompt.
+    const researchDelegate = researchAgent
+      ? async ({ issues, errorText }: { issues: string[]; errorText: string }): Promise<string> => {
+          const task =
+            `A build is failing and the known fixes did not resolve it. Investigate and return CONCRETE, actionable findings the coder can apply — the root cause, the correct library/API usage, and the exact change to make. Do NOT write files; just report your findings.\n\nFailing checks:\n${issues.map((i) => `- ${i}`).join("\n")}` +
+            (errorText && !issues.join("\n").includes(errorText) ? `\n\nError detail:\n${errorText.slice(0, 800)}` : "");
+          const res = await runSpecialist(researchAgent, task, false);
+          return res.ok ? res.text : "";
+        }
+      : undefined;
+    const projectTag = cwd.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "project";
+    const ladderEnabled = process.env.CHORALE_NO_LADDER !== "1";
+    if (ladderEnabled) ensureSeeded(getPlaybook()); // never let the playbook be cold — seed known fixes once
+
     // Runnability gate (lever #3): a build can produce many files and still not run. Statically check
-    // the project (server entry point, start script, required .env, coherent local imports) and loop
-    // a bounded repair back to the coder until it's runnable or the budget is spent.
+    // the project, then repair TIER BY TIER — foundational issues (a missing server entry) first and in
+    // isolation, because everything else (unmounted routers, etc.) cascades from them and can't be fixed
+    // until the entry exists. Each tier gets its own scoped ladder run so the one fix that matters isn't
+    // buried under seven symptoms.
     if (process.env.CHORALE_NO_RUNCHECK !== "1") {
-      const maxFix = 2;
-      for (let round = 0; round <= maxFix; round++) {
+      const allIssues = (): RunnableIssue[] => {
         const proj = collectProject(cwd);
-        const issues = checkRunnable(proj.files, proj.paths);
-        if (issues.length === 0) {
-          log.info(round > 0 ? `[chorale] ✓ runnable after ${round} fix round(s)\n` : `[chorale] ✓ runnability check passed\n`);
-          break;
+        return checkRunnable(proj.files, proj.paths);
+      };
+      let issues = allIssues();
+      if (issues.length === 0) {
+        log.info(`[chorale] ✓ runnability check passed\n`);
+      } else if (ladderEnabled) {
+        log.info(`[chorale] ⚠ runnability: ${issues.length} issue(s) across ${tiersOf(issues).length} tier(s) — repair ladder engaged (foundational first)…\n`);
+        for (let pass = 0; pass < 4; pass++) {
+          issues = allIssues();
+          if (issues.length === 0) break;
+          const tier = tiersOf(issues)[0]!; // the most-foundational remaining tier
+          const tierKinds = new Set(tier.map((i) => i.kind));
+          const foundational = tier.some((i) => i.kind === "no-entry" || i.kind === "broken-start");
+          const contract = !foundational && tier.some((i) => i.kind === "frontend-backend-mismatch");
+          const imports = !foundational && !contract && tier.some((i) => i.kind === "missing-import");
+          const projFiles = collectProject(cwd).files;
+          const directive = foundational ? foundationalDirective(issues, projFiles) : contract ? contractDirective(projFiles) : imports ? missingImportDirective(tier, projFiles) : "";
+          const tierMessages = tier.map((i, idx) => i.message + (directive && idx === 0 ? "\n\n" + directive : ""));
+          const note = foundational ? " (create the server entry that mounts every router)" : contract ? " (align the frontend API client to the backend's real routes)" : imports ? " (point each dangling import at the real file or create it)" : "";
+          log.info(`[chorale]   ▸ fixing ${tier.length} ${[...tierKinds].join("/")} issue(s)${note}…\n`);
+          const r = await runRepairLadder(tierMessages, {
+            attempt: ({ instruction, escalate }) => runSpecialist("coder", instruction, escalate),
+            recheck: () => allIssues().filter((i) => tierKinds.has(i.kind)).map((i) => i.message), // scoped to THIS tier
+            fingerprint: projectFingerprint,
+            model: coderModel,
+            escalateModel,
+            kind: "runnability",
+            hasResearch,
+            research: researchDelegate,
+            canEscalate,
+            project: projectTag,
+            step: "runnability",
+            log: (m) => log.info(`[chorale]   ↳ ${m}\n`),
+          });
+          if (!r.solved && allIssues().some((i) => tierKinds.has(i.kind))) {
+            log.info(`[chorale]   ⚠ could not clear the ${[...tierKinds].join("/")} tier — stopping runnability repair\n`);
+            break;
+          }
         }
-        if (round === maxFix) {
-          log.info(`[chorale] ⚠ ${issues.length} runnability issue(s) remain after ${maxFix} fix round(s)\n`);
-          break;
-        }
-        log.info(`[chorale] ⚠ runnability: ${issues.length} issue(s) — asking the coder to fix${round >= 1 ? " (escalated)" : ""}…\n`);
-        for (const i of issues.slice(0, 6)) log.info(`    ${i.message}\n`);
-        // First fix round on the cheap model; escalate the repair once it persists (#5).
-        await runSpecialist("coder", runnableFeedback(issues), round >= 1);
+        const remaining = allIssues();
+        log.info(remaining.length === 0 ? `[chorale] ✓ runnable (all tiers cleared)\n` : `[chorale] ⚠ ${remaining.length} runnability issue(s) remain after the ladder\n`);
       }
     }
 
     // Dynamic boot gate (fullstack frontier, opt-in via CHORALE_SMOKE_RUN): actually boot the
     // assembled server and probe it — catches crash-on-boot (e.g. a CJS/ESM export mismatch) and 5xx
-    // handler bugs that static checks can't. Best-effort; escalated repair. Needs deps installed.
+    // handler bugs that static checks can't. Best-effort; repaired via the same ladder. Needs deps.
     if (process.env.CHORALE_SMOKE_RUN === "1") {
-      const maxBoot = 2;
-      for (let round = 0; round <= maxBoot; round++) {
-        const bootIssues = await smokeRun(cwd, collectProject(cwd).files);
-        if (bootIssues.length === 0) {
-          log.info(round > 0 ? `[chorale] ✓ boots + serves after ${round} fix round(s)\n` : `[chorale] ✓ dynamic boot: server starts and serves\n`);
-          break;
+      const bootFiles = collectProject(cwd).files;
+      if (!detectServerEntry(bootFiles)) {
+        log.info(`[chorale] · boot gate: no bootable server detected — skipped\n`);
+      } else {
+        const doInstall = process.env.CHORALE_BOOT_INSTALL !== "0";
+        // A dependency npm cannot RESOLVE (a hallucinated/nonexistent version) is a repairable code bug
+        // — surface it, with npm's real error, so the ladder fixes package.json. A timeout or toolchain
+        // failure is NOT a code bug: sending it to the ladder makes the coder chase a package.json bug
+        // that doesn't exist (it burned both rungs doing exactly that), so treat it as inconclusive.
+        const bootProblems = async (): Promise<string[]> => {
+          if (doInstall) {
+            const dep = ensureServerDeps(cwd, bootFiles);
+            if (!dep.installed && dep.reason !== "already installed") {
+              if (dep.kind === "resolution") return [`npm install failed for the backend — npm cannot resolve a dependency: ${dep.reason}. Fix package.json so every dependency and version is a real, published package on npm (remove or correct any invented versions) so it installs cleanly.`];
+              return []; // timeout / toolchain / nothing to install — can't boot, but not a bug to repair
+            }
+          }
+          return (await smokeRun(cwd, bootFiles)).map((i) => i.message);
+        };
+        log.info(`[chorale] · boot gate: installing backend deps + booting…\n`);
+        const bootIssues = await bootProblems();
+        if (bootIssues.length > 0 && ladderEnabled) {
+          log.info(`[chorale] ⚠ boot: ${bootIssues.length} issue(s) — repair ladder engaged…\n`);
+          for (const m of bootIssues.slice(0, 4)) log.info(`    ${m.split("\n")[0]}\n`);
+          const r = await runRepairLadder(bootIssues, {
+            attempt: ({ instruction, escalate }) => runSpecialist("coder", instruction, escalate),
+            recheck: bootProblems,
+            fingerprint: projectFingerprint,
+            model: coderModel,
+            escalateModel,
+            kind: "boot",
+            hasResearch,
+            research: researchDelegate,
+            canEscalate,
+            project: projectTag,
+            step: "boot",
+            log: (m) => log.info(`[chorale]   ↳ ${m}\n`),
+          });
+          log.info(r.solved ? `[chorale] ✓ boots + serves after the ${r.rungs.at(-1)?.level} rung\n` : `[chorale] ⚠ ${r.remaining.length} boot issue(s) remain after the ladder\n`);
+        } else if (bootIssues.length === 0) {
+          // Only claim "serves" if deps were genuinely available to boot with — never a false pass.
+          const dep = doInstall ? ensureServerDeps(cwd, bootFiles) : { installed: true, reason: "" };
+          const ready = !doInstall || dep.installed || dep.reason === "already installed";
+          log.info(ready ? `[chorale] ✓ dynamic boot: server installs, starts and serves\n` : `[chorale] · boot gate: inconclusive — backend deps unavailable (${dep.reason})\n`);
         }
-        if (round === maxBoot) {
-          log.info(`[chorale] ⚠ ${bootIssues.length} boot issue(s) remain after ${maxBoot} fix round(s)\n`);
-          break;
-        }
-        log.info(`[chorale] ⚠ boot: ${bootIssues.length} issue(s) — asking the coder to fix (escalated)…\n`);
-        for (const i of bootIssues.slice(0, 4)) log.info(`    ${i.message.split("\n")[0]}\n`);
-        await runSpecialist("coder", smokeRunFeedback(bootIssues), true); // escalate: a boot crash is worth the strong model
       }
     }
 

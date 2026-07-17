@@ -2,7 +2,23 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalizePlan, parsePlan, assessComplexity, validatePlan, planFeedback, formatPlan } from "../src/core/plan";
+import { normalizePlan, parsePlan, assessComplexity, validatePlan, planFeedback, formatPlan, PLAN_TOOL_SCHEMA } from "../src/core/plan";
+
+describe("Phase 4 — plan tool schema tolerance", () => {
+  // The TaskFlow no-op: the planner emitted {steps:[...]} with no `summary`. `summary` was required,
+  // so EVERY plan tool call was rejected before execute() → no plan captured → plan-exec skipped →
+  // the entire production build produced nothing. Only `steps` may be load-bearing.
+  it("accepts a plan with no summary (steps is the only thing that matters)", () => {
+    const r = PLAN_TOOL_SCHEMA.safeParse({ steps: [{ title: "Scaffold the backend", agent: "coder" }] });
+    expect(r.success).toBe(true);
+    expect(normalizePlan({ steps: [{ title: "Scaffold the backend", agent: "coder" }] }).summary).toBe("");
+  });
+
+  it("still accepts the full shape and rejects a non-object", () => {
+    expect(PLAN_TOOL_SCHEMA.safeParse({ summary: "s", steps: [{ title: "t", agent: "coder", dependsOn: [1], layer: "api", acceptance: "a", files: [{ path: "x.js", status: "new" }] }] }).success).toBe(true);
+    expect(PLAN_TOOL_SCHEMA.safeParse("{\"steps\":[]}").success).toBe(false); // a stringified plan is still invalid
+  });
+});
 
 describe("Phase 4 — planning core (plan.ts)", () => {
   describe("normalizePlan (structured tool path)", () => {
