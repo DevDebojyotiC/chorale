@@ -17,6 +17,7 @@ import { createPlanTool } from "../tools/plan-tool.js";
 import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./plan.js";
 import { executePlan, type StepRunner } from "./plan-exec.js";
 import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
+import { checkRunnable, runnableFeedback } from "./runnable.js";
 import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/loader.js";
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
@@ -286,15 +287,20 @@ export interface RunEvent {
  * This is the minimal self-healing behavior; richer failover (cooldowns,
  * credential rotation) lands in a later phase.
  */
-/** Source extensions worth scanning for the project contract (routes, schema, exports). */
+/** Extensions whose CONTENT we read (for contract + runnability analysis). */
 const CONTRACT_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sql"]);
+const CONTENT_NAMES = new Set(["package.json", ".env", ".env.example"]);
 const CONTRACT_SKIP_DIRS = new Set(["node_modules", ".git", "data", "dist", "build", ".next", "coverage"]);
 
-/** Walk a project directory collecting source files for contract extraction (bounded, skips deps). */
-function collectSources(root: string, maxFiles = 200, maxBytes = 40_000): SourceFile[] {
-  const out: SourceFile[] = [];
+/**
+ * Walk a project directory (bounded, skipping deps) collecting: the CONTENT of source + config
+ * files (for contract/runnability analysis) and the PATH of every file (for import/entry resolution).
+ */
+function collectProject(root: string, maxFiles = 400, maxBytes = 60_000): { files: SourceFile[]; paths: Set<string> } {
+  const files: SourceFile[] = [];
+  const paths = new Set<string>();
   const walk = (dir: string): void => {
-    if (out.length >= maxFiles) return;
+    if (paths.size >= maxFiles) return;
     let entries: string[];
     try {
       entries = readdirSync(dir);
@@ -302,7 +308,7 @@ function collectSources(root: string, maxFiles = 200, maxBytes = 40_000): Source
       return;
     }
     for (const name of entries) {
-      if (out.length >= maxFiles) return;
+      if (paths.size >= maxFiles) return;
       const full = resolve(dir, name);
       let st;
       try {
@@ -312,9 +318,14 @@ function collectSources(root: string, maxFiles = 200, maxBytes = 40_000): Source
       }
       if (st.isDirectory()) {
         if (!CONTRACT_SKIP_DIRS.has(name) && !name.startsWith(".")) walk(full);
-      } else if (st.size <= maxBytes && CONTRACT_EXTS.has(full.slice(full.lastIndexOf(".")).toLowerCase())) {
+        continue;
+      }
+      const rel = full.slice(root.length + 1).replace(/\\/g, "/");
+      paths.add(rel);
+      const readable = st.size <= maxBytes && (CONTRACT_EXTS.has(full.slice(full.lastIndexOf(".")).toLowerCase()) || CONTENT_NAMES.has(name));
+      if (readable) {
         try {
-          out.push({ path: full.slice(root.length + 1), content: readFileSync(full, "utf8") });
+          files.push({ path: rel, content: readFileSync(full, "utf8") });
         } catch {
           /* skip unreadable */
         }
@@ -322,7 +333,7 @@ function collectSources(root: string, maxFiles = 200, maxBytes = 40_000): Source
     }
   };
   walk(root);
-  return out;
+  return { files, paths };
 }
 
 export async function runAgent(opts: RunOptions): Promise<RunResult> {
@@ -524,12 +535,35 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       // base URL / tables / exports, so each next step builds against the actual earlier work — not a
       // prose guess (this is what stops the frontend calling /api/… when the backend serves /…).
       context: () => {
-        const contract = extractContract(collectSources(cwd));
+        const contract = extractContract(collectProject(cwd).files);
         return hasContract(contract) ? formatContract(contract) : "";
       },
     });
     const failed = results.filter((r) => !r.ok).length;
     log.info(`[chorale] ✓ plan executed: ${results.length - failed}/${results.length} steps ok\n`);
+
+    // Runnability gate (lever #3): a build can produce many files and still not run. Statically check
+    // the project (server entry point, start script, required .env, coherent local imports) and loop
+    // a bounded repair back to the coder until it's runnable or the budget is spent.
+    if (process.env.CHORALE_NO_RUNCHECK !== "1") {
+      const maxFix = 2;
+      for (let round = 0; round <= maxFix; round++) {
+        const proj = collectProject(cwd);
+        const issues = checkRunnable(proj.files, proj.paths);
+        if (issues.length === 0) {
+          log.info(round > 0 ? `[chorale] ✓ runnable after ${round} fix round(s)\n` : `[chorale] ✓ runnability check passed\n`);
+          break;
+        }
+        if (round === maxFix) {
+          log.info(`[chorale] ⚠ ${issues.length} runnability issue(s) remain after ${maxFix} fix round(s)\n`);
+          break;
+        }
+        log.info(`[chorale] ⚠ runnability: ${issues.length} issue(s) — asking the coder to fix…\n`);
+        for (const i of issues.slice(0, 6)) log.info(`    ${i.message}\n`);
+        await stepRunner("coder", runnableFeedback(issues), { id: "runfix", agent: "coder", title: "make the project runnable", dependsOn: [], layer: "other", acceptance: "the app runs", files: [], designDecision: false });
+      }
+    }
+
     planExecBlock =
       "## The plan has already been executed by specialists\nEach step below was carried out. Write the user a concise final summary of what was built (and note any failed step); do NOT re-delegate or redo the work.\n\n" +
       results.map((r) => `- ${r.id} [${r.agent}] ${r.title}: ${r.ok ? r.text.replace(/\s+/g, " ").slice(0, 300) : "FAILED — " + r.text.slice(0, 200)}`).join("\n") +
