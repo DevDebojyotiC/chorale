@@ -75,7 +75,7 @@
     // Models: zai:glm-4.5-flash (free), zai:glm-4.7-flash (free), zai:glm-4.6, zai:glm-5.1, …
     zai: {
       api: "openai-compatible",
-      baseUrl: "https://api.z.ai/api/openai/v1",
+      baseUrl: "https://api.z.ai/api/paas/v4", // OpenAI-compatible; /api/openai/v1 404s for standard keys
       apiKey: "${ZAI_API_KEY}",
     },
     // Puter — free GLM via Puter's user-pays gateway (routed through puter.ai.chat, no REST endpoint).
