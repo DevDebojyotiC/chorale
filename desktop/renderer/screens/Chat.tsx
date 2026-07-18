@@ -24,6 +24,7 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
   const [input, setInput] = useState("");
   const [sessionId, setSessionId] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     chorale.listAgents().then((a) => {
@@ -71,24 +72,36 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
     setUsage(null);
     const history = turns.map((t) => ({ role: t.role, content: t.text }));
     let acc = "";
-    chorale.run({ agent, prompt: text, sessionId, history }, {
+    cancelRef.current = chorale.run({ agent, prompt: text, sessionId, history }, {
       onToken: (tk) => {
         acc += tk;
         setStreaming(acc);
       },
       onEvent: (type, txt) => setEvents((e) => [...e, { type, text: txt }]),
       onDone: (model, final, u) => {
+        cancelRef.current = null;
         setTurns((t) => [...t, { role: "assistant", text: final || acc, agent, model }]);
         setStreaming("");
         setUsage(u ? { in: u.inputTokens, out: u.outputTokens } : null);
         setBusy(false);
       },
       onError: (msg) => {
+        cancelRef.current = null;
         setTurns((t) => [...t, { role: "assistant", text: "⚠ " + msg, agent, model: "error" }]);
         setStreaming("");
         setBusy(false);
       },
     });
+  }
+
+  function stop() {
+    cancelRef.current?.();
+    cancelRef.current = null;
+    setStreaming((partial) => {
+      if (partial) setTurns((t) => [...t, { role: "assistant", text: partial + " …(stopped)", agent }]);
+      return "";
+    });
+    setBusy(false);
   }
 
   return (
@@ -153,11 +166,19 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
               placeholder={busy ? "the chorale is working…" : `Message ${agent} — Enter to send, Shift+Enter for a new line`}
               rows={1}
             />
-            <button className="send" onClick={submit} disabled={busy || !input.trim()} aria-label="Send">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M7 11l5-5 5 5M12 6v13" />
-              </svg>
-            </button>
+            {busy ? (
+              <button className="send stop" onClick={stop} aria-label="Stop" title="Stop">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+              </button>
+            ) : (
+              <button className="send" onClick={submit} disabled={!input.trim()} aria-label="Send">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 11l5-5 5 5M12 6v13" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </div>

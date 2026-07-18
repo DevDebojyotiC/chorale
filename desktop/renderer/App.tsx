@@ -3,6 +3,7 @@ import { Chat } from "./screens/Chat";
 import { Agents } from "./screens/Agents";
 import { Config } from "./screens/Config";
 import { Sessions } from "./screens/Sessions";
+import { IS_MOCK } from "./bridge";
 
 type Screen = "chat" | "agents" | "config" | "sessions";
 
@@ -63,6 +64,7 @@ export function App() {
       <div className="top">
         <div className="crumb">
           workspace <b>swarm</b>
+          {IS_MOCK && <span style={{ color: "var(--warn)" }}> · preview (mock data)</span>}
         </div>
         <div className="spacer" />
         <button className="tbtn" onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">

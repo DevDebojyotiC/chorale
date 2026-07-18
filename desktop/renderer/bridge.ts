@@ -1,7 +1,13 @@
 import type { ChoraleBridge } from "../shared/ipc";
+import { mockBridge } from "./mock";
 
-/** The API the preload injected on window.chorale. */
-export const chorale: ChoraleBridge = (window as unknown as { chorale: ChoraleBridge }).chorale;
+const injected = (window as unknown as { chorale?: ChoraleBridge }).chorale;
+
+/** True when running in a plain browser (Vite preview) with no Electron bridge — uses mock data. */
+export const IS_MOCK = !injected;
+
+/** The API the preload injected on window.chorale, or a mock when previewing in a browser. */
+export const chorale: ChoraleBridge = injected ?? mockBridge;
 
 /**
  * Per-agent accent colors — the "orchestra sections" metaphor. Keyed by agent name; a stable hash
