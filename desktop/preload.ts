@@ -11,6 +11,7 @@ const bridge: ChoraleBridge = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
   listAgents: () => ipcRenderer.invoke(IPC.agentsList),
   getConfig: () => ipcRenderer.invoke(IPC.configGet),
+  setKey: (envVar, value) => ipcRenderer.invoke(IPC.settingsSetKey, envVar, value),
   newSession: (agent) => ipcRenderer.invoke(IPC.sessionNew, agent),
   listSessions: () => ipcRenderer.invoke(IPC.sessionList),
   loadSession: (id) => ipcRenderer.invoke(IPC.sessionLoad, id),

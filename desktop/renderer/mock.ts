@@ -20,12 +20,12 @@ const AGENTS: AgentSummary[] = [
 
 const CONFIG: ConfigSummary = {
   providers: [
-    { name: "fireworks", api: "openai-compatible", baseUrl: "https://api.fireworks.ai/inference/v1", hasKey: true },
-    { name: "puter", api: "puter", baseUrl: null, hasKey: true },
-    { name: "zai", api: "openai-compatible", baseUrl: "https://api.z.ai/api/paas/v4", hasKey: true },
-    { name: "anthropic", api: "anthropic", baseUrl: null, hasKey: false },
-    { name: "ollama", api: "openai-compatible", baseUrl: "http://127.0.0.1:11434/v1", hasKey: true },
-    { name: "hf", api: "openai-compatible", baseUrl: "https://router.huggingface.co/v1", hasKey: false },
+    { name: "fireworks", api: "openai-compatible", baseUrl: "https://api.fireworks.ai/inference/v1", hasKey: true, envVar: "FIREWORKS_API_KEY", keyMasked: "fw-…a1b" },
+    { name: "puter", api: "puter", baseUrl: null, hasKey: true, envVar: "PUTER_AUTH_TOKEN", keyMasked: "eyJ…x9z" },
+    { name: "zai", api: "openai-compatible", baseUrl: "https://api.z.ai/api/paas/v4", hasKey: true, envVar: "ZAI_API_KEY", keyMasked: "sk-…4f2" },
+    { name: "anthropic", api: "anthropic", baseUrl: null, hasKey: false, envVar: "ANTHROPIC_API_KEY", keyMasked: "" },
+    { name: "ollama", api: "openai-compatible", baseUrl: "http://127.0.0.1:11434/v1", hasKey: true, envVar: null, keyMasked: "" },
+    { name: "hf", api: "openai-compatible", baseUrl: "https://router.huggingface.co/v1", hasKey: false, envVar: "HF_TOKEN", keyMasked: "" },
   ],
   routing: AGENTS.map((a) => ({ agent: a.name, model: a.model, fallbacks: a.fallbacks })),
   defaults: { maxOutputTokens: 8192, requestTimeoutMs: 180000, maxRetries: 2, maxSteps: 8, permissions: "auto-edit" },
@@ -55,6 +55,11 @@ export const mockBridge: ChoraleBridge = {
   getAppInfo: () => Promise.resolve({ workspace: "C:/Users/you/AppData/Roaming/Chorale/workspace", agents: AGENTS.length, version: "0.2.0", packaged: false }),
   listAgents: () => Promise.resolve(AGENTS),
   getConfig: () => Promise.resolve(CONFIG),
+  setKey: (envVar, value) =>
+    Promise.resolve({
+      ...CONFIG,
+      providers: CONFIG.providers.map((p) => (p.envVar === envVar ? { ...p, hasKey: !!value.trim(), keyMasked: value.trim() ? value.slice(0, 3) + "…" + value.slice(-3) : "" } : p)),
+    }),
   newSession: () => Promise.resolve(`mem_mock_${sessionSeq++}`),
   listSessions: () => Promise.resolve(SESSIONS),
   loadSession: (id): Promise<ChatTurn[]> =>

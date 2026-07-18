@@ -1,9 +1,58 @@
 import { useEffect, useState } from "react";
-import type { ConfigSummary } from "../../shared/ipc";
-import { chorale, agentColor } from "../bridge";
+import type { ConfigSummary, ProviderSummary } from "../../shared/ipc";
+import { chorale, agentColor, IS_MOCK } from "../bridge";
 
 const shortUrl = (u: string | null): string => (u ? u.replace(/^https?:\/\//, "").replace(/\/+$/, "") : "");
 const shortModel = (m: string): string => m.split(":").slice(1).join(":") || m;
+
+/** A provider row — editable key field for env-keyed providers, static for local ones. */
+function ProviderRow({ p, onSave }: { p: ProviderSummary; onSave: (envVar: string, value: string) => Promise<void> }) {
+  const [val, setVal] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  if (!p.envVar) {
+    return (
+      <div className="row">
+        <span className="dot" style={{ background: p.hasKey ? "var(--ok)" : "var(--faint)" }} />
+        <span className="name">{p.name}</span>
+        <span className="badge">local</span>
+        <span className="url">{shortUrl(p.baseUrl) || p.api}</span>
+      </div>
+    );
+  }
+
+  const save = async () => {
+    if (!val.trim()) return;
+    setSaving(true);
+    await onSave(p.envVar!, val.trim());
+    setSaving(false);
+    setVal("");
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1600);
+  };
+
+  return (
+    <div className="row keyrow">
+      <span className="dot" style={{ background: p.hasKey ? "var(--ok)" : "var(--warn)" }} title={p.hasKey ? "key set" : "no key"} />
+      <span className="name">{p.name}</span>
+      <input
+        className="keyinput"
+        type="password"
+        spellCheck={false}
+        placeholder={p.hasKey ? `${p.keyMasked} · replace…` : `paste ${p.envVar}…`}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+        }}
+      />
+      <button className="keysave" disabled={!val.trim() || saving} onClick={save}>
+        {saved ? "✓ saved" : saving ? "…" : "save"}
+      </button>
+    </div>
+  );
+}
 
 export function Config() {
   const [cfg, setCfg] = useState<ConfigSummary | null>(null);
@@ -11,6 +60,11 @@ export function Config() {
   useEffect(() => {
     chorale.getConfig().then(setCfg);
   }, []);
+
+  const saveKey = async (envVar: string, value: string) => {
+    const next = await chorale.setKey(envVar, value);
+    setCfg(next);
+  };
 
   if (!cfg) return <div className="loading">loading config…</div>;
 
@@ -25,15 +79,10 @@ export function Config() {
       <div className="cols">
         <div className="block">
           <h3>
-            Providers <span className="c">{cfg.providers.length} configured</span>
+            Providers <span className="c">keys saved to .env{IS_MOCK ? " (preview)" : ""}</span>
           </h3>
           {cfg.providers.map((p) => (
-            <div className="row" key={p.name}>
-              <span className="dot" style={{ background: p.hasKey ? "var(--ok)" : p.api === "openai-compatible" && p.baseUrl?.includes("127.0.0.1") ? "var(--warn)" : "var(--faint)" }} />
-              <span className="name">{p.name}</span>
-              <span className="badge">{p.hasKey ? p.api : "no key"}</span>
-              <span className="url">{shortUrl(p.baseUrl) || p.api}</span>
-            </div>
+            <ProviderRow key={p.name} p={p} onSave={saveKey} />
           ))}
         </div>
 

@@ -30,6 +30,10 @@ export interface ProviderSummary {
   baseUrl: string | null;
   /** Whether a usable key/token resolved (env-expanded) — drives the status dot. */
   hasKey: boolean;
+  /** The ${VAR} this provider's key comes from, or null for local/sentinel providers (no key needed). */
+  envVar: string | null;
+  /** A masked preview of the current key value (never the full secret). */
+  keyMasked: string;
 }
 
 export interface RouteRow {
@@ -108,6 +112,8 @@ export interface ChoraleBridge {
   listAgents: () => Promise<AgentSummary[]>;
   getConfig: () => Promise<ConfigSummary>;
   /** Open a new session for `agent`; returns its id (a volatile id if persistence is unavailable). */
+  /** Write a provider key to the workspace .env and hot-reload; returns the refreshed config. */
+  setKey: (envVar: string, value: string) => Promise<ConfigSummary>;
   newSession: (agent: string) => Promise<string>;
   listSessions: () => Promise<SessionInfo[]>;
   loadSession: (id: string) => Promise<ChatTurn[]>;
@@ -119,6 +125,7 @@ export const IPC = {
   appInfo: "app:info",
   agentsList: "agents:list",
   configGet: "config:get",
+  settingsSetKey: "settings:set-key",
   sessionNew: "session:new",
   sessionList: "session:list",
   sessionLoad: "session:load",

@@ -9,9 +9,11 @@
  */
 import { app, BrowserWindow, ipcMain } from "electron";
 import { resolve, join } from "node:path";
-import { readdirSync, existsSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { config as loadDotenv } from "dotenv";
+import JSON5 from "json5";
 import { firstRunSeed, agentCount } from "./workspace.js";
+import { envVarOf, upsertEnvVar, readEnvVar, maskKey } from "./settings.js";
 import { loadConfig } from "../src/core/config.js";
 import { buildRegistry, type Registry } from "../src/core/model-registry.js";
 import { loadAgent } from "../src/agents/loader.js";
@@ -52,15 +54,63 @@ function setupWorkspace(): void {
   loadDotenv({ path: join(workspaceDir, ".env") });
 }
 
-function initCore(): void {
+function reloadConfig(): void {
   config = loadConfig();
   config.agents.dir = resolve(workspaceDir, config.agents.dir); // absolute — robust to cwd
   registry = buildRegistry(config);
+}
+
+function initCore(): void {
+  reloadConfig();
   try {
     store = new SessionStore();
   } catch {
     store = null; // sessions won't persist; everything else works
   }
+}
+
+const configPath = (): string => join(workspaceDir, "config", "chorale.config.json5");
+const envPath = (): string => join(workspaceDir, ".env");
+const readEnv = (): string => (existsSync(envPath()) ? readFileSync(envPath(), "utf8") : "");
+
+/** Raw provider apiKey strings (BEFORE env expansion) → so we can recover each provider's ${VAR}. */
+function rawProviderKeys(): Record<string, string | undefined> {
+  try {
+    const raw = JSON5.parse(readFileSync(configPath(), "utf8")) as { providers?: Record<string, { apiKey?: string }> };
+    const out: Record<string, string | undefined> = {};
+    for (const [name, p] of Object.entries(raw.providers ?? {})) out[name] = p.apiKey;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function buildConfigSummary(): ConfigSummary {
+  const raw = rawProviderKeys();
+  const envText = readEnv();
+  const providers = Object.entries(config.providers).map(([name, p]) => {
+    const envVar = envVarOf(raw[name]);
+    return {
+      name,
+      api: p.api,
+      baseUrl: p.baseUrl ?? null,
+      hasKey: Boolean(p.apiKey && p.apiKey.trim()), // loadConfig already env-expanded ${VARS}
+      envVar,
+      keyMasked: envVar ? maskKey(readEnvVar(envText, envVar)) : "",
+    };
+  });
+  const routing = agentFiles().map((f) => {
+    const s = agentSummary(f);
+    return { agent: s.name, model: s.model, fallbacks: s.fallbacks };
+  });
+  const d = config.defaults;
+  return {
+    providers,
+    routing,
+    defaults: { maxOutputTokens: d.maxOutputTokens, requestTimeoutMs: d.requestTimeoutMs, maxRetries: d.maxRetries, maxSteps: d.maxSteps, permissions: config.permissions.mode },
+    agentsDir: config.agents.dir,
+    activeProfile: config.activeProfile ?? null,
+  };
 }
 
 const agentFiles = (): string[] =>
@@ -94,31 +144,15 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.agentsList, (): AgentSummary[] => agentFiles().map(agentSummary));
 
-  ipcMain.handle(IPC.configGet, (): ConfigSummary => {
-    const providers = Object.entries(config.providers).map(([name, p]) => ({
-      name,
-      api: p.api,
-      baseUrl: p.baseUrl ?? null,
-      hasKey: Boolean(p.apiKey && p.apiKey.trim()), // loadConfig already env-expanded ${VARS}
-    }));
-    const routing = agentFiles().map((f) => {
-      const s = agentSummary(f);
-      return { agent: s.name, model: s.model, fallbacks: s.fallbacks };
-    });
-    const d = config.defaults;
-    return {
-      providers,
-      routing,
-      defaults: {
-        maxOutputTokens: d.maxOutputTokens,
-        requestTimeoutMs: d.requestTimeoutMs,
-        maxRetries: d.maxRetries,
-        maxSteps: d.maxSteps,
-        permissions: config.permissions.mode,
-      },
-      agentsDir: config.agents.dir,
-      activeProfile: config.activeProfile ?? null,
-    };
+  ipcMain.handle(IPC.configGet, (): ConfigSummary => buildConfigSummary());
+
+  ipcMain.handle(IPC.settingsSetKey, (_e, envVar: string, value: string): ConfigSummary => {
+    const v = value.trim();
+    writeFileSync(envPath(), upsertEnvVar(readEnv(), envVar, v));
+    if (v) process.env[envVar] = v;
+    else delete process.env[envVar];
+    reloadConfig(); // re-expand ${envVar} with the new value so hasKey/registry reflect it immediately
+    return buildConfigSummary();
   });
 
   ipcMain.handle(IPC.sessionNew, (_e, agent: string): string => {
