@@ -24,3 +24,6 @@ grand-tour-output/
 
 # Fullstack capability experiments (build output, not source)
 experiments/
+
+# electron-builder output
+release/

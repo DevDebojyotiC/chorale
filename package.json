@@ -7,6 +7,23 @@
   "bin": {
     "chorale": "./dist/index.js"
   },
+  "main": "desktop/dist/main.cjs",
+  "build": {
+    "appId": "com.chorale.desktop",
+    "productName": "Chorale",
+    "directories": { "output": "release" },
+    "files": ["desktop/dist/**/*"],
+    "extraResources": [
+      { "from": "config", "to": "defaults/config" },
+      { "from": "agents", "to": "defaults/agents", "filter": ["**/*.md"] },
+      { "from": ".env.example", "to": "defaults/.env.example" }
+    ],
+    "npmRebuild": false,
+    "win": { "target": ["nsis"], "artifactName": "Chorale-Setup-${version}.${ext}" },
+    "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true },
+    "mac": { "target": ["dmg"], "category": "public.app-category.developer-tools" },
+    "linux": { "target": ["AppImage"], "category": "Development" }
+  },
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsup",
@@ -16,7 +33,9 @@
     "ui:build": "node desktop/build-main.mjs && vite build --config desktop/vite.config.ts",
     "ui:rebuild": "electron-rebuild -f -w better-sqlite3",
     "ui:dev": "node desktop/dev.mjs",
-    "ui": "npm run ui:build && electron desktop/dist/main.cjs"
+    "ui": "npm run ui:build && electron desktop/dist/main.cjs",
+    "pack": "npm run ui:build && electron-builder --dir",
+    "dist": "npm run ui:build && electron-builder"
   },
   "engines": {
     "node": ">=22"
@@ -59,6 +78,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
     "jsdom": "^29.1.1",
     "react-dom": "^19.2.7",
     "tsup": "^8.5.1",
