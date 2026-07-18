@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AgentSummary } from "../../shared/ipc";
 import { chorale, agentColor } from "../bridge";
+import { AgentEditor } from "../components/AgentEditor";
 
 /** The toggles worth showing as chips, in display order. */
 const TOGGLE_KEYS: { key: keyof AgentSummary["toggles"]; label: string }[] = [
@@ -15,6 +16,7 @@ const TOGGLE_KEYS: { key: keyof AgentSummary["toggles"]; label: string }[] = [
 
 export function Agents() {
   const [agents, setAgents] = useState<AgentSummary[] | null>(null);
+  const [editing, setEditing] = useState<{ name: string | null } | null>(null);
 
   useEffect(() => {
     chorale.listAgents().then(setAgents);
@@ -24,17 +26,22 @@ export function Agents() {
 
   return (
     <div className="pad">
-      <div className="pagehead">
-        <h1>Agents</h1>
-        <p>
-          {agents.length} specialists, each a single <span className="mono">agent.md</span> — its own model, tools, and toggles. Author one by dropping in a file.
-        </p>
+      <div className="pagehead" style={{ display: "flex", alignItems: "flex-end", gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <h1>Agents</h1>
+          <p>
+            {agents.length} specialists, each a single <span className="mono">agent.md</span> — its own model, tools, and toggles. Click one to edit; author a new one in-app.
+          </p>
+        </div>
+        <button className="btn primary" onClick={() => setEditing({ name: null })}>
+          ＋ New agent
+        </button>
       </div>
       <div className="grid">
         {agents.map((a) => {
           const active = TOGGLE_KEYS.filter((t) => a.toggles[t.key]);
           return (
-            <div className="card" key={a.name} style={{ ["--acc" as string]: agentColor(a.name) }}>
+            <button className="card agentcard" key={a.name} style={{ ["--acc" as string]: agentColor(a.name), textAlign: "left" }} onClick={() => setEditing({ name: a.name })}>
               <div className="ch">
                 <span className="sw" />
                 <b>{a.name}</b>
@@ -69,10 +76,11 @@ export function Agents() {
                   ))}
                 </div>
               )}
-            </div>
+            </button>
           );
         })}
       </div>
+      {editing && <AgentEditor name={editing.name} onClose={() => setEditing(null)} onSaved={(next) => setAgents(next)} />}
     </div>
   );
 }

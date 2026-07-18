@@ -23,7 +23,7 @@ import { setLogLevel } from "../src/core/log.js";
 import { setApprover } from "../src/tools/permissions.js";
 import { SessionStore } from "../src/core/session.js";
 import type { ChoraleConfig } from "../src/core/config.js";
-import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo } from "./shared/ipc.js";
+import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult } from "./shared/ipc.js";
 
 setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows the activity rail
 
@@ -156,10 +156,38 @@ function agentSummary(file: string): AgentSummary {
   };
 }
 
+/** Summarize an agent, or null if its file won't parse (so one broken agent can't break the roster). */
+function safeAgentSummary(file: string): AgentSummary | null {
+  try {
+    return agentSummary(file);
+  } catch {
+    return null;
+  }
+}
+const roster = (): AgentSummary[] => agentFiles().map(safeAgentSummary).filter((a): a is AgentSummary => a !== null);
+
 function registerIpc(): void {
   ipcMain.handle(IPC.appInfo, (): AppInfo => ({ workspace: workspaceDir, agents: agentCount(workspaceDir), version: app.getVersion(), packaged: app.isPackaged }));
 
-  ipcMain.handle(IPC.agentsList, (): AgentSummary[] => agentFiles().map(agentSummary));
+  ipcMain.handle(IPC.agentsList, (): AgentSummary[] => roster());
+
+  ipcMain.handle(IPC.agentSource, (_e, name: string): string => {
+    const f = resolve(config.agents.dir, `${name}.md`);
+    return existsSync(f) ? readFileSync(f, "utf8") : "";
+  });
+
+  ipcMain.handle(IPC.agentSave, (_e, name: string, source: string): AgentSaveResult => {
+    const safe = name.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "");
+    if (!safe) return { ok: false, error: "An agent name is required (letters, numbers, hyphens)." };
+    const f = resolve(config.agents.dir, `${safe}.md`);
+    try {
+      writeFileSync(f, source);
+      loadAgent(f); // validate by loading it exactly as the runtime would
+      return { ok: true, agents: roster() };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
 
   ipcMain.handle(IPC.configGet, (): ConfigSummary => buildConfigSummary());
 

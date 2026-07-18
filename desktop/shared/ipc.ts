@@ -102,6 +102,15 @@ export interface RunHandlers {
   onError?: (message: string) => void;
 }
 
+/** Result of saving an agent.md — the file is written, then validated by loading it. */
+export interface AgentSaveResult {
+  ok: boolean;
+  /** A load/parse error to show the user; the file is still written so they can fix it. */
+  error?: string;
+  /** The refreshed roster (on success). */
+  agents?: AgentSummary[];
+}
+
 /** App/workspace info for the title bar and status. */
 export interface AppInfo {
   workspace: string;
@@ -122,6 +131,10 @@ export interface SessionInfo {
 export interface ChoraleBridge {
   getAppInfo: () => Promise<AppInfo>;
   listAgents: () => Promise<AgentSummary[]>;
+  /** The raw agent.md source (empty string for a new agent). */
+  getAgentSource: (name: string) => Promise<string>;
+  /** Write agents/<name>.md and validate; returns the refreshed roster or a parse error. */
+  saveAgent: (name: string, source: string) => Promise<AgentSaveResult>;
   getConfig: () => Promise<ConfigSummary>;
   /** Open a new session for `agent`; returns its id (a volatile id if persistence is unavailable). */
   /** Write a provider key to the workspace .env and hot-reload; returns the refreshed config. */
@@ -139,6 +152,8 @@ export interface ChoraleBridge {
 export const IPC = {
   appInfo: "app:info",
   agentsList: "agents:list",
+  agentSource: "agents:source",
+  agentSave: "agents:save",
   configGet: "config:get",
   settingsSetKey: "settings:set-key",
   sessionNew: "session:new",

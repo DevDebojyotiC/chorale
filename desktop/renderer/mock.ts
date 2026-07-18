@@ -54,6 +54,15 @@ let sessionSeq = 0;
 export const mockBridge: ChoraleBridge = {
   getAppInfo: () => Promise.resolve({ workspace: "C:/Users/you/AppData/Roaming/Chorale/workspace", agents: AGENTS.length, version: "0.2.0", packaged: false }),
   listAgents: () => Promise.resolve(AGENTS),
+  getAgentSource: (name) => {
+    const a = AGENTS.find((x) => x.name === name);
+    return Promise.resolve(
+      a
+        ? `---\nname: ${a.name}\ndescription: ${a.description}\nmodel: ${a.model}\nfallbacks: [${a.fallbacks.join(", ")}]\ntier: ${a.tier ?? "other"}\ntools: [${a.tools.join(", ")}]\n---\n\nYou are the ${a.name}. ${a.description}\n`
+        : "",
+    );
+  },
+  saveAgent: (_name, _source) => Promise.resolve({ ok: true, agents: AGENTS }),
   getConfig: () => Promise.resolve(CONFIG),
   setKey: (envVar, value) =>
     Promise.resolve({

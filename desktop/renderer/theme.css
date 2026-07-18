@@ -164,6 +164,23 @@ table.route .fb { color: var(--faint); font-size: 11px; }
 .btn.primary { background: var(--brand); border-color: var(--brand); color: #04110f; font-weight: 600; }
 .btn.primary:hover { filter: brightness(1.08); }
 
+/* agent card as a button */
+.agentcard { cursor: pointer; font: inherit; display: block; width: 100%; color: var(--text); }
+.agentcard:hover { border-color: color-mix(in oklab, var(--acc) 55%, var(--line)); }
+
+/* agent editor modal */
+.modal.editor { max-width: 720px; display: flex; flex-direction: column; max-height: 86vh; }
+.editor-h { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.editor-h b { font-size: 14px; }
+.editor-sub { color: var(--faint); font-size: 11px; }
+.editor-name { margin: 12px 16px 0; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--text); font-size: 13px; padding: 8px 10px; outline: none; }
+.editor-name:focus { border-color: var(--brand); }
+.editor-src { margin: 12px 16px 0; flex: 1; min-height: 320px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--text); font-size: 12.5px; line-height: 1.6; padding: 12px; resize: none; outline: none; tab-size: 2; }
+.editor-src:focus { border-color: var(--brand); }
+.editor-err { margin: 10px 16px 0; color: var(--crit); font-size: 11.5px; background: color-mix(in oklab, var(--crit) 10%, transparent); border: 1px solid color-mix(in oklab, var(--crit) 35%, var(--line)); border-radius: var(--r-sm); padding: 8px 10px; }
+.editor-actions { display: flex; align-items: center; gap: 8px; padding: 14px 16px; }
+.editor-hint { color: var(--faint); font-size: 10.5px; }
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
 @media (max-width: 900px) {
   .app { grid-template-columns: 56px 1fr; }
