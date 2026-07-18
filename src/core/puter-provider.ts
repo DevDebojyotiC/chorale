@@ -22,9 +22,37 @@ type PuterChatResponse = { message?: { content?: unknown; tool_calls?: PuterTool
 type PuterToolCall = { id?: string; function?: { name?: string; arguments?: unknown } };
 
 let cached: { token: string; client: PuterClient } | null = null;
+let guardInstalled = false;
+
+/**
+ * puter.js opens a realtime WebSocket when it initializes in Node, and that socket crashes on close
+ * inside undici with an uncaught "Maximum call stack size exceeded" — which takes down the whole
+ * process on the first AI call. The chat request itself succeeds over HTTP; only the background socket
+ * misbehaves. So install a tightly-scoped guard that swallows ONLY that noise (stack mentions the puter
+ * vm sandbox / undici WebSocket) and preserves normal fatal behavior for every other error. Installed
+ * once, lazily, and only when the puter provider is actually used — runs that never touch it are
+ * unaffected.
+ */
+function installWsNoiseGuard(): void {
+  if (guardInstalled) return;
+  guardInstalled = true;
+  const isPuterWsNoise = (e: unknown): boolean => {
+    const s = e instanceof Error ? (e.stack ?? e.message) : String(e);
+    return /evalmachine|undici|WebSocket/i.test(s);
+  };
+  process.on("uncaughtException", (e) => {
+    if (isPuterWsNoise(e)) return; // puter's realtime socket — ignore
+    console.error(e); // not ours: preserve the default fatal behavior
+    process.exit(1);
+  });
+  process.on("unhandledRejection", (e) => {
+    if (!isPuterWsNoise(e)) throw e instanceof Error ? e : new Error(String(e));
+  });
+}
 
 async function puterClient(token: string): Promise<PuterClient> {
   if (cached && cached.token === token) return cached.client;
+  installWsNoiseGuard();
   const mod = (await import("@heyputer/puter.js/src/init.cjs")) as unknown as { init: (t: string) => PuterClient };
   const client = mod.init(token);
   cached = { token, client };
