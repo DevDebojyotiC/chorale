@@ -17,18 +17,27 @@ import { loadAgent } from "../src/agents/loader.js";
 import { resolveModelPlan } from "../src/core/model-policy.js";
 import { runAgent } from "../src/core/runtime.js";
 import { setLogLevel } from "../src/core/log.js";
+import { SessionStore } from "../src/core/session.js";
 import type { ChoraleConfig } from "../src/core/config.js";
-import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg } from "./shared/ipc.js";
+import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn } from "./shared/ipc.js";
 
 setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows the activity rail
 
 let config: ChoraleConfig;
 let registry: Registry;
+/** Best-effort — null if better-sqlite3 didn't load (e.g. not rebuilt for Electron). The app still
+ *  runs and chats; it just won't persist sessions. The core already guards its own lesson-store. */
+let store: SessionStore | null = null;
 
 function initCore(): void {
   config = loadConfig();
   config.agents.dir = resolve(process.cwd(), config.agents.dir); // absolute — robust to cwd
   registry = buildRegistry(config);
+  try {
+    store = new SessionStore();
+  } catch {
+    store = null; // sessions won't persist; everything else works
+  }
 }
 
 const agentFiles = (): string[] =>
@@ -87,27 +96,47 @@ function registerIpc(): void {
     };
   });
 
+  ipcMain.handle(IPC.sessionNew, (_e, agent: string): string => {
+    try {
+      return store ? store.createSession(agent) : `mem_${Date.now().toString(36)}`;
+    } catch {
+      return `mem_${Date.now().toString(36)}`;
+    }
+  });
+
+  ipcMain.handle(IPC.sessionList, (): SessionInfo[] => {
+    if (!store) return [];
+    return store.listSessions(50).map((s) => ({ id: s.id, agent: s.agent, title: s.title, updatedAt: s.updated_at }));
+  });
+
+  ipcMain.handle(IPC.sessionLoad, (_e, id: string): ChatTurn[] => {
+    if (!store) return [];
+    return store.getMessages(id).map((m) => ({ role: m.role, content: m.content }));
+  });
+
   ipcMain.on(IPC.runStart, async (e, req: RunRequest) => {
     const send = (msg: RunMsg): void => {
       if (!e.sender.isDestroyed()) e.sender.send(IPC.runMsg, msg);
     };
+    const persist = store && req.sessionId && !req.sessionId.startsWith("mem_") ? store : null;
     try {
       const agent = loadAgent(resolve(config.agents.dir, `${req.agent}.md`));
+      persist?.appendMessage(req.sessionId, "user", req.prompt);
       const res = await runAgent({
         config,
         registry,
         agent,
         prompt: req.prompt,
+        history: req.history, // prior turns — the agent's memory across the conversation
         onToken: (text) => send({ runId: req.runId, kind: "token", text }),
         onEvent: (ev) => send({ runId: req.runId, kind: "event", eventType: ev.type, text: ev.text }),
       });
-      send({
-        runId: req.runId,
-        kind: "done",
-        model: res.model,
-        text: res.text,
-        usage: res.usage ? { inputTokens: res.usage.inputTokens ?? 0, outputTokens: res.usage.outputTokens ?? 0 } : null,
-      });
+      const usage = res.usage ? { inputTokens: res.usage.inputTokens ?? 0, outputTokens: res.usage.outputTokens ?? 0 } : null;
+      if (persist) {
+        persist.appendMessage(req.sessionId, "assistant", res.text, res.model);
+        if (usage) persist.recordUsage(req.sessionId, res.model, usage.inputTokens, usage.outputTokens);
+      }
+      send({ runId: req.runId, kind: "done", model: res.model, text: res.text, usage });
     } catch (err) {
       send({ runId: req.runId, kind: "error", message: err instanceof Error ? err.message : String(err) });
     }

@@ -46,11 +46,29 @@ export interface ConfigSummary {
   activeProfile: string | null;
 }
 
+/** One prior conversation turn threaded back into the agent (so it has memory across turns). */
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 /** A run request the renderer sends over `run:start`. */
 export interface RunRequest {
   runId: string;
   agent: string;
   prompt: string;
+  /** The session this turn belongs to (for persistence); empty when persistence is unavailable. */
+  sessionId: string;
+  /** Prior turns in this conversation — the agent's memory. */
+  history: ChatTurn[];
+}
+
+/** What the renderer passes to `window.chorale.run` (minus the internal runId). */
+export interface RunInput {
+  agent: string;
+  prompt: string;
+  sessionId: string;
+  history: ChatTurn[];
 }
 
 /** Streaming messages the main process pushes back over `run:msg`. */
@@ -68,17 +86,32 @@ export interface RunHandlers {
   onError?: (message: string) => void;
 }
 
+/** A saved session, for the Sessions list. */
+export interface SessionInfo {
+  id: string;
+  agent: string;
+  title: string | null;
+  updatedAt: string;
+}
+
 /** The API the preload exposes on `window.chorale`. */
 export interface ChoraleBridge {
   listAgents: () => Promise<AgentSummary[]>;
   getConfig: () => Promise<ConfigSummary>;
+  /** Open a new session for `agent`; returns its id (a volatile id if persistence is unavailable). */
+  newSession: (agent: string) => Promise<string>;
+  listSessions: () => Promise<SessionInfo[]>;
+  loadSession: (id: string) => Promise<ChatTurn[]>;
   /** Start a streaming turn; returns a cancel function. */
-  run: (agent: string, prompt: string, handlers: RunHandlers) => () => void;
+  run: (req: RunInput, handlers: RunHandlers) => () => void;
 }
 
 export const IPC = {
   agentsList: "agents:list",
   configGet: "config:get",
+  sessionNew: "session:new",
+  sessionList: "session:list",
+  sessionLoad: "session:load",
   runStart: "run:start",
   runMsg: "run:msg",
   runCancel: "run:cancel",

@@ -22,14 +22,25 @@ export function Chat() {
   const [usage, setUsage] = useState<{ in: number; out: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
+  const [sessionId, setSessionId] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     chorale.listAgents().then((a) => {
       setAgents(a);
-      if (!a.some((x) => x.name === "orchestrator") && a[0]) setAgent(a[0].name);
+      const def = a.some((x) => x.name === "orchestrator") ? "orchestrator" : (a[0]?.name ?? "general");
+      setAgent(def);
+      chorale.newSession(def).then(setSessionId);
     });
   }, []);
+
+  function newChat() {
+    setTurns([]);
+    setEvents([]);
+    setStreaming("");
+    setUsage(null);
+    chorale.newSession(agent).then(setSessionId);
+  }
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
@@ -44,8 +55,9 @@ export function Chat() {
     setStreaming("");
     setEvents([]);
     setUsage(null);
+    const history = turns.map((t) => ({ role: t.role, content: t.text }));
     let acc = "";
-    chorale.run(agent, text, {
+    chorale.run({ agent, prompt: text, sessionId, history }, {
       onToken: (tk) => {
         acc += tk;
         setStreaming(acc);
@@ -76,6 +88,12 @@ export function Chat() {
                 {a.name}
               </button>
             ))}
+            <div className="spacer" />
+            {turns.length > 0 && (
+              <button className="apill newchat" onClick={newChat} disabled={busy} title="Start a new conversation">
+                ＋ new chat
+              </button>
+            )}
           </div>
 
           {turns.length === 0 && !busy && <div className="body user">Ask the chorale anything — the <b>{agent}</b> agent will take it{agent === "orchestrator" ? ", decomposing and delegating as needed." : "."}</div>}

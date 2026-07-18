@@ -10,7 +10,10 @@ let seq = 0;
 const bridge: ChoraleBridge = {
   listAgents: () => ipcRenderer.invoke(IPC.agentsList),
   getConfig: () => ipcRenderer.invoke(IPC.configGet),
-  run: (agent, prompt, handlers: RunHandlers) => {
+  newSession: (agent) => ipcRenderer.invoke(IPC.sessionNew, agent),
+  listSessions: () => ipcRenderer.invoke(IPC.sessionList),
+  loadSession: (id) => ipcRenderer.invoke(IPC.sessionLoad, id),
+  run: (req, handlers: RunHandlers) => {
     const runId = `r${Date.now().toString(36)}_${seq++}`;
     const listener = (_e: unknown, msg: RunMsg): void => {
       if (msg.runId !== runId) return;
@@ -26,7 +29,7 @@ const bridge: ChoraleBridge = {
     };
     const cleanup = (): void => ipcRenderer.removeListener(IPC.runMsg, listener);
     ipcRenderer.on(IPC.runMsg, listener);
-    ipcRenderer.send(IPC.runStart, { runId, agent, prompt });
+    ipcRenderer.send(IPC.runStart, { runId, ...req });
     return () => {
       ipcRenderer.send(IPC.runCancel, runId);
       cleanup();
