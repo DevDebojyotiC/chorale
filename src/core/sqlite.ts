@@ -1,4 +1,5 @@
-import { createRequire } from "node:module";
+import "./_sqlite-quiet.js"; // MUST precede the node:sqlite import — installs the warning filter first
+import { DatabaseSync } from "node:sqlite";
 
 /**
  * A thin better-sqlite3-compatible wrapper over Node's built-in **node:sqlite** (`DatabaseSync`).
@@ -8,19 +9,7 @@ import { createRequire } from "node:module";
  * lessons.ts only need to swap their import to this module; the API they use (`exec` / `prepare` /
  * `run().changes` / `get` / `all` with `?` params) is identical, and this adds the one method they use
  * that node:sqlite spells differently: `pragma()`.
- *
- * node:sqlite emits a one-time "experimental feature" warning when first loaded; we silence just that.
  */
-const req = createRequire(import.meta.url);
-const origEmit = process.emitWarning.bind(process);
-process.emitWarning = ((warning: string | Error, ...rest: unknown[]): void => {
-  const msg = typeof warning === "string" ? warning : warning?.message;
-  if (typeof msg === "string" && msg.includes("SQLite is an experimental feature")) return;
-  (origEmit as (...a: unknown[]) => void)(warning, ...rest);
-}) as typeof process.emitWarning;
-const { DatabaseSync } = req("node:sqlite") as typeof import("node:sqlite");
-process.emitWarning = origEmit;
-
 type DB = InstanceType<typeof DatabaseSync>;
 
 /**
