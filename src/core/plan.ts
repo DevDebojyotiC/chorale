@@ -15,6 +15,7 @@
 import { z } from "zod";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { DESIGN_CONTRACT_SCHEMA, normalizeDesignContract, hasDesignContract, type DesignContract } from "./design-contract.js";
 
 /** The architectural layers a step can belong to (used for the complexity measure). */
 export const PLAN_LAYERS = ["schema", "api", "ui", "tests", "docs", "infra", "other"] as const;
@@ -47,6 +48,12 @@ export interface Plan {
   steps: PlanStep[];
   /** Computed, never model-claimed — see assessComplexity. */
   complexity: "trivial" | "complex";
+  /**
+   * The interface contract the planner committed to up front (lever #1) — the exact endpoints, module
+   * exports, data model, dependencies, and env vars every step must build against. Present only when
+   * the planner declared one; absent leaves the reactive contract (contract.ts) as the sole source.
+   */
+  contract?: DesignContract;
 }
 
 // ── Structured tool schema (the preferred output path) ────────────────────────
@@ -59,6 +66,9 @@ export const PLAN_TOOL_SCHEMA = z.object({
   // rejected before execute() — so no plan was ever captured, plan-exec was skipped, and a whole
   // production build silently produced nothing. Never fail a plan over a cosmetic field.
   summary: z.string().optional().describe("One-line summary of the goal"),
+  // The interface contract (lever #1): declare the exact seams up front so every step builds to the
+  // same spec. Optional — a plan without it still executes (the reactive contract fills in later).
+  contract: DESIGN_CONTRACT_SCHEMA.optional(),
   steps: z
     .array(
       z.object({
@@ -93,7 +103,7 @@ const asLayer = (v: unknown): PlanLayer => {
 };
 
 /** Normalize loosely-typed structured input (from the plan tool) into a canonical Plan. */
-export function normalizePlan(input: { summary?: unknown; steps?: unknown }): Plan {
+export function normalizePlan(input: { summary?: unknown; steps?: unknown; contract?: unknown }): Plan {
   const rawSteps: RawStep[] = Array.isArray(input.steps) ? (input.steps as RawStep[]) : [];
   // Assign canonical ids s1..sN by order; map any numeric/loose depends references onto them.
   const idFor = (i: number): string => `s${i + 1}`;
@@ -124,6 +134,8 @@ export function normalizePlan(input: { summary?: unknown; steps?: unknown }): Pl
     designDecision: r.designDecision === true,
   }));
   const plan: Plan = { summary: String(input.summary ?? "").trim(), steps, complexity: "trivial" };
+  const contract = normalizeDesignContract(input.contract);
+  if (hasDesignContract(contract)) plan.contract = contract;
   plan.complexity = assessComplexity(plan).complexity;
   return plan;
 }
@@ -158,7 +170,7 @@ function balancedObject(s: string): string | null {
  * channel; parsing it beats throwing it away (a discarded plan skips plan-exec and collapses the
  * whole build into direct delegation). Returns the raw object for normalizePlan, or null.
  */
-export function extractJsonPlan(text: string): { summary?: unknown; steps?: unknown } | null {
+export function extractJsonPlan(text: string): { summary?: unknown; steps?: unknown; contract?: unknown } | null {
   const candidates: string[] = [];
   for (const m of text.matchAll(/```(?:json|jsonc)?\s*\r?\n([\s\S]*?)```/g)) candidates.push(m[1]!);
   candidates.push(text); // bare JSON with no fence
@@ -168,7 +180,7 @@ export function extractJsonPlan(text: string): { summary?: unknown; steps?: unkn
     try {
       const parsed: unknown = JSON.parse(obj);
       if (parsed && typeof parsed === "object" && Array.isArray((parsed as { steps?: unknown }).steps)) {
-        return parsed as { summary?: unknown; steps?: unknown };
+        return parsed as { summary?: unknown; steps?: unknown; contract?: unknown };
       }
     } catch {
       /* not JSON — try the next candidate */

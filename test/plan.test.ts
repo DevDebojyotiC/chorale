@@ -50,6 +50,41 @@ describe("Phase 4 — plan tool schema tolerance", () => {
     expect(PLAN_TOOL_SCHEMA.safeParse({ summary: "s", steps: [{ title: "t", agent: "coder", dependsOn: [1], layer: "api", acceptance: "a", files: [{ path: "x.js", status: "new" }] }] }).success).toBe(true);
     expect(PLAN_TOOL_SCHEMA.safeParse("{\"steps\":[]}").success).toBe(false); // a stringified plan is still invalid
   });
+
+  // Contract-first (lever #1): the planner declares the interface spec up front; it rides on the plan.
+  it("captures the up-front interface contract from the plan tool", () => {
+    const r = PLAN_TOOL_SCHEMA.safeParse({
+      steps: [{ title: "Backend", agent: "coder" }],
+      contract: { endpoints: ["POST /api/login"], dependencies: ["express", "zod"], env: ["JWT_SECRET"] },
+    });
+    expect(r.success).toBe(true);
+    const plan = normalizePlan({
+      steps: [{ title: "Backend", agent: "coder" }],
+      contract: { endpoints: ["POST /api/login", "POST /api/login"], dependencies: ["express"], env: ["JWT_SECRET"] },
+    });
+    expect(plan.contract).toBeDefined();
+    expect(plan.contract!.endpoints).toEqual(["POST /api/login"]); // deduped through normalizeDesignContract
+    expect(plan.contract!.dependencies).toEqual(["express"]);
+  });
+
+  it("leaves plan.contract undefined when no contract (or an empty one) is supplied", () => {
+    expect(normalizePlan({ steps: [{ title: "x", agent: "coder" }] }).contract).toBeUndefined();
+    expect(normalizePlan({ steps: [{ title: "x", agent: "coder" }], contract: {} }).contract).toBeUndefined();
+  });
+
+  it("carries the contract through the fenced-JSON fallback (parsePlan)", () => {
+    const text = [
+      "```json",
+      JSON.stringify({
+        steps: [{ title: "API", agent: "coder" }],
+        contract: { endpoints: ["GET /health"], dependencies: ["fastify"] },
+      }),
+      "```",
+    ].join("\n");
+    const plan = parsePlan(text);
+    expect(plan!.contract!.endpoints).toEqual(["GET /health"]);
+    expect(plan!.contract!.dependencies).toEqual(["fastify"]);
+  });
 });
 
 describe("Phase 4 — planning core (plan.ts)", () => {

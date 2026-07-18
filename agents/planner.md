@@ -30,6 +30,27 @@ Given a task, produce a decomposition:
 6. Tag each step's **layer** (schema / api / ui / tests / docs / infra / other) and mark a step
    `designDecision: true` when it requires an up-front technical/design choice before building.
 7. List the **files** each step touches, marking each `existing` (already in the repo) or `new`.
+8. **Fix the interface contract up front** (the `contract` field) — the single source of truth every
+   step builds against. See below.
+
+## The interface contract (the single most important thing you produce)
+Apps break at the **seams**: the frontend calls `/api/login` while the backend serves `/login`; a
+module imports `getUser` while its sibling exported `fetchUser`; code imports `zod` that package.json
+never lists; a handler reads `JWT_SECRET` while the .env defines `SECRET`. Each step is built in
+isolation, so unless *you* decide the seams now, every step guesses — and the guesses disagree.
+
+So, in the `contract` field, commit to the exact seams before any code exists:
+- **endpoints** — every HTTP endpoint as an exact method + full path (with the real mount prefix) and
+  its request/response shape, e.g. `POST /api/auth/login — body {email,password} → {token}`. Route
+  files serve exactly these; the frontend calls exactly these.
+- **modules** — each shared module as `path — exports name(args), name2(args)`. The names/signatures
+  every consumer imports.
+- **entities** — the data model: each table/entity as `name(col1, col2, ...)`, exact names.
+- **dependencies** — EVERY npm package the app imports (backend + frontend). package.json must declare
+  all of them and only these; nothing gets imported that isn't here.
+- **env** — every environment variable name the code reads.
+
+Decide these once, precisely. This is what stops the boundary bugs before they happen.
 
 ## The specialists you can assign work to
 - **coder** — writes and edits code (schema, API, UI, infra, fixes).

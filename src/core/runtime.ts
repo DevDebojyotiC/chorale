@@ -17,6 +17,7 @@ import { createPlanTool } from "../tools/plan-tool.js";
 import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./plan.js";
 import { executePlan, type StepRunner } from "./plan-exec.js";
 import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
+import { formatDesignContract, hasDesignContract } from "./design-contract.js";
 import { checkRunnable, tiersOf, directiveFor, planWireUp, scaffoldRoutes, type RunnableIssue } from "./runnable.js";
 import { smokeRun, ensureServerDeps, detectServerEntry } from "./smoke-run.js";
 import { runRepairLadder } from "./repair.js";
@@ -475,7 +476,8 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     if (r.plan) {
       if (r.plan.complexity === "complex") {
         preGatePlan = r.plan;
-        preGateBlock += `## Plan to follow\nA ${pg.agent} decomposed this task. Execute these steps in order, respecting the dependencies; treat each step's "done when" as its acceptance criterion:\n\n${formatPlan(r.plan)}\n\n`;
+        const contractBlock = hasDesignContract(r.plan.contract) ? `${formatDesignContract(r.plan.contract)}\n\n` : "";
+        preGateBlock += `## Plan to follow\nA ${pg.agent} decomposed this task. Execute these steps in order, respecting the dependencies; treat each step's "done when" as its acceptance criterion:\n\n${formatPlan(r.plan)}\n\n${contractBlock}`;
         log.info(`\n[chorale] ✓ plan-first: injected a ${r.plan.steps.length}-step plan\n`);
       } else {
         log.info(`\n[chorale] plan-first: task is simple — proceeding without a formal plan\n`);
@@ -546,12 +548,18 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     const results = await executePlan(preGatePlan, stepRunner, {
       goal: prompt,
       onStep: (r, i, total) => log.info(`[chorale]   step ${i + 1}/${total} [${r.agent}] ${r.title} — ${r.ok ? "✓" : "✗ " + r.text.slice(0, 80)}\n`),
-      // Shared project contract (lever #2): read the files built so far and extract the real routes /
-      // base URL / tables / exports, so each next step builds against the actual earlier work — not a
-      // prose guess (this is what stops the frontend calling /api/… when the backend serves /…).
+      // Shared project contract, two layers threaded into every step:
+      //  · the DESIGNED contract (lever #1) — the planner's up-front interface spec (exact endpoints,
+      //    module exports, deps, env), injected verbatim into EVERY step as the single source of truth,
+      //    so producers and consumers reference the same seams instead of guessing at each other;
+      //  · the REACTIVE contract (lever #2) — the real routes/base-URL/tables/exports extracted from the
+      //    files built so far, so each next step also matches the actual earlier work.
       context: () => {
-        const contract = extractContract(collectProject(cwd).files);
-        return hasContract(contract) ? formatContract(contract) : "";
+        const parts: string[] = [];
+        if (hasDesignContract(preGatePlan!.contract)) parts.push(formatDesignContract(preGatePlan!.contract));
+        const built = extractContract(collectProject(cwd).files);
+        if (hasContract(built)) parts.push(formatContract(built));
+        return parts.join("\n\n");
       },
     });
     const failed = results.filter((r) => !r.ok).length;
