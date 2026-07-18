@@ -39,7 +39,15 @@ already exposes exactly the seam a GUI needs, so the UI is a *delivery layer*, n
 6. **Observe** — **Cost & usage** (per-model tokens + est. cost), **Playbook** (learned fixes), **Doctor**
    (provider reachability).
 7. **Packaging** — `electron-builder` → **`Chorale-Setup-0.2.0.exe`** (NSIS installer). First-run seeding
-   and `better-sqlite3` (N-API, no rebuild) verified in the packaged app.
+   verified in the packaged app.
+
+**Persistence caveat (honest):** `better-sqlite3` is a native addon built for Node's ABI, not Electron's,
+and it needs a C++ compiler to rebuild (none on the build machine). So in both the dev and packaged app
+the SQLite store fails to load — the app **degrades gracefully**: chat (incl. multi-turn within a session,
+held in the renderer) works, but cross-session **persistence, the Sessions list, and store-backed Cost &
+usage are inactive**. The run loop's self-learn path is guarded the same way. Proper fix (planned):
+migrate the store to Node's built-in `node:sqlite` (no native module, ABI-agnostic — works in Node *and*
+Electron with no rebuild), or build the installer on a machine with a compiler.
 
 Plus the foundation: shell/nav/theme, Chat (streaming + live activity rail + tokens + multi-turn history),
 Sessions (browse + resume), best-effort persistence.
