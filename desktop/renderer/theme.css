@@ -142,6 +142,12 @@ table.route .ag { display: flex; align-items: center; gap: 8px; }
 table.route .ag .sw { width: 8px; height: 8px; border-radius: 2px; }
 table.route .fb { color: var(--faint); font-size: 11px; }
 .note { max-width: 1000px; margin: 14px auto 0; color: var(--faint); font-size: 11.5px; font-family: var(--mono); }
+table.usage thead td { color: var(--faint); font-size: 9.5px; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--line); }
+table.usage td { text-align: right; }
+table.usage td:first-child { text-align: left; }
+table.usage tbody td, table.usage thead td { font-variant-numeric: tabular-nums; }
+table.usage tfoot td { border-top: 1px solid var(--line); border-bottom: none; color: var(--text); padding-top: 10px; }
+table.usage tfoot td:first-child { color: var(--muted); text-transform: uppercase; font-size: 10px; letter-spacing: .5px; }
 .loading { display: grid; place-items: center; height: 100%; color: var(--faint); font-family: var(--mono); font-size: 12px; }
 .sessioncard { font: inherit; width: 100%; color: var(--text); }
 .sessioncard:hover { border-color: color-mix(in oklab, var(--acc) 50%, var(--line)); background: color-mix(in oklab, var(--acc) 5%, var(--surface)); }

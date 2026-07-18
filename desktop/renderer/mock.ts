@@ -63,6 +63,31 @@ export const mockBridge: ChoraleBridge = {
     );
   },
   saveAgent: (_name, _source) => Promise.resolve({ ok: true, agents: AGENTS }),
+  getUsage: () =>
+    Promise.resolve({
+      rows: [
+        { model: "fireworks:accounts/fireworks/models/gpt-oss-120b", requests: 42, inputTokens: 148200, outputTokens: 39900, cost: 0.0181 },
+        { model: "puter:z-ai/glm-4.6", requests: 8, inputTokens: 21600, outputTokens: 5100, cost: 0 },
+        { model: "ollama:qwen2.5-coder:3b", requests: 15, inputTokens: 9800, outputTokens: 4200, cost: 0 },
+      ],
+      totalIn: 179600,
+      totalOut: 49200,
+      totalCost: 0.0181,
+    }),
+  getPlaybook: () =>
+    Promise.resolve([
+      { id: "p1", title: "ts-node crashes on TypeScript@7 — switch to tsx", source: "seeded", context: "node + esm + typescript", symptom: "Unknown file extension \".ts\"", solution: "Use tsx as the runner (add tsx devDep, start = tsx <entry>); remove ts-node.", createdAt: Date.now() - 3 * 86400000 },
+      { id: "p2", title: "better-sqlite3 native build fails — bump to a prebuild major", source: "learned", context: "native module + node 22", symptom: "node-gyp / no prebuilt binary", solution: "Bump better-sqlite3 to ^12 (ships a Node-22 prebuild) or use node:sqlite.", createdAt: Date.now() - 6 * 3600000 },
+      { id: "p3", title: "undeclared package crashes at load — add to package.json", source: "learned", context: "express + esm", symptom: "Cannot find package 'ws'", solution: "Add every imported package to dependencies with a valid range before install.", createdAt: Date.now() - 40 * 60000 },
+    ]),
+  checkDoctor: () =>
+    Promise.resolve([
+      { name: "fireworks", api: "openai-compatible", ok: true, detail: "200 OK", ms: 210 },
+      { name: "puter", api: "puter", ok: true, detail: "reachable", ms: 340 },
+      { name: "zai", api: "openai-compatible", ok: true, detail: "200 OK", ms: 180 },
+      { name: "anthropic", api: "anthropic", ok: false, detail: "401 — no key", ms: 90 },
+      { name: "ollama", api: "openai-compatible", ok: false, detail: "ECONNREFUSED (not running)", ms: 12 },
+    ]),
   getConfig: () => Promise.resolve(CONFIG),
   setKey: (envVar, value) =>
     Promise.resolve({

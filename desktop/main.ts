@@ -22,8 +22,11 @@ import { runAgent } from "../src/core/runtime.js";
 import { setLogLevel } from "../src/core/log.js";
 import { setApprover } from "../src/tools/permissions.js";
 import { SessionStore } from "../src/core/session.js";
+import { estimateCost } from "../src/core/costs.js";
+import { getPlaybook } from "../src/core/playbook.js";
+import { checkProviders } from "../src/core/doctor.js";
 import type { ChoraleConfig } from "../src/core/config.js";
-import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult } from "./shared/ipc.js";
+import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem } from "./shared/ipc.js";
 
 setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows the activity rail
 
@@ -216,6 +219,40 @@ function registerIpc(): void {
   ipcMain.handle(IPC.sessionLoad, (_e, id: string): ChatTurn[] => {
     if (!store) return [];
     return store.getMessages(id).map((m) => ({ role: m.role, content: m.content }));
+  });
+
+  ipcMain.handle(IPC.observeUsage, (): UsageSummary => {
+    const rows = (store ? store.usageByModel() : []).map((r) => ({
+      model: r.model,
+      requests: r.requests,
+      inputTokens: r.input_tokens,
+      outputTokens: r.output_tokens,
+      cost: estimateCost(r.model, r.input_tokens, r.output_tokens),
+    }));
+    return {
+      rows,
+      totalIn: rows.reduce((n, r) => n + r.inputTokens, 0),
+      totalOut: rows.reduce((n, r) => n + r.outputTokens, 0),
+      totalCost: rows.reduce((n, r) => n + (r.cost ?? 0), 0),
+    };
+  });
+
+  ipcMain.handle(IPC.observePlaybook, (): PlaybookItem[] => {
+    try {
+      return getPlaybook()
+        .entries()
+        .map((e) => ({ id: e.id, title: e.title, source: e.source, context: e.context, symptom: e.symptom, solution: e.solution, createdAt: e.createdAt }));
+    } catch {
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC.observeDoctor, async (): Promise<ProviderHealthItem[]> => {
+    try {
+      return await checkProviders(config);
+    } catch {
+      return [];
+    }
   });
 
   ipcMain.on(IPC.permissionResponse, (_e, id: string, approved: boolean) => {

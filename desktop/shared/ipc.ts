@@ -119,6 +119,41 @@ export interface AppInfo {
   packaged: boolean;
 }
 
+/** Per-model usage + estimated cost, for the Cost & usage view. */
+export interface UsageStat {
+  model: string;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  cost: number | null;
+}
+export interface UsageSummary {
+  rows: UsageStat[];
+  totalIn: number;
+  totalOut: number;
+  totalCost: number;
+}
+
+/** A learned/seeded fix, for the Playbook view. */
+export interface PlaybookItem {
+  id: string;
+  title: string;
+  source: "seeded" | "learned" | "researched";
+  context: string;
+  symptom: string;
+  solution: string;
+  createdAt: number;
+}
+
+/** Provider reachability, for the Doctor view. */
+export interface ProviderHealthItem {
+  name: string;
+  api: string;
+  ok: boolean;
+  detail: string;
+  ms: number;
+}
+
 /** A saved session, for the Sessions list. */
 export interface SessionInfo {
   id: string;
@@ -139,6 +174,10 @@ export interface ChoraleBridge {
   /** Open a new session for `agent`; returns its id (a volatile id if persistence is unavailable). */
   /** Write a provider key to the workspace .env and hot-reload; returns the refreshed config. */
   setKey: (envVar: string, value: string) => Promise<ConfigSummary>;
+  getUsage: () => Promise<UsageSummary>;
+  getPlaybook: () => Promise<PlaybookItem[]>;
+  /** On-demand provider reachability check (makes network calls). */
+  checkDoctor: () => Promise<ProviderHealthItem[]>;
   newSession: (agent: string) => Promise<string>;
   listSessions: () => Promise<SessionInfo[]>;
   loadSession: (id: string) => Promise<ChatTurn[]>;
@@ -156,6 +195,9 @@ export const IPC = {
   agentSave: "agents:save",
   configGet: "config:get",
   settingsSetKey: "settings:set-key",
+  observeUsage: "observe:usage",
+  observePlaybook: "observe:playbook",
+  observeDoctor: "observe:doctor",
   sessionNew: "session:new",
   sessionList: "session:list",
   sessionLoad: "session:load",

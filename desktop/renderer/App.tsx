@@ -3,10 +3,13 @@ import { Chat } from "./screens/Chat";
 import { Agents } from "./screens/Agents";
 import { Config } from "./screens/Config";
 import { Sessions } from "./screens/Sessions";
+import { CostUsage } from "./screens/CostUsage";
+import { Playbook } from "./screens/Playbook";
+import { Doctor } from "./screens/Doctor";
 import { PermissionModal } from "./components/PermissionModal";
 import { IS_MOCK, chorale } from "./bridge";
 
-type Screen = "chat" | "agents" | "config" | "sessions";
+type Screen = "chat" | "agents" | "config" | "sessions" | "cost" | "playbook" | "doctor";
 
 const NAV: { id: Screen; label: string; key: string; icon: ReactNode }[] = [
   { id: "chat", label: "Chat", key: "1", icon: <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2Z" /> },
@@ -93,13 +96,17 @@ export function App() {
           <Icon><><path d="M4 19.5V5a2 2 0 0 1 2-2h11.5" /><path d="M6 17h13v3H6a2 2 0 0 1 0-4Z" /></></Icon>
           <span>Sessions</span>
         </button>
-        <button className="navitem" disabled title="Coming soon">
+        <button className="navitem" aria-current={screen === "cost"} onClick={() => setScreen("cost")}>
           <Icon><><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></></Icon>
           <span>Cost &amp; usage</span>
         </button>
-        <button className="navitem" disabled title="Coming soon">
+        <button className="navitem" aria-current={screen === "playbook"} onClick={() => setScreen("playbook")}>
           <Icon><><path d="M12 2l2.4 5 5.6.5-4.2 3.7 1.3 5.4L12 18.8 6.9 21.6l1.3-5.4L4 12.5 9.6 12Z" /></></Icon>
           <span>Playbook</span>
+        </button>
+        <button className="navitem" aria-current={screen === "doctor"} onClick={() => setScreen("doctor")}>
+          <Icon><><path d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Z" /><path d="M12 8v4l3 2" /></></Icon>
+          <span>Doctor</span>
         </button>
       </nav>
 
@@ -115,6 +122,9 @@ export function App() {
             }}
           />
         )}
+        {screen === "cost" && <CostUsage />}
+        {screen === "playbook" && <Playbook />}
+        {screen === "doctor" && <Doctor />}
       </main>
       <PermissionModal />
     </div>
