@@ -60,8 +60,19 @@ export function isCatastrophic(command: string): boolean {
   return CATASTROPHIC.some((re) => re.test(command));
 }
 
-/** Prompt y/N on the terminal (stderr), only if stdin is interactive. */
+/**
+ * A non-TTY approval hook (e.g. a desktop GUI dialog). When set, it takes precedence over the terminal
+ * prompt, so a GUI can approve shell commands the same way the CLI does over a TTY. Unset by default,
+ * so CLI/headless behavior is unchanged.
+ */
+let approver: ((question: string) => Promise<boolean>) | null = null;
+export function setApprover(fn: ((question: string) => Promise<boolean>) | null): void {
+  approver = fn;
+}
+
+/** Ask for approval: a registered approver (GUI) if present, else a terminal y/N when interactive. */
 export async function confirmTty(question: string): Promise<boolean> {
+  if (approver) return approver(question);
   if (!process.stdin.isTTY) return false;
   const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
   try {

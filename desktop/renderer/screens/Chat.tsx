@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentSummary } from "../../shared/ipc";
+import type { AgentSummary, PermissionMode } from "../../shared/ipc";
 import { chorale, agentColor, eventStyle } from "../bridge";
 
 interface Turn {
@@ -22,6 +22,7 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
   const [usage, setUsage] = useState<{ in: number; out: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
+  const [mode, setMode] = useState<PermissionMode>("auto-edit");
   const [sessionId, setSessionId] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
@@ -72,7 +73,7 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
     setUsage(null);
     const history = turns.map((t) => ({ role: t.role, content: t.text }));
     let acc = "";
-    cancelRef.current = chorale.run({ agent, prompt: text, sessionId, history }, {
+    cancelRef.current = chorale.run({ agent, prompt: text, sessionId, history, permissionMode: mode }, {
       onToken: (tk) => {
         acc += tk;
         setStreaming(acc);
@@ -116,6 +117,11 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
               </button>
             ))}
             <div className="spacer" />
+            <select className="modesel" value={mode} onChange={(e) => setMode(e.target.value as PermissionMode)} title="What the agent may do this turn">
+              <option value="read-only">read-only</option>
+              <option value="auto-edit">auto-edit</option>
+              <option value="full-auto">full-auto</option>
+            </select>
             {turns.length > 0 && (
               <button className="apill newchat" onClick={newChat} disabled={busy} title="Start a new conversation">
                 ＋ new chat

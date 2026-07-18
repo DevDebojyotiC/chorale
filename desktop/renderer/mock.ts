@@ -84,4 +84,12 @@ export const mockBridge: ChoraleBridge = {
       timers.forEach(clearTimeout);
     };
   },
+  onPermission: (cb) => {
+    // Dev helper: call window.__triggerPermission("npm test") in the console to preview the dialog.
+    (window as unknown as { __triggerPermission?: (c: string) => void }).__triggerPermission = (command: string) => cb({ id: "mock-perm", command });
+    return () => {
+      delete (window as unknown as { __triggerPermission?: unknown }).__triggerPermission;
+    };
+  },
+  respondPermission: (id, approved) => console.log("[mock] permission", id, approved ? "approved" : "denied"),
 };

@@ -3,7 +3,7 @@
  * `window.chorale` API over contextBridge; the renderer never sees ipcRenderer or Node directly.
  */
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC, type RunHandlers, type RunMsg, type ChoraleBridge } from "./shared/ipc.js";
+import { IPC, type RunHandlers, type RunMsg, type ChoraleBridge, type PermissionReq } from "./shared/ipc.js";
 
 let seq = 0;
 
@@ -37,6 +37,12 @@ const bridge: ChoraleBridge = {
       cleanup();
     };
   },
+  onPermission: (cb: (req: PermissionReq) => void) => {
+    const listener = (_e: unknown, req: PermissionReq): void => cb(req);
+    ipcRenderer.on(IPC.permissionRequest, listener);
+    return () => ipcRenderer.removeListener(IPC.permissionRequest, listener);
+  },
+  respondPermission: (id: string, approved: boolean) => ipcRenderer.send(IPC.permissionResponse, id, approved),
 };
 
 contextBridge.exposeInMainWorld("chorale", bridge);

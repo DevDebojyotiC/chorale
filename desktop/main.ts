@@ -20,6 +20,7 @@ import { loadAgent } from "../src/agents/loader.js";
 import { resolveModelPlan } from "../src/core/model-policy.js";
 import { runAgent } from "../src/core/runtime.js";
 import { setLogLevel } from "../src/core/log.js";
+import { setApprover } from "../src/tools/permissions.js";
 import { SessionStore } from "../src/core/session.js";
 import type { ChoraleConfig } from "../src/core/config.js";
 import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo } from "./shared/ipc.js";
@@ -29,6 +30,22 @@ setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows th
 let config: ChoraleConfig;
 let registry: Registry;
 let workspaceDir = process.cwd();
+let mainWindow: BrowserWindow | null = null;
+
+/** Pending shell-approval requests, keyed by id → resolve(approved). */
+const pendingApprovals = new Map<string, (approved: boolean) => void>();
+let approvalSeq = 0;
+
+/** GUI approver: ask the renderer to approve a shell command (auto-edit mode). Denies if no window. */
+function guiApprove(question: string): Promise<boolean> {
+  const command = (question.match(/\$\s*(.+?)\s*(?:\n|\[y\/N\]|$)/i)?.[1] ?? question).trim();
+  if (!mainWindow || mainWindow.isDestroyed()) return Promise.resolve(false);
+  const id = `perm_${approvalSeq++}`;
+  return new Promise<boolean>((resolve) => {
+    pendingApprovals.set(id, resolve);
+    mainWindow!.webContents.send(IPC.permissionRequest, { id, command });
+  });
+}
 /** Best-effort — null if better-sqlite3 didn't load (e.g. not rebuilt for Electron). The app still
  *  runs and chats; it just won't persist sessions. The core already guards its own lesson-store. */
 let store: SessionStore | null = null;
@@ -173,6 +190,14 @@ function registerIpc(): void {
     return store.getMessages(id).map((m) => ({ role: m.role, content: m.content }));
   });
 
+  ipcMain.on(IPC.permissionResponse, (_e, id: string, approved: boolean) => {
+    const resolve = pendingApprovals.get(id);
+    if (resolve) {
+      pendingApprovals.delete(id);
+      resolve(approved);
+    }
+  });
+
   ipcMain.on(IPC.runStart, async (e, req: RunRequest) => {
     const send = (msg: RunMsg): void => {
       if (!e.sender.isDestroyed()) e.sender.send(IPC.runMsg, msg);
@@ -187,6 +212,7 @@ function registerIpc(): void {
         agent,
         prompt: req.prompt,
         history: req.history, // prior turns — the agent's memory across the conversation
+        permissionMode: req.permissionMode,
         onToken: (text) => send({ runId: req.runId, kind: "token", text }),
         onEvent: (ev) => send({ runId: req.runId, kind: "event", eventType: ev.type, text: ev.text }),
       });
@@ -219,6 +245,10 @@ function createWindow(): void {
     },
   });
   win.once("ready-to-show", () => win.show());
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null;
+  });
+  mainWindow = win;
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) void win.loadURL(devUrl);
   else void win.loadFile(resolve(__dirname, "renderer/index.html"));
@@ -228,6 +258,7 @@ app.whenReady().then(() => {
   setupWorkspace();
   initCore();
   registerIpc();
+  setApprover(guiApprove); // shell approvals go to the GUI dialog instead of a (nonexistent) TTY
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -3,6 +3,7 @@ import { Chat } from "./screens/Chat";
 import { Agents } from "./screens/Agents";
 import { Config } from "./screens/Config";
 import { Sessions } from "./screens/Sessions";
+import { PermissionModal } from "./components/PermissionModal";
 import { IS_MOCK, chorale } from "./bridge";
 
 type Screen = "chat" | "agents" | "config" | "sessions";
@@ -115,6 +116,7 @@ export function App() {
           />
         )}
       </main>
+      <PermissionModal />
     </div>
   );
 }

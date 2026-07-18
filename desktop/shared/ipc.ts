@@ -50,6 +50,15 @@ export interface ConfigSummary {
   activeProfile: string | null;
 }
 
+/** Approval tier the run operates under (mirrors the core's PermissionMode). */
+export type PermissionMode = "read-only" | "auto-edit" | "full-auto";
+
+/** A shell command awaiting the user's approval (auto-edit mode). */
+export interface PermissionReq {
+  id: string;
+  command: string;
+}
+
 /** One prior conversation turn threaded back into the agent (so it has memory across turns). */
 export interface ChatTurn {
   role: "user" | "assistant";
@@ -65,6 +74,8 @@ export interface RunRequest {
   sessionId: string;
   /** Prior turns in this conversation — the agent's memory. */
   history: ChatTurn[];
+  /** How much the agent may do this turn. */
+  permissionMode: PermissionMode;
 }
 
 /** What the renderer passes to `window.chorale.run` (minus the internal runId). */
@@ -73,6 +84,7 @@ export interface RunInput {
   prompt: string;
   sessionId: string;
   history: ChatTurn[];
+  permissionMode: PermissionMode;
 }
 
 /** Streaming messages the main process pushes back over `run:msg`. */
@@ -119,6 +131,9 @@ export interface ChoraleBridge {
   loadSession: (id: string) => Promise<ChatTurn[]>;
   /** Start a streaming turn; returns a cancel function. */
   run: (req: RunInput, handlers: RunHandlers) => () => void;
+  /** Subscribe to shell-approval requests; returns an unsubscribe. Respond with respondPermission. */
+  onPermission: (cb: (req: PermissionReq) => void) => () => void;
+  respondPermission: (id: string, approved: boolean) => void;
 }
 
 export const IPC = {
@@ -132,4 +147,6 @@ export const IPC = {
   runStart: "run:start",
   runMsg: "run:msg",
   runCancel: "run:cancel",
+  permissionRequest: "permission:request",
+  permissionResponse: "permission:response",
 } as const;
