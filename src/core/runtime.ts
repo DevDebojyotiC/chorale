@@ -952,7 +952,17 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     const repairTemp = (round: number) => Math.min(0.9, 0.5 + 0.2 * round);
     // Self-learning: the diagnoses shown last round, pending a win/loss verdict this round.
     let pending: { key: string; lesson: string }[] = [];
-    const learnStore = learn ? getLessonStore() : null;
+    // Guarded like the lesson-injection path above: the store is SQLite (better-sqlite3), which may be
+    // unavailable (e.g. a native-ABI mismatch when embedded in Electron). Degrade to no self-learning
+    // rather than breaking the whole turn.
+    let learnStore: ReturnType<typeof getLessonStore> | null = null;
+    if (learn) {
+      try {
+        learnStore = getLessonStore();
+      } catch {
+        learnStore = null;
+      }
+    }
     let meaningWarned = false; // the meaning-preservation nudge fires at most once (it's intent-sensitive)
     for (let round = 0; round < maxRounds; round++) {
       const isLast = round === maxRounds - 1;

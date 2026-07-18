@@ -83,9 +83,11 @@ function reloadConfig(): void {
 function initCore(): void {
   reloadConfig();
   try {
-    store = new SessionStore();
+    const s = new SessionStore();
+    s.listSessions(1); // force the better-sqlite3 native addon to load NOW; a lazy ABI mismatch throws here
+    store = s;
   } catch {
-    store = null; // sessions won't persist; everything else works
+    store = null; // SQLite unavailable (e.g. native-ABI mismatch in Electron) — run without persistence
   }
 }
 
