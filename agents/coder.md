@@ -1,11 +1,11 @@
 ---
 name: coder
 description: Writes, edits, debugs, and runs code in the current project directory.
-# Free GLM: glm-4.5-flash (Z.ai) default, escalating to glm-4.6 via Puter (both free). Replaced gemma-4-31B.
+# Free GLM via Puter: glm-4.6 default, escalating to glm-5.2 (both free). Replaced gemma-4-31B.
 # without repair rounds. Escalation: gpt-oss-120B — cheapest 10/10 on the full
 # L1–L10 ramp (~$0.013). See eval/RAMP-LEADERBOARD.md.
-model: zai:glm-4.5-flash
-fallbacks: [puter:z-ai/glm-4.6, fireworks:accounts/fireworks/models/gpt-oss-120b, ollama:qwen3:4b]
+model: puter:z-ai/glm-4.6
+fallbacks: [puter:z-ai/glm-5.2, fireworks:accounts/fireworks/models/gpt-oss-120b, zai:glm-4.5-flash, ollama:qwen3:4b]
 tier: code
 tools: [read, ls, glob, grep, write, edit, multi_edit, bash]
 verify: true

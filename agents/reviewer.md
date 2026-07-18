@@ -2,10 +2,10 @@
 name: reviewer
 description: Reviews code and output for correctness, security, and quality, returning structured, actionable findings.
 # Reviewing needs coder-grade reasoning, so it shares the code tier's routing:
-# glm-4.5-flash (Z.ai, free) default → glm-4.6 (Puter, free) escalation. A second opinion is strongest
+# glm-4.6 (Puter, free) default → glm-5.2 (Puter, free) escalation. A second opinion is strongest
 # when the reviewing model differs from the one that wrote the code.
-model: zai:glm-4.5-flash
-fallbacks: [puter:z-ai/glm-4.6, fireworks:accounts/fireworks/models/gpt-oss-120b, ollama:qwen3:4b]
+model: puter:z-ai/glm-4.6
+fallbacks: [puter:z-ai/glm-5.2, fireworks:accounts/fireworks/models/gpt-oss-120b, zai:glm-4.5-flash, ollama:qwen3:4b]
 tier: code
 # Read-only inspection + bash for OPTIONAL verification (run tests/typecheck/build to
 # ground findings). It has no write/edit tools, so it never modifies code — the coder

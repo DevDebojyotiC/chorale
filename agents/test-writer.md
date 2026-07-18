@@ -2,9 +2,9 @@
 name: test-writer
 description: Writes and RUNS tests for existing code — grounded in the real code, and only worth anything if they'd catch a bug.
 # Test-writing needs strong reasoning about behavior + edge cases, so it shares the code tier:
-# glm-4.5-flash (Z.ai, free) default → glm-4.6 (Puter, free) escalation.
-model: zai:glm-4.5-flash
-fallbacks: [puter:z-ai/glm-4.6, fireworks:accounts/fireworks/models/gpt-oss-120b, ollama:qwen3:4b]
+# glm-4.6 (Puter, free) default → glm-5.2 (Puter, free) escalation.
+model: puter:z-ai/glm-4.6
+fallbacks: [puter:z-ai/glm-5.2, fireworks:accounts/fireworks/models/gpt-oss-120b, zai:glm-4.5-flash, ollama:qwen3:4b]
 tier: code
 # Read the code, write tests, and run them.
 tools: [read, ls, glob, grep, write, edit, multi_edit, bash]
