@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planSkeleton, parseDep, reconcileEnv, type SkeletonEdit } from "../src/core/skeleton";
+import { planSkeleton, parseDep, reconcileEnv, repairStartScripts, type SkeletonEdit } from "../src/core/skeleton";
 import { versionFor, isDevPackage } from "../src/core/dependency-registry";
 import { normalizeDesignContract } from "../src/core/design-contract";
 import type { SourceFile } from "../src/core/contract";
@@ -125,6 +125,48 @@ describe("Phase 4 — planSkeleton (deterministic skeleton, lever #2)", () => {
     const env = byPath(edits).get(".env")!;
     expect(env.content).toContain("PORT=3000");
     expect(env.content).toMatch(/JWT_SECRET=/);
+  });
+
+  it("repairStartScripts switches plain node on a .ts entry to tsx and adds the devDep", () => {
+    const files = [
+      f("package.json", JSON.stringify({ name: "app", type: "module", scripts: { start: "node src/index.ts" } })),
+      f("src/index.ts", "console.log('hi');"),
+    ];
+    const edits = repairStartScripts(files);
+    const pkg = manifest(edits[0]!);
+    expect(pkg.scripts.start).toBe("tsx src/index.ts");
+    expect(pkg.devDependencies).toHaveProperty("tsx");
+    expect(pkg.devDependencies).toHaveProperty("typescript");
+  });
+
+  it("repairStartScripts repoints a broken .js start at its existing .ts source", () => {
+    const files = [
+      f("package.json", JSON.stringify({ name: "app", scripts: { start: "node index.js" } })),
+      f("index.ts", "export {};"),
+    ];
+    const pkg = manifest(repairStartScripts(files)[0]!);
+    expect(pkg.scripts.start).toBe("tsx index.ts");
+  });
+
+  it("repairStartScripts leaves a compiled-output (dist) start and an already-loadered script alone", () => {
+    const distFiles = [
+      f("package.json", JSON.stringify({ name: "app", scripts: { build: "tsc", start: "node dist/index.js" } })),
+      f("src/index.ts", "export {};"),
+    ];
+    expect(repairStartScripts(distFiles)).toEqual([]); // respects the tsc build flow
+    const tsxFiles = [
+      f("package.json", JSON.stringify({ name: "app", scripts: { start: "tsx src/index.ts" } })),
+      f("src/index.ts", "export {};"),
+    ];
+    expect(repairStartScripts(tsxFiles)).toEqual([]); // already runnable
+  });
+
+  it("repairStartScripts leaves a plain-JS entry alone (node runs it fine)", () => {
+    const files = [
+      f("package.json", JSON.stringify({ name: "app", scripts: { start: "node index.js" } })),
+      f("index.js", "console.log('hi');"),
+    ];
+    expect(repairStartScripts(files)).toEqual([]);
   });
 
   it("produces no edits for an already-complete project", () => {

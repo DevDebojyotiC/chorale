@@ -19,7 +19,7 @@ import { executePlan, type StepRunner } from "./plan-exec.js";
 import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
 import { formatDesignContract, hasDesignContract } from "./design-contract.js";
 import { checkRunnable, tiersOf, directiveFor, planWireUp, scaffoldRoutes, type RunnableIssue } from "./runnable.js";
-import { planSkeleton } from "./skeleton.js";
+import { planSkeleton, repairStartScripts } from "./skeleton.js";
 import { smokeRun, ensureServerDeps, detectServerEntry } from "./smoke-run.js";
 import { runRepairLadder } from "./repair.js";
 import { getPlaybook } from "./playbook.js";
@@ -636,6 +636,19 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           if (issues.length === 0) break;
           const tier = tiersOf(issues)[0]!; // the most-foundational remaining tier
           const tierKinds = new Set(tier.map((i) => i.kind));
+
+          // Deterministic pre-pass: a start script that runs TypeScript through plain node (the
+          // unrunnable-entry class) is a mechanical fix — switch it to tsx. No model call.
+          if (tierKinds.has("unrunnable-entry") || tierKinds.has("broken-start")) {
+            const fixes = repairStartScripts(collectProject(cwd).files);
+            for (const e of fixes) writeFileSync(resolve(cwd, e.path), e.content, "utf8");
+            if (fixes.length > 0) log.info(`[chorale]   ⚙ ${fixes.map((e) => e.reason).join("; ")}\n`);
+            reconcileSkeleton("  ⚙"); // the new tsx devDep must land in package.json too
+            if (allIssues().filter((i) => tierKinds.has(i.kind)).length === 0) {
+              log.info(`[chorale]   ✓ ${[...tierKinds].join("/")} tier cleared deterministically (no model call)\n`);
+              continue;
+            }
+          }
 
           // Deterministic pre-pass: the missing-dependency / missing-env classes are pure bookkeeping —
           // reconcile package.json/.env in code first (lever #2/#3), so the model is never asked to do an

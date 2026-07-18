@@ -215,6 +215,54 @@ export function planSkeleton(files: SourceFile[], contract: DesignContract | und
   return edits;
 }
 
+const START_SUFFIXES = ["", ".ts", ".tsx", ".js", ".mjs", ".cjs", "/index.ts", "/index.tsx", "/index.js", "/index.mjs"];
+const HAS_LOADER = /tsx|ts-node|--loader|--import|--experimental-strip-types|swc|babel/;
+
+/**
+ * Deterministically repair a package.json start/dev script that cannot execute its entry (the
+ * `unrunnable-entry` / TypeScript-source-run-by-node class) — no model call. Two safe cases:
+ *   · `node <entry.ts>` — plain node running a TypeScript file, which it cannot do → switch to `tsx`.
+ *   · `node <missing.js>` whose TypeScript source exists as a sibling (e.g. index.js absent, index.ts
+ *     present, and no build step targeting a dist/ output) → repoint at the .ts source, run with tsx.
+ * Compiled-output targets (dist/…, build/…) are left alone so a real tsc build flow is respected.
+ * Ensures tsx + typescript devDependencies when it switches a script to tsx.
+ */
+export function repairStartScripts(files: SourceFile[]): SkeletonEdit[] {
+  const paths = new Set(files.map((f) => norm(f.path)));
+  const edits: SkeletonEdit[] = [];
+  for (const f of files.filter((x) => norm(x.path).endsWith("package.json"))) {
+    const pkg = parseManifest(f.content);
+    if (!pkg) continue;
+    const scripts = { ...((pkg.scripts as Record<string, string>) ?? {}) };
+    const dir = dirOf(f.path);
+    const prefix = dir ? dir + "/" : "";
+    let changed = false;
+    for (const key of ["start", "dev"]) {
+      const cmd = scripts[key];
+      if (typeof cmd !== "string" || HAS_LOADER.test(cmd)) continue;
+      const m = cmd.match(/\b(?:node|nodemon)\s+(?:--\S+\s+)*([^\s&|;]+)/);
+      if (!m || !/[./]/.test(m[1]!)) continue;
+      const entryTok = m[1]!.replace(/^\.\//, "");
+      if (/(^|\/)(dist|build|out|lib)\//.test(entryTok)) continue; // compiled-output target — leave the build flow
+      const rel = prefix + entryTok;
+      const base = rel.replace(/\.(js|ts|mjs|cjs|jsx|tsx)$/, "");
+      const real = START_SUFFIXES.map((s) => base + s).find((p) => paths.has(p));
+      if (!real || !/\.tsx?$/.test(real)) continue; // only act when the real entry is TypeScript
+      const newEntry = real.slice(prefix.length);
+      scripts[key] = cmd.replace(/\b(?:node|nodemon)\s+(?:--\S+\s+)*[^\s&|;]+/, `tsx ${newEntry}`);
+      changed = true;
+    }
+    if (!changed) continue;
+    const out: Record<string, unknown> = { ...pkg, scripts };
+    const dev = { ...((out.devDependencies as Record<string, string>) ?? {}) };
+    dev.tsx ??= versionFor("tsx");
+    dev.typescript ??= versionFor("typescript");
+    out.devDependencies = sortKeys(dev);
+    edits.push({ path: norm(f.path), content: JSON.stringify(out, null, 2) + "\n", reason: `${norm(f.path)}: start script switched to tsx (node cannot run TypeScript)` });
+  }
+  return edits;
+}
+
 /** True when `pkg` is imported by some code file NOT in `scan` — so a contract dep already lands in another unit. */
 function isImportedByOtherUnit(pkg: string, files: SourceFile[], scan: SourceFile[]): boolean {
   const scanSet = new Set(scan.map((f) => norm(f.path)));
