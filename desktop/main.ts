@@ -7,10 +7,11 @@
  * loads them (including the native better-sqlite3). Launch with cwd = project root so config/ + agents/
  * + .env resolve.
  */
-import "dotenv/config";
 import { app, BrowserWindow, ipcMain } from "electron";
-import { resolve } from "node:path";
-import { readdirSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { readdirSync, existsSync } from "node:fs";
+import { config as loadDotenv } from "dotenv";
+import { firstRunSeed, agentCount } from "./workspace.js";
 import { loadConfig } from "../src/core/config.js";
 import { buildRegistry, type Registry } from "../src/core/model-registry.js";
 import { loadAgent } from "../src/agents/loader.js";
@@ -19,19 +20,41 @@ import { runAgent } from "../src/core/runtime.js";
 import { setLogLevel } from "../src/core/log.js";
 import { SessionStore } from "../src/core/session.js";
 import type { ChoraleConfig } from "../src/core/config.js";
-import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn } from "./shared/ipc.js";
+import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo } from "./shared/ipc.js";
 
 setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows the activity rail
 
 let config: ChoraleConfig;
 let registry: Registry;
+let workspaceDir = process.cwd();
 /** Best-effort — null if better-sqlite3 didn't load (e.g. not rebuilt for Electron). The app still
  *  runs and chats; it just won't persist sessions. The core already guards its own lesson-store. */
 let store: SessionStore | null = null;
 
+/**
+ * Establish the workspace (config/agents/.env/data root), then load .env from it. In dev this is the
+ * repo cwd (unchanged). In a packaged app it's a per-user dir under userData, seeded on first launch
+ * from the bundled defaults, and we chdir into it so the core's cwd-relative reads land there.
+ */
+function setupWorkspace(): void {
+  if (app.isPackaged) {
+    workspaceDir = join(app.getPath("userData"), "workspace");
+    try {
+      firstRunSeed(workspaceDir, join(process.resourcesPath, "defaults"));
+    } catch {
+      /* seeding failed — handled by the fallback below */
+    }
+    if (existsSync(join(workspaceDir, "config", "chorale.config.json5"))) process.chdir(workspaceDir);
+    else workspaceDir = process.cwd(); // no seed available — use whatever cwd offers
+  } else {
+    workspaceDir = process.cwd(); // dev: the repo, unchanged
+  }
+  loadDotenv({ path: join(workspaceDir, ".env") });
+}
+
 function initCore(): void {
   config = loadConfig();
-  config.agents.dir = resolve(process.cwd(), config.agents.dir); // absolute — robust to cwd
+  config.agents.dir = resolve(workspaceDir, config.agents.dir); // absolute — robust to cwd
   registry = buildRegistry(config);
   try {
     store = new SessionStore();
@@ -67,6 +90,8 @@ function agentSummary(file: string): AgentSummary {
 }
 
 function registerIpc(): void {
+  ipcMain.handle(IPC.appInfo, (): AppInfo => ({ workspace: workspaceDir, agents: agentCount(workspaceDir), version: app.getVersion(), packaged: app.isPackaged }));
+
   ipcMain.handle(IPC.agentsList, (): AgentSummary[] => agentFiles().map(agentSummary));
 
   ipcMain.handle(IPC.configGet, (): ConfigSummary => {
@@ -166,6 +191,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  setupWorkspace();
   initCore();
   registerIpc();
   createWindow();

@@ -52,6 +52,7 @@ const EVENTS: [string, string][] = [
 let sessionSeq = 0;
 
 export const mockBridge: ChoraleBridge = {
+  getAppInfo: () => Promise.resolve({ workspace: "C:/Users/you/AppData/Roaming/Chorale/workspace", agents: AGENTS.length, version: "0.2.0", packaged: false }),
   listAgents: () => Promise.resolve(AGENTS),
   getConfig: () => Promise.resolve(CONFIG),
   newSession: () => Promise.resolve(`mem_mock_${sessionSeq++}`),

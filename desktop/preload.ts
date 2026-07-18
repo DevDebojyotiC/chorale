@@ -8,6 +8,7 @@ import { IPC, type RunHandlers, type RunMsg, type ChoraleBridge } from "./shared
 let seq = 0;
 
 const bridge: ChoraleBridge = {
+  getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
   listAgents: () => ipcRenderer.invoke(IPC.agentsList),
   getConfig: () => ipcRenderer.invoke(IPC.configGet),
   newSession: (agent) => ipcRenderer.invoke(IPC.sessionNew, agent),

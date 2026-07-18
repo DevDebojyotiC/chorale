@@ -3,7 +3,7 @@ import { Chat } from "./screens/Chat";
 import { Agents } from "./screens/Agents";
 import { Config } from "./screens/Config";
 import { Sessions } from "./screens/Sessions";
-import { IS_MOCK } from "./bridge";
+import { IS_MOCK, chorale } from "./bridge";
 
 type Screen = "chat" | "agents" | "config" | "sessions";
 
@@ -25,6 +25,11 @@ export function App() {
   const [screen, setScreen] = useState<Screen>("chat");
   const [theme, setTheme] = useState<"dark" | "light" | null>(null);
   const [resume, setResume] = useState<string | null>(null); // session id to open in Chat
+  const [workspace, setWorkspace] = useState("workspace");
+
+  useEffect(() => {
+    chorale.getAppInfo().then((i) => setWorkspace(i.workspace.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "workspace"));
+  }, []);
 
   useEffect(() => {
     if (theme) document.documentElement.setAttribute("data-theme", theme);
@@ -63,7 +68,7 @@ export function App() {
 
       <div className="top">
         <div className="crumb">
-          workspace <b>swarm</b>
+          workspace <b>{workspace}</b>
           {IS_MOCK && <span style={{ color: "var(--warn)" }}> · preview (mock data)</span>}
         </div>
         <div className="spacer" />

@@ -86,6 +86,14 @@ export interface RunHandlers {
   onError?: (message: string) => void;
 }
 
+/** App/workspace info for the title bar and status. */
+export interface AppInfo {
+  workspace: string;
+  agents: number;
+  version: string;
+  packaged: boolean;
+}
+
 /** A saved session, for the Sessions list. */
 export interface SessionInfo {
   id: string;
@@ -96,6 +104,7 @@ export interface SessionInfo {
 
 /** The API the preload exposes on `window.chorale`. */
 export interface ChoraleBridge {
+  getAppInfo: () => Promise<AppInfo>;
   listAgents: () => Promise<AgentSummary[]>;
   getConfig: () => Promise<ConfigSummary>;
   /** Open a new session for `agent`; returns its id (a volatile id if persistence is unavailable). */
@@ -107,6 +116,7 @@ export interface ChoraleBridge {
 }
 
 export const IPC = {
+  appInfo: "app:info",
   agentsList: "agents:list",
   configGet: "config:get",
   sessionNew: "session:new",
