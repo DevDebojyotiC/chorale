@@ -68,6 +68,52 @@ main { grid-area: main; overflow: hidden; min-width: 0; }
 .caret { display: inline-block; width: 7px; height: 15px; background: var(--brand); vertical-align: -2px; margin-left: 2px; animation: blink 1.1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* message actions (copy / retry) — reveal on hover */
+.msg-actions { margin-left: auto; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.msg:hover .msg-actions { opacity: 1; }
+.msgact, .codecopy { font-family: var(--mono); font-size: 10px; background: transparent; border: 1px solid transparent; color: var(--faint); cursor: pointer; padding: 1px 6px; border-radius: 4px; }
+.msgact:hover, .codecopy:hover { color: var(--text); border-color: var(--line); }
+.msgact:disabled { opacity: .4; cursor: default; }
+
+/* rich markdown rendering (assistant messages) */
+.body.md { white-space: normal; }
+.body.md > *:first-child { margin-top: 0; }
+.body.md > *:last-child { margin-bottom: 0; }
+.body.md p { margin: 0 0 10px; }
+.body.md ul, .body.md ol { margin: 0 0 10px; padding-left: 22px; }
+.body.md li { margin: 3px 0; }
+.body.md li > p { margin: 0; }
+.body.md h1, .body.md h2, .body.md h3, .body.md h4 { margin: 18px 0 8px; font-weight: 650; line-height: 1.3; text-wrap: balance; }
+.body.md h1 { font-size: 18px; } .body.md h2 { font-size: 16px; } .body.md h3 { font-size: 14.5px; } .body.md h4 { font-size: 13px; }
+.body.md a { color: var(--brand); text-decoration: none; }
+.body.md a:hover { text-decoration: underline; }
+.body.md blockquote { margin: 0 0 10px; padding: 2px 0 2px 12px; border-left: 2px solid var(--line); color: var(--muted); }
+.body.md hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+.body.md table { border-collapse: collapse; margin: 0 0 10px; font-size: 12.5px; display: block; overflow-x: auto; }
+.body.md th, .body.md td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; }
+.body.md th { background: var(--surface-2); }
+.body.md strong { font-weight: 650; }
+.inline-code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: .5px 5px; }
+
+.codeblock { border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; margin: 0 0 12px; background: var(--bg); }
+.codeblock-h { display: flex; align-items: center; justify-content: space-between; padding: 5px 8px 5px 11px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.codeblock-h .lang { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.codeblock pre { margin: 0; padding: 11px 12px; overflow-x: auto; }
+.codeblock code { font-family: var(--mono); font-size: 12px; line-height: 1.55; background: none; border: none; padding: 0; color: var(--text); }
+
+/* highlight.js tokens, mapped to the chorale palette (theme-aware in both light + dark) */
+.hljs-comment, .hljs-quote { color: var(--faint); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag { color: var(--a-planner); }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-meta-string { color: var(--a-scribe); }
+.hljs-number, .hljs-meta { color: var(--a-reviewer); }
+.hljs-title, .hljs-title.function_, .hljs-section, .hljs-selector-id { color: var(--a-coder); }
+.hljs-built_in, .hljs-type, .hljs-class .hljs-title, .hljs-title.class_ { color: var(--a-research); }
+.hljs-attr, .hljs-attribute, .hljs-name, .hljs-tag, .hljs-selector-class { color: var(--brand); }
+.hljs-variable, .hljs-template-variable, .hljs-params, .hljs-property { color: var(--text); }
+.hljs-symbol, .hljs-bullet, .hljs-link { color: var(--a-test); }
+.hljs-deletion { color: var(--crit); }
+.hljs-emphasis { font-style: italic; } .hljs-strong { font-weight: 650; }
+
 .composer-wrap { position: absolute; bottom: 20px; left: 26px; right: 26px; }
 .box { max-width: 720px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 9px 10px 9px 13px; display: flex; align-items: center; gap: 10px; box-shadow: 0 8px 30px -14px rgba(0,0,0,.5); }
 .box textarea { flex: 1; background: transparent; border: none; color: var(--text); font-family: var(--mono); font-size: 12.5px; resize: none; outline: none; max-height: 120px; line-height: 1.5; padding: 4px 0; }

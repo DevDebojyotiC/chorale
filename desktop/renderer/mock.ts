@@ -39,7 +39,26 @@ const SESSIONS: SessionInfo[] = [
   { id: "s_9e0011", agent: "research", title: "Compare free GLM providers", updatedAt: new Date(Date.now() - 2 * 86400000).toISOString() },
 ];
 
-const REPLY = "I decomposed this into a plan and locked the interface contract up front, so every step builds to the same seams. The backend, auth, and bookmark CRUD are in; I'm wiring the server entry and mounting the routers against the contract paths now.";
+const REPLY = `I decomposed this into a plan and locked the **interface contract** up front, so every step builds to the same seams. Here's the server entry that mounts the routers:
+
+\`\`\`ts
+import express from "express";
+import { authRouter } from "./api/auth";
+import { bookmarksRouter } from "./api/bookmarks";
+
+const app = express();
+app.use(express.json());
+app.use("/api/auth", authRouter);        // POST /api/auth/register, /login
+app.use("/api/bookmarks", bookmarksRouter); // CRUD, JWT-guarded
+app.listen(process.env.PORT ?? 3000);
+\`\`\`
+
+Next steps:
+1. Frontend SPA calling \`/api/auth/login\`
+2. Integration tests for the CRUD routes
+3. A short \`README\`
+
+Run it with \`npm start\` once the deps install.`;
 const EVENTS: [string, string][] = [
   ["verify", "plan validated & injected · 9 steps · DAG ok"],
   ["tool", "coder wrote src/db/index.ts, src/utils/jwt.ts"],

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentSummary, PermissionMode } from "../../shared/ipc";
 import { chorale, agentColor, eventStyle } from "../bridge";
+import { Message, CopyBtn } from "../components/Message";
 
 interface Turn {
   role: "user" | "assistant";
@@ -66,12 +67,24 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
     const text = input.trim();
     if (!text || busy) return;
     setInput("");
-    setTurns((t) => [...t, { role: "user", text }]);
+    submitText(text, turns);
+  }
+
+  /** Retry the assistant turn at index i by re-running its preceding user prompt. */
+  function retry(i: number) {
+    const user = turns[i - 1];
+    if (busy || !user || user.role !== "user") return;
+    submitText(user.text, turns.slice(0, i - 1));
+  }
+
+  function submitText(text: string, base: Turn[]) {
+    if (!text || busy) return;
+    setTurns([...base, { role: "user", text }]);
     setBusy(true);
     setStreaming("");
     setEvents([]);
     setUsage(null);
-    const history = turns.map((t) => ({ role: t.role, content: t.text }));
+    const history = base.map((t) => ({ role: t.role, content: t.text }));
     let acc = "";
     cancelRef.current = chorale.run({ agent, prompt: text, sessionId, history, permissionMode: mode }, {
       onToken: (tk) => {
@@ -137,8 +150,16 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
                 <span className="sw" style={{ background: t.role === "user" ? "var(--a-general)" : agentColor(t.agent ?? "") }} />
                 <b style={{ color: t.role === "user" ? undefined : agentColor(t.agent ?? "") }}>{t.role === "user" ? "you" : t.agent}</b>
                 {t.model && <span className="meta">{t.model}</span>}
+                <div className="msg-actions">
+                  <CopyBtn getText={() => t.text} label="copy" className="msgact" />
+                  {t.role === "assistant" && (
+                    <button className="msgact" onClick={() => retry(i)} disabled={busy}>
+                      retry
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className={"body" + (t.role === "user" ? " user" : "")}>{t.text}</div>
+              {t.role === "assistant" ? <Message text={t.text} markdown /> : <Message text={t.text} markdown={false} />}
             </div>
           ))}
 
