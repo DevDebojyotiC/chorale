@@ -28,7 +28,7 @@ function Icon({ children }: { children: ReactNode }) {
 export function App() {
   const [screen, setScreen] = useState<Screen>("chat");
   const [theme, setTheme] = useState<"dark" | "light" | null>(null);
-  const [resume, setResume] = useState<string | null>(null); // session id to open in Chat
+  const [resume, setResume] = useState<{ id: string; folder: string | null } | null>(null); // session to open in Chat
   const [workspace, setWorkspace] = useState("workspace");
 
   useEffect(() => {
@@ -116,8 +116,8 @@ export function App() {
         {screen === "config" && <Config />}
         {screen === "sessions" && (
           <Sessions
-            onOpen={(id) => {
-              setResume(id);
+            onOpen={(s) => {
+              setResume({ id: s.id, folder: s.folder });
               setScreen("chat");
             }}
           />

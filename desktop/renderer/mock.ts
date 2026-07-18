@@ -34,9 +34,9 @@ const CONFIG: ConfigSummary = {
 };
 
 const SESSIONS: SessionInfo[] = [
-  { id: "s_4f9a2c", agent: "orchestrator", title: "Build BookmarkHub fullstack app", updatedAt: new Date(Date.now() - 6 * 60000).toISOString() },
-  { id: "s_1b7d40", agent: "scribe", title: "Draft the API reference", updatedAt: new Date(Date.now() - 3 * 3600000).toISOString() },
-  { id: "s_9e0011", agent: "research", title: "Compare free GLM providers", updatedAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+  { id: "s_4f9a2c", agent: "orchestrator", title: "Build BookmarkHub fullstack app", updatedAt: new Date(Date.now() - 6 * 60000).toISOString(), folder: "D:/projects/bookmarkhub" },
+  { id: "s_1b7d40", agent: "scribe", title: "Draft the API reference", updatedAt: new Date(Date.now() - 3 * 3600000).toISOString(), folder: null },
+  { id: "s_9e0011", agent: "research", title: "Compare free GLM providers", updatedAt: new Date(Date.now() - 2 * 86400000).toISOString(), folder: null },
 ];
 
 const REPLY = `I decomposed this into a plan and locked the **interface contract** up front, so every step builds to the same seams. Here's the server entry that mounts the routers:
@@ -113,7 +113,9 @@ export const mockBridge: ChoraleBridge = {
       ...CONFIG,
       providers: CONFIG.providers.map((p) => (p.envVar === envVar ? { ...p, hasKey: !!value.trim(), keyMasked: value.trim() ? value.slice(0, 3) + "…" + value.slice(-3) : "" } : p)),
     }),
+  pickFolder: () => Promise.resolve("D:/projects/demo-app"),
   newSession: () => Promise.resolve(`mem_mock_${sessionSeq++}`),
+  setSessionFolder: () => Promise.resolve(),
   listSessions: () => Promise.resolve(SESSIONS),
   loadSession: (id): Promise<ChatTurn[]> =>
     Promise.resolve([

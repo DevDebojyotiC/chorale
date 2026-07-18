@@ -279,6 +279,9 @@ export interface RunOptions {
   maxSteps?: number;
   /** Agent names already on the delegation path (for cycle detection). */
   delegationPath?: string[];
+  /** Working directory for this run's file/shell tools (defaults to process.cwd()). The desktop app
+   *  points this at a session's chosen project folder so the agent operates there and is sandboxed to it. */
+  cwd?: string;
 }
 
 /** A structured activity event for a renderer (the TUI subscribes to these). */
@@ -365,7 +368,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const agentSkills = selectSkills(discoverSkills(config.skills.dirs), agent.skills);
   const mcp = await connectMcpServers(config, agent.mcp);
   const permissionMode: PermissionMode = opts.permissionMode ?? config.permissions.mode;
-  const cwd = process.cwd();
+  const cwd = opts.cwd ?? process.cwd();
   // Files the agent writes this run — fed to the verify-repair loop.
   const touched = new Set<string>();
   // Original content of edited files (for the scribe's meaning-preservation check).

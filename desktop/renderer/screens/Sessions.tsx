@@ -15,7 +15,7 @@ function ago(iso: string): string {
   return `${Math.round(h / 24)}d ago`;
 }
 
-export function Sessions({ onOpen }: { onOpen: (id: string) => void }) {
+export function Sessions({ onOpen }: { onOpen: (session: SessionInfo) => void }) {
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export function Sessions({ onOpen }: { onOpen: (id: string) => void }) {
       <div className="grid" style={{ gridTemplateColumns: "1fr", maxWidth: 720 }}>
         {sessions.length === 0 && <div className="body user mono">No saved sessions yet — start chatting and they'll appear here.</div>}
         {sessions.map((s) => (
-          <button key={s.id} className="card sessioncard" style={{ ["--acc" as string]: agentColor(s.agent), textAlign: "left", cursor: "pointer" }} onClick={() => onOpen(s.id)}>
+          <button key={s.id} className="card sessioncard" style={{ ["--acc" as string]: agentColor(s.agent), textAlign: "left", cursor: "pointer" }} onClick={() => onOpen(s)}>
             <div className="ch">
               <span className="sw" />
               <b>{s.title || "untitled conversation"}</b>
@@ -42,9 +42,11 @@ export function Sessions({ onOpen }: { onOpen: (id: string) => void }) {
             <div className="kv">
               <span className="k">updated</span>
               <span className="val">{ago(s.updatedAt)}</span>
-              <span className="k" style={{ marginLeft: "auto", width: "auto" }}>
-                {s.id}
-              </span>
+              {s.folder && (
+                <span className="val" style={{ marginLeft: "auto", color: "var(--muted)" }} title={s.folder}>
+                  📁 {s.folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop()}
+                </span>
+              )}
             </div>
           </button>
         ))}

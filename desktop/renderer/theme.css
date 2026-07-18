@@ -201,6 +201,11 @@ table.usage tfoot td:first-child { color: var(--muted); text-transform: uppercas
 .apill.newchat:hover { color: var(--text); border-color: var(--faint); }
 .modesel { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; cursor: pointer; outline: none; }
 .modesel:hover { color: var(--text); border-color: var(--faint); }
+.folderchip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px 4px 8px; cursor: pointer; }
+.folderchip:hover { color: var(--text); border-color: var(--faint); }
+.folderchip svg { color: var(--brand); flex: none; }
+.clearfolder { color: var(--faint); font-size: 10px; padding-left: 3px; }
+.clearfolder:hover { color: var(--crit); }
 
 /* modal / permission dialog */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(3, 6, 10, .55); display: grid; place-items: center; z-index: 100; padding: 20px; }

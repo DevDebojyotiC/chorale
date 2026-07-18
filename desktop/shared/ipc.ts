@@ -76,6 +76,8 @@ export interface RunRequest {
   history: ChatTurn[];
   /** How much the agent may do this turn. */
   permissionMode: PermissionMode;
+  /** The project folder the agent's file/shell tools operate in (null = the default workspace). */
+  folder: string | null;
 }
 
 /** What the renderer passes to `window.chorale.run` (minus the internal runId). */
@@ -85,6 +87,7 @@ export interface RunInput {
   sessionId: string;
   history: ChatTurn[];
   permissionMode: PermissionMode;
+  folder: string | null;
 }
 
 /** Streaming messages the main process pushes back over `run:msg`. */
@@ -160,6 +163,7 @@ export interface SessionInfo {
   agent: string;
   title: string | null;
   updatedAt: string;
+  folder: string | null;
 }
 
 /** The API the preload exposes on `window.chorale`. */
@@ -178,7 +182,12 @@ export interface ChoraleBridge {
   getPlaybook: () => Promise<PlaybookItem[]>;
   /** On-demand provider reachability check (makes network calls). */
   checkDoctor: () => Promise<ProviderHealthItem[]>;
-  newSession: (agent: string) => Promise<string>;
+  /** Open a native folder picker; returns the chosen absolute path, or null if cancelled. */
+  pickFolder: () => Promise<string | null>;
+  /** Open a new session for `agent` (optionally bound to a project folder); returns its id. */
+  newSession: (agent: string, folder?: string | null) => Promise<string>;
+  /** Set (or clear) a session's project folder. */
+  setSessionFolder: (id: string, folder: string | null) => Promise<void>;
   listSessions: () => Promise<SessionInfo[]>;
   loadSession: (id: string) => Promise<ChatTurn[]>;
   /** Start a streaming turn; returns a cancel function. */
@@ -201,6 +210,8 @@ export const IPC = {
   sessionNew: "session:new",
   sessionList: "session:list",
   sessionLoad: "session:load",
+  sessionSetFolder: "session:set-folder",
+  pickFolder: "dialog:pick-folder",
   runStart: "run:start",
   runMsg: "run:msg",
   runCancel: "run:cancel",

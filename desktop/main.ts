@@ -7,7 +7,7 @@
  * loads them (including the native better-sqlite3). Launch with cwd = project root so config/ + agents/
  * + .env resolve.
  */
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import { resolve, join } from "node:path";
 import { readdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { config as loadDotenv } from "dotenv";
@@ -205,17 +205,30 @@ function registerIpc(): void {
     return buildConfigSummary();
   });
 
-  ipcMain.handle(IPC.sessionNew, (_e, agent: string): string => {
+  ipcMain.handle(IPC.pickFolder, async (): Promise<string | null> => {
+    const res = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"], title: "Choose a project folder for this session" });
+    return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]!;
+  });
+
+  ipcMain.handle(IPC.sessionNew, (_e, agent: string, folder: string | null): string => {
     try {
-      return store ? store.createSession(agent) : `mem_${Date.now().toString(36)}`;
+      return store ? store.createSession(agent, folder) : `mem_${Date.now().toString(36)}`;
     } catch {
       return `mem_${Date.now().toString(36)}`;
     }
   });
 
+  ipcMain.handle(IPC.sessionSetFolder, (_e, id: string, folder: string | null): void => {
+    try {
+      if (store && !id.startsWith("mem_")) store.setFolder(id, folder);
+    } catch {
+      /* persistence unavailable */
+    }
+  });
+
   ipcMain.handle(IPC.sessionList, (): SessionInfo[] => {
     if (!store) return [];
-    return store.listSessions(50).map((s) => ({ id: s.id, agent: s.agent, title: s.title, updatedAt: s.updated_at }));
+    return store.listSessions(50).map((s) => ({ id: s.id, agent: s.agent, title: s.title, updatedAt: s.updated_at, folder: s.folder }));
   });
 
   ipcMain.handle(IPC.sessionLoad, (_e, id: string): ChatTurn[] => {
@@ -280,6 +293,7 @@ function registerIpc(): void {
         prompt: req.prompt,
         history: req.history, // prior turns — the agent's memory across the conversation
         permissionMode: req.permissionMode,
+        cwd: req.folder && existsSync(req.folder) ? req.folder : undefined, // agent works in the session's folder
         onToken: (text) => send({ runId: req.runId, kind: "token", text }),
         onEvent: (ev) => send({ runId: req.runId, kind: "event", eventType: ev.type, text: ev.text }),
       });

@@ -14,7 +14,7 @@ interface Ev {
   text: string;
 }
 
-export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?: () => void }) {
+export function Chat({ resume, onResumed }: { resume?: { id: string; folder: string | null } | null; onResumed?: () => void }) {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [agent, setAgent] = useState("orchestrator");
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -25,6 +25,7 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<PermissionMode>("auto-edit");
   const [sessionId, setSessionId] = useState("");
+  const [folder, setFolder] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
 
@@ -42,15 +43,28 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
     setEvents([]);
     setStreaming("");
     setUsage(null);
-    chorale.newSession(agent).then(setSessionId);
+    chorale.newSession(agent, folder).then(setSessionId); // keep the same project folder
   }
 
-  // Resume a past session picked in the Sessions view: load its turns and adopt its id.
+  async function chooseFolder() {
+    const f = await chorale.pickFolder();
+    if (f === null) return;
+    setFolder(f);
+    if (sessionId) void chorale.setSessionFolder(sessionId, f);
+  }
+
+  function clearFolder() {
+    setFolder(null);
+    if (sessionId) void chorale.setSessionFolder(sessionId, null);
+  }
+
+  // Resume a past session picked in the Sessions view: load its turns, id, and project folder.
   useEffect(() => {
     if (!resume) return;
-    chorale.loadSession(resume).then((prior) => {
+    chorale.loadSession(resume.id).then((prior) => {
       setTurns(prior.map((t) => ({ role: t.role, text: t.content, agent: t.role === "assistant" ? agent : undefined })));
-      setSessionId(resume);
+      setSessionId(resume.id);
+      setFolder(resume.folder);
       setStreaming("");
       setEvents([]);
       setUsage(null);
@@ -86,7 +100,7 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
     setUsage(null);
     const history = base.map((t) => ({ role: t.role, content: t.text }));
     let acc = "";
-    cancelRef.current = chorale.run({ agent, prompt: text, sessionId, history, permissionMode: mode }, {
+    cancelRef.current = chorale.run({ agent, prompt: text, sessionId, history, permissionMode: mode, folder }, {
       onToken: (tk) => {
         acc += tk;
         setStreaming(acc);
@@ -130,6 +144,24 @@ export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?
               </button>
             ))}
             <div className="spacer" />
+            <button className="folderchip" onClick={chooseFolder} title={folder ?? "Choose a project folder — the agent works (and is sandboxed) there"}>
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+              </svg>
+              {folder ? folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() : "workspace"}
+              {folder && (
+                <span
+                  className="clearfolder"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearFolder();
+                  }}
+                  title="Use the default workspace"
+                >
+                  ✕
+                </span>
+              )}
+            </button>
             <select className="modesel" value={mode} onChange={(e) => setMode(e.target.value as PermissionMode)} title="What the agent may do this turn">
               <option value="read-only">read-only</option>
               <option value="auto-edit">auto-edit</option>

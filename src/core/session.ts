@@ -14,6 +14,8 @@ export interface SessionRow {
   updated_at: string;
   agent: string;
   title: string | null;
+  /** The project folder this session works in (absolute path), or null for the default workspace. */
+  folder: string | null;
 }
 
 export interface UsageRow {
@@ -56,7 +58,8 @@ export class SessionStore {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         agent      TEXT NOT NULL,
-        title      TEXT
+        title      TEXT,
+        folder     TEXT
       );
       CREATE TABLE IF NOT EXISTS messages (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,6 +80,12 @@ export class SessionStore {
       );
       CREATE INDEX IF NOT EXISTS idx_usage_session ON usage(session_id);
     `);
+    // Migrate DBs created before the `folder` column existed (no-op if already present).
+    try {
+      this.db.exec(`ALTER TABLE sessions ADD COLUMN folder TEXT`);
+    } catch {
+      /* column already exists */
+    }
   }
 
   /** Record token usage for one turn (used by the `chorale cost` view). */
@@ -96,17 +105,27 @@ export class SessionStore {
     return (sessionId ? stmt.all(sessionId) : stmt.all()) as UsageRow[];
   }
 
-  createSession(agent: string): string {
+  createSession(agent: string, folder?: string | null): string {
     const id = newSessionId();
     const now = nowIso();
     this.db
-      .prepare(`INSERT INTO sessions (id, created_at, updated_at, agent, title) VALUES (?, ?, ?, ?, NULL)`)
-      .run(id, now, now, agent);
+      .prepare(`INSERT INTO sessions (id, created_at, updated_at, agent, title, folder) VALUES (?, ?, ?, ?, NULL, ?)`)
+      .run(id, now, now, agent, folder ?? null);
     return id;
   }
 
+  /** Set (or clear) a session's project folder. */
+  setFolder(id: string, folder: string | null): void {
+    this.db.prepare(`UPDATE sessions SET folder = ? WHERE id = ?`).run(folder, id);
+  }
+
+  /** Rename a session (used by the UI). */
+  setTitle(id: string, title: string): void {
+    this.db.prepare(`UPDATE sessions SET title = ? WHERE id = ?`).run(title, id);
+  }
+
   getSession(id: string): SessionRow | undefined {
-    return this.db.prepare(`SELECT id, created_at, updated_at, agent, title FROM sessions WHERE id = ?`).get(id) as
+    return this.db.prepare(`SELECT id, created_at, updated_at, agent, title, folder FROM sessions WHERE id = ?`).get(id) as
       | SessionRow
       | undefined;
   }
@@ -116,13 +135,13 @@ export class SessionStore {
     // millisecond `updated_at`, the most-recently-inserted one wins (SQLite's
     // ordering is otherwise arbitrary on ties).
     return this.db
-      .prepare(`SELECT id, created_at, updated_at, agent, title FROM sessions ORDER BY updated_at DESC, rowid DESC LIMIT 1`)
+      .prepare(`SELECT id, created_at, updated_at, agent, title, folder FROM sessions ORDER BY updated_at DESC, rowid DESC LIMIT 1`)
       .get() as SessionRow | undefined;
   }
 
   listSessions(limit = 20): SessionRow[] {
     return this.db
-      .prepare(`SELECT id, created_at, updated_at, agent, title FROM sessions ORDER BY updated_at DESC, rowid DESC LIMIT ?`)
+      .prepare(`SELECT id, created_at, updated_at, agent, title, folder FROM sessions ORDER BY updated_at DESC, rowid DESC LIMIT ?`)
       .all(limit) as SessionRow[];
   }
 
