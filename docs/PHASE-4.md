@@ -1,6 +1,6 @@
 # Phase 4 — Core Agents
 
-> **Status:** in progress (Tasks 1–4 + the escalate-last system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 303 passing · **Last updated:** 2026-07-18
+> **Status:** in progress (Tasks 1–4 + the escalate-last system + the contract-first system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 351 passing · **Last updated:** 2026-07-18
 >
 > This is a **living document**. It records what Phase 4 set out to do, everything built so far,
 > and — most importantly — *why* each decision was made. It will be revised and finalized when
@@ -608,7 +608,64 @@ The store lives at `data/playbook.json` (gitignored, like `lessons.sqlite`); ove
 |---|---|
 | `CHORALE_NO_LADDER=1` | disable the repair ladder (gates still report) |
 | `CHORALE_BOOT_INSTALL=0` | don't install backend deps before the boot gate |
+| `CHORALE_BOOT_CONTAINER=1` | install deps inside a node:22 toolchain container (opt-in; needs Docker) |
 | `CHORALE_PLAYBOOK_DB` | override the playbook store path |
+
+---
+
+## 4d. Contract-first — deciding the seams before writing the code ✅
+
+### 4d.1 The thesis
+The gates and the moving frontier (§4c.6) chase *symptoms*: an unmounted router, an undeclared package,
+a frontend calling the wrong path. The **cause** is upstream — every file is generated in isolation, so
+there is no shared source of truth for the *seams between them*, and the two sides of each seam guess at
+each other. Contract-first flips it: the planner decides the interfaces **once, up front**, and that
+contract is threaded into every step and enforced deterministically. Five levers, in leverage order.
+
+### 4d.2 Lever #1 — the up-front interface contract (`src/core/design-contract.ts`)
+The `plan` tool now carries a `contract`: exact endpoints (method + full path + shapes), each shared
+module's exports/signatures, the data model, the full dependency list, and env vars. It rides on
+`Plan.contract` (optional — a plan without one still runs) and is injected **verbatim into every
+plan-exec step** as *"the single source of truth; build to match it exactly"*, alongside the existing
+reactive contract (what's been built so far). Producers and consumers now reference one spec.
+
+### 4d.3 Lever #2 — the deterministic skeleton (`src/core/skeleton.ts` + `dependency-registry.ts`)
+Contract-first only pays off if the mechanical files the model botches are made correct with **no model
+call**. `planSkeleton()` guarantees, against the contract *and* the code actually written: every
+imported/contract package is declared in a `package.json` with a **resolvable** version range (a curated
+table pins native modules to a prebuild-shipping major; unknowns fall back to `latest`), with
+monorepo-correct per-unit attribution, and every contract env var is in a root `.env`. Only completes
+what's missing — never narrows or overwrites. `runnable.ts` exposes `importedPackages()` so the skeleton
+and the missing-dependency check share one definition of "what is a package". *Verified on real apps: it
+deterministically declares `ws` (opshub/taskflow — the exact WebSocket boot blocker) and
+`cors`/`helmet`/`express-rate-limit` (inventoryiq), zero edits on the clean ones.*
+
+### 4d.4 Lever #3 — deterministic bookkeeping repair
+The bookkeeping issue classes are fixed in code, no model call: **missing-dependency / missing-env** via
+the skeleton (above), and the **start-script class** via `repairStartScripts()` — a start script that
+runs TypeScript through plain `node` (the `unrunnable-entry` class), or a broken `node <missing.js>`
+whose `.ts` source exists, is rewritten to `tsx`, ensuring the tsx/typescript devDeps; compiled-output
+(`dist/`) starts and already-loadered scripts are left alone. (We deliberately do *not* auto-stub
+`missing-endpoint`: a stub trades a missing endpoint for one that returns nothing real.)
+
+### 4d.5 Lever #4 — per-step contract-drift verification
+Verifying only at the end lets a boundary break compound. `contractDrift()` checks each step's served
+endpoints against the contract the moment it finishes: a same-method, same-resource, **wrong-prefix**
+near-miss (`/login` vs `/api/auth/login` — one path a slash-anchored suffix of the other) is drift and
+the step is re-attempted with the exact expected path. Exact matches, genuinely-new endpoints (a health
+check), and two paths that merely share a last word (`/admin/users` vs `/api/users`) are left alone.
+
+### 4d.6 Lever #5 — boot through the real runner + probe the contract (`src/core/smoke-run.ts`)
+The boot gate hardcoded `node <entry>`, so **every** TypeScript backend spuriously failed it.
+`bootLaunch()` now respects the unit's start script (tsx / ts-node / node), forces a loader when a script
+would run TypeScript through plain node, and infers from the entry extension otherwise — booting through
+the unit-local `tsx` bin. Probing was root-only; it now exercises the whole GET read-surface of the
+contract (reads are side-effect-free) and merges the designed contract's endpoints, so a 5xx anywhere in
+the agreed API is caught. An opt-in toolchain container (`CHORALE_BOOT_CONTAINER=1`) installs inside
+`node:22-bookworm` so a native module with no prebuild still compiles, degrading to a local install when
+Docker is unreachable. *Live-verified (no API cost): bookit boots through tsx — the old path ran
+`node index.js` and crashed on its TS imports — and full-surface probing caught a `GET /slots` 500 the
+base-only probe missed.*
 
 ---
 
@@ -617,7 +674,7 @@ The store lives at `data/playbook.json` (gitignored, like `lessons.sqlite`); ove
 | Item | State |
 |------|-------|
 | Branch | `phase-4` |
-| Tests | **264 passing**, typecheck clean, `npm audit` 0 vulnerabilities |
+| Tests | **351 passing**, typecheck clean, `npm audit` 0 vulnerabilities |
 | Task 1 — Reviewer | ✅ shipped (5 suites green, 3 production modes) |
 | Task 2 — Scribe | ✅ shipped (22 capability checks green, multi-format I/O, 3 design tiers, 10 profiles, 3 permanent doc rules, `check_length`) |
 | Task 3 — Planner/Gates | ✅ shipped — planner agent + `plan.ts` (validate-repair), generalized gates (ancestor-exclusion loop guard, on-demand + auto), benchmark, plan-first wiring |
