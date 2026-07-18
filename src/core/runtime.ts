@@ -19,6 +19,7 @@ import { executePlan, type StepRunner } from "./plan-exec.js";
 import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
 import { formatDesignContract, hasDesignContract } from "./design-contract.js";
 import { checkRunnable, tiersOf, directiveFor, planWireUp, scaffoldRoutes, type RunnableIssue } from "./runnable.js";
+import { planSkeleton } from "./skeleton.js";
 import { smokeRun, ensureServerDeps, detectServerEntry } from "./smoke-run.js";
 import { runRepairLadder } from "./repair.js";
 import { getPlaybook } from "./playbook.js";
@@ -614,6 +615,17 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         const proj = collectProject(cwd);
         return checkRunnable(proj.files, proj.paths);
       };
+      // Deterministic skeleton (lever #2): before any check runs, make the mechanical files correct with
+      // NO model call — declare every imported/contract package in package.json with a resolvable version
+      // range, and put every contract env var in .env. Pre-empts the missing-dependency / missing-env
+      // classes at the source (only completes what is missing; never narrows or overwrites values).
+      const reconcileSkeleton = (where: string): void => {
+        const proj = collectProject(cwd);
+        const edits = planSkeleton(proj.files, preGatePlan?.contract);
+        for (const e of edits) writeFileSync(resolve(cwd, e.path), e.content, "utf8");
+        if (edits.length > 0) log.info(`[chorale] ${where} skeleton: ${edits.map((e) => e.reason).join("; ")}\n`);
+      };
+      reconcileSkeleton("⚙");
       let issues = allIssues();
       if (issues.length === 0) {
         log.info(`[chorale] ✓ runnability check passed\n`);
@@ -624,6 +636,17 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           if (issues.length === 0) break;
           const tier = tiersOf(issues)[0]!; // the most-foundational remaining tier
           const tierKinds = new Set(tier.map((i) => i.kind));
+
+          // Deterministic pre-pass: the missing-dependency / missing-env classes are pure bookkeeping —
+          // reconcile package.json/.env in code first (lever #2/#3), so the model is never asked to do an
+          // edit a curated table does perfectly.
+          if (tierKinds.has("missing-dependency") || tierKinds.has("missing-env")) {
+            reconcileSkeleton("  ⚙");
+            if (allIssues().filter((i) => tierKinds.has(i.kind)).length === 0) {
+              log.info(`[chorale]   ✓ ${[...tierKinds].join("/")} tier cleared deterministically (no model call)\n`);
+              continue;
+            }
+          }
 
           // Deterministic pre-pass: scaffolding a router from a module's methods and mounting it are
           // mechanical edits the model keeps botching. Do them in code first — scaffold missing routes,

@@ -241,6 +241,28 @@ function checkMissingDeps(files: SourceFile[], allPaths: Set<string>): RunnableI
   ];
 }
 
+/**
+ * Every npm package the project's code imports — the value-import specifiers that resolve to a real
+ * package (not a builtin, `node:`, path alias, or local file). This is the SAME extraction the
+ * missing-dependency check uses, exposed so the deterministic skeleton (skeleton.ts) declares exactly
+ * the set the check will later demand — the two never disagree about what counts as a package.
+ */
+export function importedPackages(files: SourceFile[], scanOnly?: SourceFile[]): Set<string> {
+  const allPaths = new Set(files.map((f) => f.path.replace(/\\/g, "/"))); // local-path context from the whole tree
+  const aliases = aliasPrefixes(files);
+  const isAlias = (spec: string): boolean => [...aliases].some((a) => a && (spec === a || spec.startsWith(a + "/") || spec.startsWith(a)));
+  const resolvesLocal = (spec: string): boolean => RESOLVE_SUFFIXES.some((s) => allPaths.has(spec + s) || [...allPaths].some((p) => norm(p).endsWith("/" + spec + s)));
+  const out = new Set<string>();
+  for (const f of (scanOnly ?? files).filter((x) => isCode(x.path) && !STATIC_FRONTEND_RE.test("/" + norm(x.path)))) {
+    for (const spec of bareSpecs(f.content)) {
+      if (isAlias(spec) || resolvesLocal(spec)) continue;
+      const pkg = packageOf(spec);
+      if (pkg) out.add(pkg);
+    }
+  }
+  return out;
+}
+
 /** Directive for undeclared npm dependencies — add them to package.json, don't delete the imports. */
 export function missingDependencyDirective(files: SourceFile[], allPaths: Set<string>): string {
   const issues = checkMissingDeps(files, allPaths);
