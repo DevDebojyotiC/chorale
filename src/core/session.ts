@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import Database from "./sqlite.js";
 import { mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -39,7 +39,7 @@ function newSessionId(): string {
 
 /** SQLite-backed conversation store: create/resume/list sessions and their messages. */
 export class SessionStore {
-  private db: Database.Database;
+  private db: Database;
 
   constructor(path = "data/chorale.sqlite") {
     const dir = dirname(path);

@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import Database from "./sqlite.js";
 import { mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -20,7 +20,7 @@ export interface Lesson {
 const nowIso = (): string => new Date().toISOString();
 
 export class LessonStore {
-  private db: Database.Database;
+  private db: Database;
 
   constructor(path = process.env.CHORALE_LESSONS_DB || "data/lessons.sqlite") {
     const dir = dirname(path);

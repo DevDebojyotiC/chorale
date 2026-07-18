@@ -11,18 +11,53 @@
   "build": {
     "appId": "com.chorale.desktop",
     "productName": "Chorale",
-    "directories": { "output": "release" },
-    "files": ["desktop/dist/**/*"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/dist/**/*"
+    ],
     "extraResources": [
-      { "from": "config", "to": "defaults/config" },
-      { "from": "agents", "to": "defaults/agents", "filter": ["**/*.md"] },
-      { "from": ".env.example", "to": "defaults/.env.example" }
+      {
+        "from": "config",
+        "to": "defaults/config"
+      },
+      {
+        "from": "agents",
+        "to": "defaults/agents",
+        "filter": [
+          "**/*.md"
+        ]
+      },
+      {
+        "from": ".env.example",
+        "to": "defaults/.env.example"
+      }
     ],
     "npmRebuild": false,
-    "win": { "target": ["nsis"], "artifactName": "Chorale-Setup-${version}.${ext}" },
-    "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true },
-    "mac": { "target": ["dmg"], "category": "public.app-category.developer-tools" },
-    "linux": { "target": ["AppImage"], "category": "Development" }
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "Chorale-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development"
+    }
   },
   "scripts": {
     "dev": "tsx src/index.ts",
@@ -31,7 +66,6 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "ui:build": "node desktop/build-main.mjs && vite build --config desktop/vite.config.ts",
-    "ui:rebuild": "electron-rebuild -f -w better-sqlite3",
     "ui:dev": "node desktop/dev.mjs",
     "ui": "npm run ui:build && electron desktop/dist/main.cjs",
     "pack": "npm run ui:build && electron-builder --dir",
@@ -50,7 +84,6 @@
     "@heyputer/puter.js": "^2.5.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "ai": "^7.0.26",
-    "better-sqlite3": "^12.11.1",
     "dotenv": "^17.4.2",
     "esbuild": "^0.28.1",
     "exceljs": "^4.4.0",
@@ -70,8 +103,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.2.0",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^26.1.1",
     "@types/pdfkit": "^0.17.6",
     "@types/react": "^19.2.17",
