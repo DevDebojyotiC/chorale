@@ -1,6 +1,6 @@
 # Phase 5 — Desktop UI
 
-> **Status:** in progress · **Branch:** `phase-4` (UI foundation) · **Last updated:** 2026-07-18
+> **Status:** in progress · **Branch:** `phase-5` · **Last updated:** 2026-07-18
 
 A native desktop GUI over the **UI-agnostic core** — the Claude-Desktop-replacement front end. The core
 already exposes exactly the seam a GUI needs, so the UI is a *delivery layer*, not a capability change.
@@ -25,10 +25,15 @@ already exposes exactly the seam a GUI needs, so the UI is a *delivery layer*, n
   `theme.css` (design tokens), `bridge.ts` (typed `window.chorale` + per-agent color map).
 - Native modules (`better-sqlite3`) are rebuilt for Electron's ABI via `@electron/rebuild`.
 
-## 3. Foundation shipped (5a–5c + reads)
-- App shell: left nav (Chat / Agents / Config + Observe stubs), top bar, theme toggle, keyboard nav.
+## 3. Shipped so far
+- **Shell** — left nav (Chat / Agents / Config / Sessions + Observe stubs), top bar, theme toggle, keys.
 - **Chat** — agent picker (per-agent color), streaming replies via IPC, the **live activity rail** that
-  visualizes the pipeline (tool / verify / heal / fallback / lesson events), per-turn token readout.
+  visualizes the pipeline (tool / verify / heal / fallback / lesson events), per-turn token readout;
+  **multi-turn history** threaded into every run, **New chat** control.
+- **Sessions** — browse saved conversations and **resume** one back into Chat.
+- **Persistence** — user/assistant messages + usage saved to the SQLite `SessionStore`; **best-effort**,
+  so if `better-sqlite3` didn't load the app still opens and chats (no persistence), mirroring how the
+  core guards its lesson store.
 - **Agents** — the roster from the real `agent.md` files (model, fallbacks, tools, tier, toggles).
 - **Config** — providers (status from resolved keys), agent→model routing, defaults, workspace.
 
@@ -41,5 +46,5 @@ npm run ui:dev       # dev mode: Vite HMR for the renderer + Electron
 
 ## 5. Next (planned)
 `5d` Agents editor (edit the `agent.md` in-UI) · `5e` Config write-back (edit providers/routing → the same
-files the CLI reads) · `5f` Observe (Cost & usage charts, Sessions/transcripts, Playbook & Lessons,
-Doctor) · session persistence + resume in the UI · `5g` packaging (`electron-builder`).
+files the CLI reads) · `5f` Observe (Cost & usage charts, Playbook & Lessons, Doctor) · session titles ·
+`5g` packaging (`electron-builder`).
