@@ -79,4 +79,16 @@ describe("Phase 4 — Puter GLM provider (openai-envelope shim)", () => {
     const json = (await res.json()) as any;
     expect(json.error.message).toMatch(/rate limited/);
   });
+
+  it("surfaces a plain-object rejection legibly (not [object Object])", async () => {
+    // puter.ai.chat rejects with a plain object, e.g. { message, code } — extract the real message.
+    const chat: PuterChat = async () => {
+      throw { message: "No usage left for request.", code: "insufficient_funds" };
+    };
+    const res = await call(puterFetch("tok", chat), { model: "z-ai/glm-4.6", messages: [] });
+    const json = (await res.json()) as any;
+    expect(json.error.message).toContain("No usage left for request.");
+    expect(json.error.message).toContain("insufficient_funds");
+    expect(json.error.message).not.toContain("[object Object]");
+  });
 });

@@ -59,6 +59,23 @@ async function puterClient(token: string): Promise<PuterClient> {
   return client;
 }
 
+/** Extract a legible message from whatever puter.ai.chat rejects with (Error | plain object | string). */
+function errText(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object") {
+    const o = e as { message?: unknown; error?: { message?: unknown } | string; code?: unknown; status?: unknown };
+    const inner = typeof o.error === "object" ? o.error?.message : o.error;
+    const msg = o.message ?? inner;
+    if (typeof msg === "string" && msg) return o.code || o.status ? `${msg} (${o.code ?? o.status})` : msg;
+    try {
+      return JSON.stringify(o).slice(0, 300);
+    } catch {
+      return String(o);
+    }
+  }
+  return String(e);
+}
+
 /** Coerce puter's message content (string | array of parts | object) to plain text. */
 function contentToText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -158,7 +175,9 @@ export function puterFetch(token?: string, chatImpl?: PuterChat): typeof fetch {
       if (wantsStream) return new Response(toSSE(model, resp, stamp), { status: 200, headers: { "content-type": "text/event-stream" } });
       return new Response(JSON.stringify(toCompletion(model, resp, stamp)), { status: 200, headers: { "content-type": "application/json" } });
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      // puter.ai.chat rejects with a plain object (not an Error), so `String(e)` is a useless
+      // "[object Object]" — dig out the real message/code so rate-limits etc. are legible.
+      const message = errText(e);
       // Surface as an OpenAI-style error body so the SDK's error path (and the fallback chain) handle it.
       return new Response(JSON.stringify({ error: { message: `puter.ai.chat failed: ${message}`, type: "puter_error" } }), { status: 502, headers: { "content-type": "application/json" } });
     }
