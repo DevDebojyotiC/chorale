@@ -2,8 +2,8 @@
 name: orchestrator
 description: Routes and decomposes requests, delegating to specialist agents and synthesizing their results.
 # The orchestrator needs reliable reasoning + tool-calling, so it defaults to serverless.
-model: puter:z-ai/glm-4.6
-fallbacks: [puter:z-ai/glm-5.2, fireworks:accounts/fireworks/models/gpt-oss-120b, zai:glm-4.5-flash, ollama:qwen3:4b]
+model: fireworks:accounts/fireworks/models/gpt-oss-120b
+fallbacks: [puter:z-ai/glm-4.6, zai:glm-4.5-flash, ollama:qwen3:4b]
 delegable: false
 tier: orchestrator
 tools: [delegate]
