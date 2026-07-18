@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeDesignContract, hasDesignContract, formatDesignContract, DESIGN_CONTRACT_SCHEMA, type DesignContract } from "../src/core/design-contract";
+import { normalizeDesignContract, hasDesignContract, formatDesignContract, contractDrift, driftDirective, DESIGN_CONTRACT_SCHEMA, type DesignContract } from "../src/core/design-contract";
 
 describe("Phase 4 — design contract (contract-first, lever #1)", () => {
   it("normalizes loose input: trims, collapses whitespace, dedupes, drops empties", () => {
@@ -54,6 +54,40 @@ describe("Phase 4 — design contract (contract-first, lever #1)", () => {
     expect(out).toContain("Dependencies");
     expect(out).not.toMatch(/API endpoints/);
     expect(out).not.toMatch(/Env vars/);
+  });
+
+  describe("contractDrift (per-step verification, lever #4)", () => {
+    const contract = normalizeDesignContract({ endpoints: ["POST /api/auth/login — body {email} → {token}", "GET /api/users — → User[]"] });
+
+    it("flags a wrong-prefix near-miss of a contract endpoint", () => {
+      const drift = contractDrift(["POST /login", "GET /api/users"], contract);
+      expect(drift).toEqual([{ served: "POST /login", expected: "POST /api/auth/login" }]);
+    });
+
+    it("does not flag an exact match or a genuinely-new endpoint", () => {
+      // /api/auth/login exact + /healthz has no contract sibling → both fine
+      expect(contractDrift(["POST /api/auth/login", "GET /healthz"], contract)).toEqual([]);
+    });
+
+    it("does not flag two different resources that merely share a last word", () => {
+      // GET /admin/users vs contract GET /api/users — neither is a suffix of the other → left alone
+      expect(contractDrift(["GET /admin/users"], contract)).toEqual([]);
+    });
+
+    it("ignores method mismatches and tolerates extractContract's '(defined in …)' note", () => {
+      expect(contractDrift(["DELETE /login"], contract)).toEqual([]); // no POST-vs-DELETE cross-flag
+      expect(contractDrift(["POST /login  (defined in src/routes/auth)"], contract)).toHaveLength(1);
+    });
+
+    it("returns nothing when the contract has no endpoints", () => {
+      expect(contractDrift(["POST /login"], normalizeDesignContract({}))).toEqual([]);
+    });
+
+    it("driftDirective names both the served and the expected path", () => {
+      const msg = driftDirective([{ served: "POST /login", expected: "POST /api/auth/login" }]);
+      expect(msg).toContain("POST /login");
+      expect(msg).toContain("POST /api/auth/login");
+    });
   });
 
   it("the zod schema accepts a well-formed contract and a fully-empty one", () => {

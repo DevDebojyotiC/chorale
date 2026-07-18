@@ -76,6 +76,68 @@ export function hasDesignContract(c: DesignContract | undefined | null): c is De
   return Boolean(c) && (c!.endpoints.length > 0 || c!.modules.length > 0 || c!.entities.length > 0 || c!.dependencies.length > 0 || c!.env.length > 0);
 }
 
+// ── Per-step contract drift (lever #4) ────────────────────────────────────────
+
+export interface EndpointDrift {
+  /** What the step actually served, e.g. "POST /login". */
+  served: string;
+  /** The contract endpoint it should have matched, e.g. "POST /api/auth/login". */
+  expected: string;
+}
+
+/** Parse "POST /api/x — notes" → {method, path}; null if it isn't a METHOD /path line. */
+function parseMethodPath(s: string): { method: string; path: string } | null {
+  const m = s.trim().match(/^(GET|POST|PUT|PATCH|DELETE)\s+(\S+)/i);
+  return m ? { method: m[1]!.toUpperCase(), path: m[2]!.replace(/\/+$/, "") || "/" } : null;
+}
+
+/** The last non-parameter path segment (":id"/"*" ignored) — the stable identity of an endpoint. */
+function lastConcreteSegment(path: string): string {
+  const segs = path.split("/").filter((s) => s && !s.startsWith(":") && s !== "*" && !/^\$\{/.test(s));
+  return segs.length ? segs[segs.length - 1]!.toLowerCase() : "";
+}
+
+/**
+ * Detect endpoints a step SERVED that are a near-miss of a CONTRACT endpoint — same method and same
+ * concluding resource, but a different full path (the classic "/login" vs "/api/auth/login" boundary
+ * break). Only near-misses are reported: an endpoint that exactly matches the contract is fine, and one
+ * with no contract sibling at all (e.g. a health check) is left alone — so this fires on drift from the
+ * agreed spec, not on every path the contract didn't enumerate.
+ */
+export function contractDrift(served: string[], contract: DesignContract): EndpointDrift[] {
+  const wanted = contract.endpoints.map(parseMethodPath).filter((x): x is { method: string; path: string } => x !== null);
+  if (wanted.length === 0) return [];
+  const wantedPaths = new Set(wanted.map((w) => `${w.method} ${w.path}`));
+  const out: EndpointDrift[] = [];
+  const seen = new Set<string>();
+  for (const raw of served) {
+    const s = parseMethodPath(raw.replace(/\s{2,}\(defined in.*$/, "")); // strip extractContract's note
+    if (!s) continue;
+    const key = `${s.method} ${s.path}`;
+    if (wantedPaths.has(key) || seen.has(key)) continue; // exact match, or already reported
+    const seg = lastConcreteSegment(s.path);
+    if (!seg) continue;
+    // A drift is a PREFIX difference on the same resource: one full path is a slash-anchored suffix of
+    // the other (/login vs /api/auth/login), not merely two paths that happen to end in the same word
+    // (/admin/users vs /api/users — different resources, left alone).
+    const near = wanted.find((w) => w.method === s.method && lastConcreteSegment(w.path) === seg && w.path !== s.path && (w.path.endsWith("/" + s.path.replace(/^\//, "")) || s.path.endsWith("/" + w.path.replace(/^\//, ""))));
+    if (near) {
+      out.push({ served: key, expected: `${near.method} ${near.path}` });
+      seen.add(key);
+    }
+  }
+  return out;
+}
+
+/** A focused directive telling a step to align its drifted endpoints with the contract. */
+export function driftDirective(drifts: EndpointDrift[]): string {
+  return (
+    "The endpoint(s) you served do NOT match the project contract — this breaks the frontend/consumer that calls the contract path. Use the EXACT contract path:\n" +
+    drifts.map((d) => `  · you served "${d.served}" — the contract specifies "${d.expected}". Change it to the contract path.`).join("\n") +
+    "\nRewrite the affected route/handler now so the served method+path matches the contract verbatim."
+  );
+}
+
 /** Render the contract as a compact, imperative block injected verbatim into every build step. */
 export function formatDesignContract(c: DesignContract): string {
   const lines: string[] = [

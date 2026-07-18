@@ -17,7 +17,7 @@ import { createPlanTool } from "../tools/plan-tool.js";
 import { parsePlan, validatePlan, planFeedback, formatPlan, type Plan } from "./plan.js";
 import { executePlan, type StepRunner } from "./plan-exec.js";
 import { extractContract, formatContract, hasContract, type SourceFile } from "./contract.js";
-import { formatDesignContract, hasDesignContract } from "./design-contract.js";
+import { formatDesignContract, hasDesignContract, contractDrift, driftDirective } from "./design-contract.js";
 import { checkRunnable, tiersOf, directiveFor, planWireUp, scaffoldRoutes, type RunnableIssue } from "./runnable.js";
 import { planSkeleton, repairStartScripts } from "./skeleton.js";
 import { smokeRun, ensureServerDeps, detectServerEntry } from "./smoke-run.js";
@@ -540,6 +540,20 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           `${task}\n\nYou did not create any of the required files. Write the FULL contents of each one now with the write tool (it creates folders automatically — do not use mkdir or bash for this): ${missing().join(", ")}.`,
           true,
         );
+      }
+      // Per-step verification (lever #4): the moment a step finishes, check the endpoints IT served
+      // against the contract — a step that wrote "POST /login" while the contract says "POST
+      // /api/auth/login" has drifted, and every later step that calls the contract path would break. Fix
+      // it now, while this step's context is fresh, instead of discovering it only at the end. Scoped to
+      // the step's own files, and only near-miss drift (a wrong prefix on the same resource) is acted on.
+      if (hasDesignContract(preGatePlan!.contract)) {
+        const touched = step.files.map((f) => resolve(cwd, f.path)).filter((p) => existsSync(p)).map((p) => ({ path: p, content: readFileSync(p, "utf8") }));
+        const served = extractContract(touched).endpoints;
+        const drifts = contractDrift(served, preGatePlan!.contract);
+        if (drifts.length > 0) {
+          log.info(`[chorale]   ⚠ step ${step.id} drifted from the contract: ${drifts.map((d) => `${d.served}≠${d.expected}`).join(", ")} — re-aligning\n`);
+          r = await runSpecialist(agentName, `${task}\n\n${driftDirective(drifts)}`, true);
+        }
       }
       const still = missing();
       const ok = newFiles.length === 0 || still.length < newFiles.length; // produced at least some deliverable
