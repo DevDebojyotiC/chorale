@@ -1,6 +1,6 @@
 # Phase 4 — Core Agents
 
-> **Status:** in progress (Tasks 1–4 + the escalate-last system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 301 passing · **Last updated:** 2026-07-18
+> **Status:** in progress (Tasks 1–4 + the escalate-last system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 303 passing · **Last updated:** 2026-07-18
 >
 > This is a **living document**. It records what Phase 4 set out to do, everything built so far,
 > and — most importantly — *why* each decision was made. It will be revised and finalized when
@@ -553,6 +553,22 @@ That guard also got sharper here: "all features dead" is only suppressed when th
 edges (a broken/empty graph) or when the reachable code **loads routes dynamically** (`readdirSync` +
 `import`, or a non-literal `require`) — the one case a static graph genuinely cannot see. A working
 graph whose reachable code simply never touches the feature layer is a real, actionable gap, flagged.
+
+**The maximal stress run (OpsHub) found two more, both real.** A ~10-feature app (auth, projects, a task
+state machine, comments, multipart attachments, FTS5 search, an atomic claim transaction, timezone
+analytics, WebSocket real-time) — an **18-step plan, captured first try** (token-cap fix holding at the
+largest scale). It surfaced two detection bugs, now fixed and regression-tested: (1) route-file
+detection was **path-based** (`routes/` dir or `*.routes.*` name), so a **modular layout**
+(`modules/<feature>/routes.ts`) was invisible to wire-up/scaffold even though the `unmounted-routes`
+*check* (content-based) saw it — detection is now **by content everywhere** (builds + exports a router),
+with the variable name taken from the folder for generic `routes` basenames; and (2) `resolveTail`
+derived the importing file's directory via `moduleKey`, which strips `/index` — so an entry named
+`index.ts` (the most common name) resolved every relative import one directory too high, making **every
+router it mounted look unmounted**. With both fixed, OpsHub's deterministic wire-up mounts all six
+modular routers and the build reaches **0 runnability issues**. (The boot gate couldn't run here —
+`better-sqlite3`'s native module won't compile in this environment — and the classifier correctly
+reported that as *inconclusive*, not a repairable bug, exactly as intended.) Each stress build has found
+exactly one-or-two new failure classes, every one a real defect turned into a check + a test.
 
 **Honest limits.** A *fully working* app from one cheap-model run remains out of reach, and the frontier
 keeps *moving* — every fix reveals the next class, and each of these checks is a heuristic that can only

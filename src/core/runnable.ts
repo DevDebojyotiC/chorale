@@ -162,9 +162,12 @@ function envInDirOrAncestors(dir: string, allPaths: Set<string>, name: string): 
 }
 const moduleKey = (p: string): string => norm(p).replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "").replace(/\/index$/, "");
 
-/** Resolve an import specifier against the importing file's dir, to a comparable module tail. */
+/** Resolve an import specifier against the importing file's dir, to a comparable module tail.
+ *  The importing file's directory is taken WITHOUT moduleKey's `/index` stripping — otherwise a file
+ *  named `index.ts` loses both its `/index` and its parent segment, and every relative import resolves
+ *  one directory too high (which made every router look unmounted whenever the entry was `index.ts`). */
 function resolveTail(fromPath: string, spec: string): string {
-  const dir = moduleKey(fromPath).split("/").slice(0, -1);
+  const dir = norm(fromPath).replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "").split("/").slice(0, -1);
   for (const seg of norm(spec).replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "").split("/")) {
     if (seg === "." || seg === "") continue;
     if (seg === "..") dir.pop();
@@ -606,7 +609,20 @@ function checkUnexposedFeatures(files: SourceFile[], allPaths: Set<string>): Run
  * exports, and exactly where the wiring goes; and if the frontend already calls paths for these
  * features, mount the new routes so those paths resolve.
  */
-const ROUTE_FILE_RE = /(^|\/)routes?\//i;
+/** A route file is defined by CONTENT — it builds and exports a router — not by where it lives. A
+ *  modular layout (modules/<feature>/routes.ts) has no routes/ dir, so a path rule misses it. */
+function isRouterFile(f: SourceFile): boolean {
+  return isCode(f.path) && exportsRouter(f.content);
+}
+
+/** The feature name for a module/route file — its basename, or the parent folder when the basename is
+ *  generic (routes/index/router), so a modular `modules/auth/routes.ts` reads as "auth", not "routes". */
+function featureName(path: string): string {
+  const parts = norm(path).split("/");
+  let base = (parts.pop() ?? "").replace(/\.\w+$/, "").replace(/\.(routes?|router|service|repo|repository|controller)s?$/i, "");
+  if (/^(routes?|router|index)$/i.test(base) || base === "") base = (parts.pop() ?? base).replace(/\.(routes?|router|service|repo|repository|controller)s?$/i, "");
+  return base || "feature";
+}
 
 /** The file where routers are mounted (creates the framework app and calls `.use`), if any. */
 function mountFile(files: SourceFile[], unit: string): SourceFile | undefined {
@@ -631,7 +647,7 @@ export function unexposedFeatureDirective(files: SourceFile[]): string {
     const appImports = app ? new Set(localSpecs(app.content).map((s) => resolveLocalImport(app.path, s, paths)).filter(Boolean).map((p) => norm(p!))) : new Set<string>();
     // Route files that ALREADY exist and reach a dead module, but the app file never imports them —
     // these just need MOUNTING (the coder keeps writing routes and forgetting to wire them in).
-    const routeFiles = files.filter((f) => isCode(f.path) && ROUTE_FILE_RE.test("/" + norm(f.path)) && norm(f.path).startsWith((r.unit === "." ? "" : r.unit + "/")));
+    const routeFiles = files.filter((f) => isRouterFile(f) && norm(f.path).startsWith((r.unit === "." ? "" : r.unit + "/")));
     const unmounted = routeFiles.filter((rf) => !appImports.has(norm(rf.path)) && localSpecs(rf.content).some((s) => deadSet.has(norm(resolveLocalImport(rf.path, s, paths) ?? ""))));
     const lines = r.dead.map((m) => `  - ${m.path}${m.exports.length ? ` (exports: ${m.exports.join(", ")})` : ""}`).join("\n");
     const mountLine = app
@@ -708,10 +724,9 @@ function exportsRouter(content: string): boolean {
   return /export\s+default\b/.test(content) || /module\.exports\s*=/.test(content) || /export\s*\{\s*router\b/.test(content);
 }
 
-/** A stable JS identifier for a route file: auth.routes.ts → authRoutes (deduped against `taken`). */
+/** A stable JS identifier for a route file: auth.routes.ts (or modules/auth/routes.ts) → authRoutes. */
 function routerVarName(path: string, taken: Set<string>): string {
-  const base = (norm(path).split("/").pop() ?? "feature").replace(/\.\w+$/, "").replace(/\.(routes?|router)$/i, "") || "feature";
-  let name = base.replace(/[^a-zA-Z0-9]+([a-zA-Z0-9])?/g, (_, c: string | undefined) => (c ? c.toUpperCase() : ""));
+  let name = featureName(path).replace(/[^a-zA-Z0-9]+([a-zA-Z0-9])?/g, (_, c: string | undefined) => (c ? c.toUpperCase() : ""));
   if (!/^[a-zA-Z_]/.test(name)) name = "r" + name;
   name = name + "Routes";
   let out = name;
@@ -804,7 +819,7 @@ export function planWireUp(files: SourceFile[], allPaths: Set<string>): WireUpEd
       }
     }
 
-    const routers = code.filter((f) => norm(f.path).startsWith(prefix) && ROUTE_FILE_RE.test("/" + norm(f.path)) && exportsRouter(f.content) && !reachable.has(norm(f.path)) && norm(f.path) !== norm(app.path));
+    const routers = code.filter((f) => norm(f.path).startsWith(prefix) && isRouterFile(f) && !reachable.has(norm(f.path)) && norm(f.path) !== norm(app.path));
     if (routers.length === 0) continue;
 
     const taken = new Set<string>();
@@ -818,7 +833,7 @@ export function planWireUp(files: SourceFile[], allPaths: Set<string>): WireUpEd
     for (const rf of routers) {
       const v = routerVarName(rf.path, taken);
       const { spec, quote } = relImport(app.path, rf.path, app.content);
-      const feature = (norm(rf.path).split("/").pop() ?? "").replace(/\.\w+$/, "").replace(/\.(routes?|router)$/i, "");
+      const feature = featureName(rf.path);
       importLines.push(`import ${v} from ${quote}${spec}${quote};`);
       useLines.push(prefixed ? `${appVar}.use(${quote}/api/${feature}${quote}, ${v});` : `${appVar}.use(${v});`);
       mounted.push({ router: rf.path, varName: v });
@@ -942,7 +957,7 @@ export function scaffoldRoutes(files: SourceFile[], allPaths: Set<string>): Scaf
   if (reports.length === 0) return [];
   const code = files.filter((f) => isCode(f.path));
   const byPath = new Map(code.map((f) => [norm(f.path), f]));
-  const routeFiles = code.filter((f) => ROUTE_FILE_RE.test("/" + norm(f.path)) && exportsRouter(f.content));
+  const routeFiles = code.filter(isRouterFile);
   const routerImports = new Set<string>();
   for (const rf of routeFiles) for (const s of localSpecs(rf.content)) { const t = resolveLocalImport(rf.path, s, allPaths); if (t) routerImports.add(norm(t)); }
   // Learn the import-extension convention from a file that actually has a relative import with an
@@ -964,7 +979,7 @@ export function scaffoldRoutes(files: SourceFile[], allPaths: Set<string>): Scaf
       if (!mod) continue;
       const api = parseModuleApi(mod.content);
       if (!api) continue; // not a parseable class → leave to the model
-      const feature = (norm(d.path).split("/").pop() ?? "feature").replace(/\.\w+$/, "").replace(/\.(service|repo|repository|controller)s?$/i, "") || "feature";
+      const feature = featureName(d.path);
       const dir = routeDir ?? norm(d.path).replace(/\/[^/]+$/, "").replace(/\/(repositories|repos|services|controllers)$/i, "/routes");
       const ext = /\.tsx?$/.test(mod.path) ? "ts" : "js";
       const routePath = `${dir}/${feature}.routes.${ext}`;

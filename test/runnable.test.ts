@@ -256,8 +256,8 @@ describe("Phase 4 — unexposed features (build completeness, the BookIt gap)", 
       { path: "server/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
       { path: "server/index.js", content: "const app = (await import('./src/app.ts')).default; app.listen(process.env.PORT);" },
       { path: "server/src/app.ts", content: "import express from 'express'; import providerRoutes from './routes/provider.routes.ts'; const app = express(); app.use(providerRoutes); export default app;" },
-      { path: "server/src/routes/provider.routes.ts", content: "import { ServiceRepository } from '../services/service.service.ts'; const router = {}; export default router;" },
-      { path: "server/src/routes/auth.routes.ts", content: "import { AuthService } from '../services/auth.service.ts'; const router = {}; export default router;" },
+      { path: "server/src/routes/provider.routes.ts", content: "import { Router } from 'express'; import { ServiceRepository } from '../services/service.service.ts'; const router = Router(); router.get('/x',(q,r)=>{}); export default router;" },
+      { path: "server/src/routes/auth.routes.ts", content: "import { Router } from 'express'; import { AuthService } from '../services/auth.service.ts'; const router = Router(); router.post('/login',(q,r)=>{}); export default router;" },
       { path: "server/src/services/service.service.ts", content: "export class ServiceRepository {}" },
       { path: "server/src/services/auth.service.ts", content: "export class AuthService {}" }, // dead: auth.routes exists but is unmounted
     ];
@@ -521,6 +521,33 @@ describe("Phase 4 — deterministic wire-up (mount routers without a model)", ()
   it("returns nothing when there is nothing to mount (all routers already wired)", () => {
     const files = base().filter((f) => !/auth/.test(f.path)); // only provider, already mounted
     expect(planWireUp(files, pathsOf(files))).toHaveLength(0);
+  });
+
+  it("detects + mounts a MODULAR router (modules/<feature>/routes.ts, no routes/ dir) — the OpsHub gap", () => {
+    // The OpsHub structure: routers live at modules/task/routes.ts with a generic `routes` basename.
+    // A path-based rule misses them; detection must be by content, and the var name from the folder.
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "backend/src/index.ts", content: "import express from 'express';\nconst app = express();\napp.use((req,res)=>res.sendStatus(404));\napp.listen(process.env.PORT);" },
+      { path: "backend/src/modules/task/routes.ts", content: "import { Router } from 'express'; const router = Router(); router.get('/', (q,r)=>{}); export default router;" },
+    ];
+    const edits = planWireUp(files, pathsOf(files));
+    expect(edits[0]!.mounted.map((m) => m.varName)).toEqual(["taskRoutes"]); // folder name, not "routesRoutes"
+    expect(edits[0]!.content).toMatch(/import taskRoutes from '\.\/modules\/task\/routes(\.js)?'/); // ext mirrored elsewhere
+    expect(edits[0]!.content).toMatch(/app\.use\(taskRoutes\)/);
+  });
+
+  it("does NOT falsely flag a modular router mounted from an index.ts entry (the resolveTail /index bug)", () => {
+    // index.ts strips to its parent via moduleKey; a router it mounts must still resolve correctly.
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: JSON.stringify({ dependencies: { express: "^4" } }) },
+      { path: "backend/src/index.ts", content: "import express from 'express';\nimport authRoutes from './modules/auth/routes.js';\nconst app = express();\napp.use('/auth', authRoutes);\napp.listen(process.env.PORT);" },
+      { path: "backend/src/modules/auth/routes.ts", content: "import { Router } from 'express'; import { AuthService } from './service.js'; const router = Router(); router.post('/login',(q,r)=>{}); export default router;" },
+      { path: "backend/src/modules/auth/service.ts", content: "export class AuthService {}" },
+    ];
+    const issues = checkRunnable(files, pathsOf(files));
+    expect(issues.some((i) => i.kind === "unmounted-routes")).toBe(false); // was flagged: index.ts entry mis-resolved
+    expect(issues.some((i) => i.kind === "unexposed-feature")).toBe(false); // auth.service reachable via the mounted router
   });
 
   it("mirrors a .js-specifier / .ts-file convention (import written as .js — survives tsc)", () => {
