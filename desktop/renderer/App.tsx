@@ -2,8 +2,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Chat } from "./screens/Chat";
 import { Agents } from "./screens/Agents";
 import { Config } from "./screens/Config";
+import { Sessions } from "./screens/Sessions";
 
-type Screen = "chat" | "agents" | "config";
+type Screen = "chat" | "agents" | "config" | "sessions";
 
 const NAV: { id: Screen; label: string; key: string; icon: ReactNode }[] = [
   { id: "chat", label: "Chat", key: "1", icon: <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2Z" /> },
@@ -22,6 +23,7 @@ function Icon({ children }: { children: ReactNode }) {
 export function App() {
   const [screen, setScreen] = useState<Screen>("chat");
   const [theme, setTheme] = useState<"dark" | "light" | null>(null);
+  const [resume, setResume] = useState<string | null>(null); // session id to open in Chat
 
   useEffect(() => {
     if (theme) document.documentElement.setAttribute("data-theme", theme);
@@ -79,6 +81,10 @@ export function App() {
           </button>
         ))}
         <div className="navlabel">Observe</div>
+        <button className="navitem" aria-current={screen === "sessions"} onClick={() => setScreen("sessions")}>
+          <Icon><><path d="M4 19.5V5a2 2 0 0 1 2-2h11.5" /><path d="M6 17h13v3H6a2 2 0 0 1 0-4Z" /></></Icon>
+          <span>Sessions</span>
+        </button>
         <button className="navitem" disabled title="Coming soon">
           <Icon><><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></></Icon>
           <span>Cost &amp; usage</span>
@@ -90,9 +96,17 @@ export function App() {
       </nav>
 
       <main>
-        {screen === "chat" && <Chat />}
+        {screen === "chat" && <Chat resume={resume} onResumed={() => setResume(null)} />}
         {screen === "agents" && <Agents />}
         {screen === "config" && <Config />}
+        {screen === "sessions" && (
+          <Sessions
+            onOpen={(id) => {
+              setResume(id);
+              setScreen("chat");
+            }}
+          />
+        )}
       </main>
     </div>
   );

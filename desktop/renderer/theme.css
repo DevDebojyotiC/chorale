@@ -135,6 +135,10 @@ table.route .ag .sw { width: 8px; height: 8px; border-radius: 2px; }
 table.route .fb { color: var(--faint); font-size: 11px; }
 .note { max-width: 1000px; margin: 14px auto 0; color: var(--faint); font-size: 11.5px; font-family: var(--mono); }
 .loading { display: grid; place-items: center; height: 100%; color: var(--faint); font-family: var(--mono); font-size: 12px; }
+.sessioncard { font: inherit; width: 100%; color: var(--text); }
+.sessioncard:hover { border-color: color-mix(in oklab, var(--acc) 50%, var(--line)); background: color-mix(in oklab, var(--acc) 5%, var(--surface)); }
+.apill.newchat { color: var(--muted); }
+.apill.newchat:hover { color: var(--text); border-color: var(--faint); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
 @media (max-width: 900px) {

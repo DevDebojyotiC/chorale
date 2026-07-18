@@ -13,7 +13,7 @@ interface Ev {
   text: string;
 }
 
-export function Chat() {
+export function Chat({ resume, onResumed }: { resume?: string | null; onResumed?: () => void }) {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [agent, setAgent] = useState("orchestrator");
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -41,6 +41,20 @@ export function Chat() {
     setUsage(null);
     chorale.newSession(agent).then(setSessionId);
   }
+
+  // Resume a past session picked in the Sessions view: load its turns and adopt its id.
+  useEffect(() => {
+    if (!resume) return;
+    chorale.loadSession(resume).then((prior) => {
+      setTurns(prior.map((t) => ({ role: t.role, text: t.content, agent: t.role === "assistant" ? agent : undefined })));
+      setSessionId(resume);
+      setStreaming("");
+      setEvents([]);
+      setUsage(null);
+      onResumed?.();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resume]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
