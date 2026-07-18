@@ -477,7 +477,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     if (r.plan) {
       if (r.plan.complexity === "complex") {
         preGatePlan = r.plan;
-        const contractBlock = hasDesignContract(r.plan.contract) ? `${formatDesignContract(r.plan.contract)}\n\n` : "";
+        const contractBlock = process.env.CHORALE_NO_CONTRACT !== "1" && hasDesignContract(r.plan.contract) ? `${formatDesignContract(r.plan.contract)}\n\n` : "";
         preGateBlock += `## Plan to follow\nA ${pg.agent} decomposed this task. Execute these steps in order, respecting the dependencies; treat each step's "done when" as its acceptance criterion:\n\n${formatPlan(r.plan)}\n\n${contractBlock}`;
         log.info(`\n[chorale] ✓ plan-first: injected a ${r.plan.steps.length}-step plan\n`);
       } else {
@@ -496,6 +496,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   if (process.env.CHORALE_PLAN_EXEC === "1" && preGatePlan && agent.tools.includes("delegate")) {
     preGateBlock = ""; // the plan is being executed for real — don't also tell the model to do it
     const canEscalate = process.env.CHORALE_NO_ESCALATE !== "1";
+    // Contract-first master switch (lever #1–#5). Off (CHORALE_NO_CONTRACT=1) reverts to pre-contract
+    // behavior: no designed-contract threading, no deterministic skeleton/start-script pre-pass, no
+    // per-step drift check, and a legacy node-entry boot — the A/B baseline.
+    const contractFirst = process.env.CHORALE_NO_CONTRACT !== "1";
     // Lever #5: run a specialist on a task; when `escalate`, force the agent's stronger fallback model
     // (gpt-oss). Compensation applied per step — pay for the strong model only when the cheap one has
     // already failed this step (a no-op or a runnability defect), which is where it earns its cost.
@@ -546,7 +550,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       // /api/auth/login" has drifted, and every later step that calls the contract path would break. Fix
       // it now, while this step's context is fresh, instead of discovering it only at the end. Scoped to
       // the step's own files, and only near-miss drift (a wrong prefix on the same resource) is acted on.
-      if (hasDesignContract(preGatePlan!.contract)) {
+      if (contractFirst && hasDesignContract(preGatePlan!.contract)) {
         const touched = step.files.map((f) => resolve(cwd, f.path)).filter((p) => existsSync(p)).map((p) => ({ path: p, content: readFileSync(p, "utf8") }));
         const served = extractContract(touched).endpoints;
         const drifts = contractDrift(served, preGatePlan!.contract);
@@ -571,7 +575,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       //    files built so far, so each next step also matches the actual earlier work.
       context: () => {
         const parts: string[] = [];
-        if (hasDesignContract(preGatePlan!.contract)) parts.push(formatDesignContract(preGatePlan!.contract));
+        if (contractFirst && hasDesignContract(preGatePlan!.contract)) parts.push(formatDesignContract(preGatePlan!.contract));
         const built = extractContract(collectProject(cwd).files);
         if (hasContract(built)) parts.push(formatContract(built));
         return parts.join("\n\n");
@@ -639,7 +643,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         for (const e of edits) writeFileSync(resolve(cwd, e.path), e.content, "utf8");
         if (edits.length > 0) log.info(`[chorale] ${where} skeleton: ${edits.map((e) => e.reason).join("; ")}\n`);
       };
-      reconcileSkeleton("⚙");
+      if (contractFirst) reconcileSkeleton("⚙");
       let issues = allIssues();
       if (issues.length === 0) {
         log.info(`[chorale] ✓ runnability check passed\n`);
@@ -653,7 +657,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
 
           // Deterministic pre-pass: a start script that runs TypeScript through plain node (the
           // unrunnable-entry class) is a mechanical fix — switch it to tsx. No model call.
-          if (tierKinds.has("unrunnable-entry") || tierKinds.has("broken-start")) {
+          if (contractFirst && (tierKinds.has("unrunnable-entry") || tierKinds.has("broken-start"))) {
             const fixes = repairStartScripts(collectProject(cwd).files);
             for (const e of fixes) writeFileSync(resolve(cwd, e.path), e.content, "utf8");
             if (fixes.length > 0) log.info(`[chorale]   ⚙ ${fixes.map((e) => e.reason).join("; ")}\n`);
@@ -667,7 +671,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           // Deterministic pre-pass: the missing-dependency / missing-env classes are pure bookkeeping —
           // reconcile package.json/.env in code first (lever #2/#3), so the model is never asked to do an
           // edit a curated table does perfectly.
-          if (tierKinds.has("missing-dependency") || tierKinds.has("missing-env")) {
+          if (contractFirst && (tierKinds.has("missing-dependency") || tierKinds.has("missing-env"))) {
             reconcileSkeleton("  ⚙");
             if (allIssues().filter((i) => tierKinds.has(i.kind)).length === 0) {
               log.info(`[chorale]   ✓ ${[...tierKinds].join("/")} tier cleared deterministically (no model call)\n`);
@@ -746,7 +750,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
               return []; // timeout / other — can't boot, but not a code bug to repair
             }
           }
-          return (await smokeRun(cwd, bootFiles, { contractEndpoints: preGatePlan?.contract?.endpoints })).map((i) => i.message);
+          return (await smokeRun(cwd, bootFiles, contractFirst ? { contractEndpoints: preGatePlan?.contract?.endpoints } : { legacyNodeBoot: true })).map((i) => i.message);
         };
         log.info(`[chorale] · boot gate: installing backend deps + booting…\n`);
         const bootIssues = await bootProblems();

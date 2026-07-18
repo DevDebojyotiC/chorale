@@ -402,12 +402,13 @@ export function classifyInstallError(stderr: string): { kind: "resolution" | "na
  * endpoints extracted from the code, so probing exercises the agreed API surface even for routes the
  * static extractor missed.
  */
-export async function smokeRun(cwd: string, files: SourceFile[], opts: { timeoutMs?: number; contractEndpoints?: string[] } = {}): Promise<SmokeIssue[]> {
+export async function smokeRun(cwd: string, files: SourceFile[], opts: { timeoutMs?: number; contractEndpoints?: string[]; legacyNodeBoot?: boolean } = {}): Promise<SmokeIssue[]> {
   const server = detectServerEntry(files);
   if (!server) return [];
   const built = extractContract(files);
   const contract: ProjectContract = { ...built, endpoints: [...new Set([...built.endpoints, ...(opts.contractEndpoints ?? [])])] };
-  return bootAndProbe(cwd + "/" + server.dir, server.entry, contract, { timeoutMs: opts.timeoutMs, launch: bootLaunch(files, server) });
+  const launch = opts.legacyNodeBoot ? { runner: "node" as const, entry: server.entry } : bootLaunch(files, server);
+  return bootAndProbe(cwd + "/" + server.dir, server.entry, contract, { timeoutMs: opts.timeoutMs, launch });
 }
 
 export function smokeRunFeedback(issues: SmokeIssue[]): string {
