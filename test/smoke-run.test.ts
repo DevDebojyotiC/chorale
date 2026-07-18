@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import http from "node:http";
-import { detectServerEntry, pickProbes, classifyProbes, smokeRunFeedback, ensureServerDeps, npmError, classifyInstallError, type Probe } from "../src/core/smoke-run";
+import { detectServerEntry, pickProbes, classifyProbes, smokeRunFeedback, ensureServerDeps, npmError, classifyInstallError, bootLaunch, containerInstallArgs, type Probe } from "../src/core/smoke-run";
 import type { SourceFile } from "../src/core/contract";
 
 describe("Phase 4 — dynamic boot gate (fullstack frontier)", () => {
@@ -26,6 +26,52 @@ describe("Phase 4 — dynamic boot gate (fullstack frontier)", () => {
     const probes = pickProbes({ baseUrl: "http://localhost:3000", endpoints: ["POST /api/auth/register", "POST /api/auth/login", "GET /api/notes"], tables: [], exports: [] });
     expect(probes[0]).toMatchObject({ method: "GET", path: "/" });
     expect(probes.some((p) => p.method === "POST" && p.path === "/api/auth/register" && p.body)).toBe(true);
+  });
+
+  it("probes the whole GET read-surface of the contract, not just the root", () => {
+    const probes = pickProbes({ endpoints: ["GET /api/notes", "GET /api/users/:id", "POST /api/notes"], tables: [], exports: [] });
+    expect(probes.some((p) => p.method === "GET" && p.path === "/api/notes")).toBe(true);
+    expect(probes.some((p) => p.method === "GET" && p.path === "/api/users/1")).toBe(true); // param made concrete
+    expect(probes.filter((p) => p.method === "GET" && p.path === "/")).toHaveLength(1); // root not duplicated
+  });
+
+  describe("bootLaunch (boot via the real runner, lever #5)", () => {
+    const server = { dir: "backend", entry: "index.ts" };
+    const pkg = (start: string) => ({ path: "backend/package.json", content: JSON.stringify({ scripts: { start } }) });
+
+    it("runs a TypeScript entry through tsx when the start script says so", () => {
+      expect(bootLaunch([pkg("tsx src/server.ts")], server)).toEqual({ runner: "tsx", entry: "src/server.ts" });
+    });
+
+    it("forces a loader when a start script would run TypeScript with plain node", () => {
+      // node cannot execute .ts; boot it through tsx anyway rather than spuriously fail
+      expect(bootLaunch([pkg("node index.ts")], server).runner).toBe("tsx");
+    });
+
+    it("keeps plain node for a JavaScript entry", () => {
+      expect(bootLaunch([pkg("node dist/server.js")], { dir: "backend", entry: "server.js" })).toEqual({ runner: "node", entry: "dist/server.js" });
+    });
+
+    it("treats nodemon as node and honours ts-node", () => {
+      expect(bootLaunch([pkg("nodemon build/app.js")], { dir: "backend", entry: "app.js" }).runner).toBe("node");
+      expect(bootLaunch([pkg("ts-node src/app.ts")], server).runner).toBe("ts-node");
+    });
+
+    it("infers the runner from the entry extension when there is no start script", () => {
+      expect(bootLaunch([{ path: "backend/package.json", content: "{}" }], { dir: "backend", entry: "index.ts" }).runner).toBe("tsx");
+      expect(bootLaunch([{ path: "backend/package.json", content: "{}" }], { dir: "backend", entry: "index.js" }).runner).toBe("node");
+    });
+  });
+
+  it("containerInstallArgs mounts the host dir into a toolchain image and installs", () => {
+    const args = containerInstallArgs("D:\\app\\backend");
+    expect(args).toContain("run");
+    expect(args).toContain("--rm");
+    expect(args).toContain("D:\\app\\backend:/app");
+    expect(args).toContain("node:22-bookworm");
+    const npmAt = args.indexOf("npm");
+    expect(args.slice(npmAt, npmAt + 2)).toEqual(["npm", "install"]); // the container's command is npm install
+    expect(containerInstallArgs("/x", "custom:img")).toContain("custom:img");
   });
 
   it("params in a probed path are made concrete", () => {

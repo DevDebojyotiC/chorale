@@ -746,7 +746,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
               return []; // timeout / other — can't boot, but not a code bug to repair
             }
           }
-          return (await smokeRun(cwd, bootFiles)).map((i) => i.message);
+          return (await smokeRun(cwd, bootFiles, { contractEndpoints: preGatePlan?.contract?.endpoints })).map((i) => i.message);
         };
         log.info(`[chorale] · boot gate: installing backend deps + booting…\n`);
         const bootIssues = await bootProblems();
