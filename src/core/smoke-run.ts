@@ -217,11 +217,13 @@ export interface DepInstall {
   reason?: string;
   dir?: string;
   /**
-   * Why it failed. Only "resolution" (a dependency/version that cannot be resolved) is a code bug the
-   * coder can repair. A "timeout" (slow native build) or "other" (network, toolchain) is NOT — sending
-   * those to the repair ladder makes it chase a package.json bug that isn't there.
+   * Why it failed. "resolution" (a version that cannot be resolved) and "native-build" (a stale native
+   * module with no prebuild for this Node) are code bugs the coder can repair in package.json. A
+   * "timeout" or "other" is NOT — sending those to the ladder makes it chase a bug that isn't there.
    */
-  kind?: "resolution" | "timeout" | "other";
+  kind?: "resolution" | "native-build" | "timeout" | "other";
+  /** For native-build: the module whose native compile failed (so the repair can name it). */
+  failedModule?: string;
 }
 
 /** Pull the meaningful npm error lines out of its stderr (drop boilerplate/log-path noise). */
@@ -264,15 +266,32 @@ export function ensureServerDeps(cwd: string, files: SourceFile[], opts: { timeo
     return { installed: true, dir };
   } catch (e) {
     const err = e as { stderr?: Buffer | string; signal?: string; message?: string };
-    const stderr = err.stderr ? String(err.stderr) : "";
-    const detail = npmError(stderr);
     if (err.signal === "SIGTERM" || /ETIMEDOUT|timed out/i.test(String(err.message ?? ""))) {
       return { installed: false, kind: "timeout", reason: `npm install timed out after ${Math.round(timeoutMs / 1000)}s (often a slow native build) — not a code problem`, dir };
     }
-    // Only a dependency/version that npm cannot resolve is something the coder can fix in package.json.
-    const resolution = /ETARGET|notarget|No matching version|404 Not Found|ERESOLVE|EUNSUPPORTEDPROTOCOL|Invalid package name/i.test(stderr);
-    return { installed: false, kind: resolution ? "resolution" : "other", reason: detail || String(err.message ?? "").slice(0, 200), dir };
+    const c = classifyInstallError(err.stderr ? String(err.stderr) : "");
+    return { installed: false, kind: c.kind, failedModule: c.failedModule, reason: c.detail || String(err.message ?? "").slice(0, 200), dir };
   }
+}
+
+/**
+ * Classify an npm-install stderr into a repair-relevant kind:
+ *  - "resolution"   — npm can't resolve a version (a hallucinated/nonexistent one). Repairable.
+ *  - "native-build" — a native addon failed to compile: no prebuilt binary for this Node and no C++
+ *    toolchain (node-gyp / prebuild-install / "find VS" / MSBuild). Usually a STALE native dep pinned
+ *    to a major that predates the running Node — bumping it to a current major with a prebuild fixes it
+ *    with no compiler, so it's repairable, and we name the offending module.
+ *  - "other"        — network / unknown. Not a code bug.
+ */
+export function classifyInstallError(stderr: string): { kind: "resolution" | "native-build" | "other"; failedModule?: string; detail: string } {
+  if (/node-gyp|prebuild-install|gyp ERR|find VS|MSB\d|node_pre_gyp|Visual Studio/i.test(stderr)) {
+    const mod = stderr.match(/node_modules[\\/]((?:@[^\\/\n]+[\\/])?[^\\/\n]+)/)?.[1]?.replace(/\\/g, "/");
+    return { kind: "native-build", failedModule: mod, detail: `the native module${mod ? ` "${mod}"` : ""} has no prebuilt binary for Node ${process.versions.node} and no C++ toolchain is available to compile it` };
+  }
+  if (/ETARGET|notarget|No matching version|404 Not Found|ERESOLVE|EUNSUPPORTEDPROTOCOL|Invalid package name/i.test(stderr)) {
+    return { kind: "resolution", detail: npmError(stderr) };
+  }
+  return { kind: "other", detail: npmError(stderr) };
 }
 
 /** Convenience: detect the server, boot it, and return issues. `[]` if there's no server to boot. */

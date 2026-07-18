@@ -83,6 +83,12 @@ const SEED_META: Record<string, SeedMeta> = {
     keywords: ["ts-node", "typescript", "register", "fileexists", "loader", "startup"],
     rootCause: "ts-node runs the TypeScript app but breaks against newer TypeScript versions and is fragile in ESM",
   },
+  "native-build": {
+    sample: "npm install failed — the native module better-sqlite3 has no prebuilt binary for this Node and node-gyp cannot find Visual Studio to compile it (gyp ERR! find VS).",
+    title: "Native module fails to build (stale version, no prebuild for this Node)",
+    keywords: ["native", "node-gyp", "prebuild", "build", "visual", "studio", "gyp", "install"],
+    rootCause: "a native dependency is pinned to a stale major with no prebuilt binary for the running Node, forcing a source compile that fails with no C++ toolchain",
+  },
   "sqlite-dir": {
     sample: "TypeError: Cannot open database because the directory does not exist — better-sqlite3 opened a DB in a folder that was never created.",
     title: "Database opened in a directory that does not exist",

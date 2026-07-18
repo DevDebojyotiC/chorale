@@ -82,6 +82,12 @@ export const DIAGNOSES: Diagnosis[] = [
       "The app runs TypeScript through ts-node (or a plain-node entry that imports .ts with no loader). ts-node breaks against newer TypeScript versions and is fragile in ESM. Use tsx instead: add tsx as a devDependency and set the start script to `tsx <entry>` (e.g. \"start\": \"tsx index.js\"); remove any `require('ts-node').register(...)` call. tsx uses esbuild and does not depend on the installed TypeScript version.",
   },
   {
+    key: "native-build",
+    test: /node-gyp|prebuild-install|gyp ERR|find VS|MSB\d|node_pre_gyp|Visual Studio/i,
+    hint:
+      "A native module failed to build — no prebuilt binary matches the running Node and there is no C++ toolchain. This is usually a STALE native dependency pinned to a major that predates your Node. In package.json, bump it to a current major that ships a prebuild for your Node (e.g. better-sqlite3 to ^12); or switch to a pure-JS / built-in alternative such as Node's built-in node:sqlite, which needs no compilation. Do NOT try to add a compiler.",
+  },
+  {
     key: "sqlite-dir",
     test: /Cannot open database because the directory does not exist|SQLITE_CANTOPEN|unable to open database file/i,
     hint:

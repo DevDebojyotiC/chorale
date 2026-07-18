@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import http from "node:http";
-import { detectServerEntry, pickProbes, classifyProbes, smokeRunFeedback, ensureServerDeps, npmError, type Probe } from "../src/core/smoke-run";
+import { detectServerEntry, pickProbes, classifyProbes, smokeRunFeedback, ensureServerDeps, npmError, classifyInstallError, type Probe } from "../src/core/smoke-run";
 import type { SourceFile } from "../src/core/contract";
 
 describe("Phase 4 — dynamic boot gate (fullstack frontier)", () => {
@@ -88,6 +88,26 @@ describe("Phase 4 — dynamic boot gate (fullstack frontier)", () => {
     expect(e).toMatch(/No matching version found for bcryptjs@\^2\.4\.10/); // names the actual bad dep
     expect(e).not.toMatch(/complete log/i); // boilerplate dropped
     expect(e).not.toMatch(/npm error/); // prefix stripped
+  });
+
+  it("classifies a native-build failure and names the module (the real OpsHub gyp error)", () => {
+    // Verbatim from the OpsHub run: better-sqlite3@^9 has no Node-22 prebuild → node-gyp → no VS.
+    const stderr = [
+      "npm error code 1",
+      "npm error path D:\\projects\\agents\\swarm\\experiments\\opshub\\node_modules\\better-sqlite3",
+      "npm error command failed",
+      "npm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c prebuild-install || node-gyp rebuild --release",
+      "npm error gyp ERR! find VS could not use PowerShell to find Visual Studio 2017 or newer",
+    ].join("\n");
+    const c = classifyInstallError(stderr);
+    expect(c.kind).toBe("native-build");
+    expect(c.failedModule).toBe("better-sqlite3"); // named, so the repair can bump exactly this dep
+    expect(c.detail).toMatch(/no prebuilt binary/i);
+  });
+
+  it("classifies a resolution failure vs a plain/other failure", () => {
+    expect(classifyInstallError("npm error code ETARGET\nnpm error notarget No matching version found for bcryptjs@^2.4.10.").kind).toBe("resolution");
+    expect(classifyInstallError("npm error network ECONNRESET").kind).toBe("other");
   });
 
   it("smokeRunFeedback turns issues into a fix instruction", () => {
