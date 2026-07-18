@@ -684,7 +684,8 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
             const dep = ensureServerDeps(cwd, bootFiles);
             if (!dep.installed && dep.reason !== "already installed") {
               if (dep.kind === "resolution") return [`npm install failed for the backend — npm cannot resolve a dependency: ${dep.reason}. Fix package.json so every dependency and version is a real, published package on npm (remove or correct any invented versions) so it installs cleanly.`];
-              return []; // timeout / toolchain / nothing to install — can't boot, but not a bug to repair
+              if (dep.kind === "native-build") return [`npm install failed for the backend — ${dep.reason}. This is almost always a STALE native dependency whose version predates the running Node: in package.json bump ${dep.failedModule ? `"${dep.failedModule.replace(/@[\d^~].*$/, "")}"` : "the native module"} to a current major that ships a prebuilt binary for Node ${process.versions.node} (e.g. better-sqlite3 to ^12), or switch to a pure-JS / built-in alternative (Node's built-in node:sqlite needs no build). Do not add a C++ toolchain.`];
+              return []; // timeout / other — can't boot, but not a code bug to repair
             }
           }
           return (await smokeRun(cwd, bootFiles)).map((i) => i.message);
