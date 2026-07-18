@@ -2,7 +2,7 @@
 
 A snapshot of what exists and works right now. Refreshed at the completion of every phase, before shipping.
 
-> **Version:** 0.2.0 (Phase 3 shipped) · **Phase:** 4 in progress (Core Agents) · **Tests:** 141 passing · **Last updated:** Phase 4 Task 2 (scribe / files-docs agent landed).
+> **Version:** 0.2.0 (Phase 3 shipped) · **Phase:** 4 in progress (Core Agents) · **Tests:** 359 passing · **Last updated:** Phase 4 — Tasks 1–4 + escalate-last + contract-first build system + free-GLM providers (Z.ai + Puter) landed; Task 5 (Productivity) remaining.
 
 ## Status at a glance
 - **Runtime:** model-agnostic, production coder pipeline (salvage + verify + self-heal + diagnose-and-compensate + a **reviewer review-gate**), fallback chain with per-request timeout + retry/backoff.
@@ -20,6 +20,8 @@ A snapshot of what exists and works right now. Refreshed at the completion of ev
 | Not worth the premium here | GLM-5.2, Kimi-K2.6, DeepSeek-V4-Pro, MiniMax-M3 | Same scores as the escalation pick at 3–20× the cost. |
 
 Full evidence: [`model-evaluation-report.md`](model-evaluation-report.md), [`engineering-benchmark-report.md`](engineering-benchmark-report.md), [`RAMP-LEADERBOARD` (eval)](../eval/RAMP-LEADERBOARD.md).
+
+> **Current Phase-4 default (post free-GLM integration):** `fireworks:…/gpt-oss-120b` (reliable) with `puter:z-ai/glm-4.6` as an **opportunistic free fallback** → `zai:glm-4.5-flash` → `ollama:qwen3:4b`. gemma is retired (no HF key → it fell back to paid anyway). Free GLM is capable but Puter's free tier is a **25M-unit monthly allowance ≈ 1 build/month**; `glm-4.5-flash` alone is too weak for the planner. See [`PHASE-4.md`](PHASE-4.md) §4e.
 
 ## What works (verified)
 - Fallback chain, salvage, verify-repair, self-heal, diagnose-and-compensate (unit + live tested).

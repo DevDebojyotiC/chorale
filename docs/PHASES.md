@@ -3,7 +3,7 @@
 The big and small features, decisions, fixes, and findings per phase — the durable project history.
 Updated at the completion of every phase, before shipping. Per-commit detail lives in [`COMMIT-LOG.md`](COMMIT-LOG.md).
 
-> **Last updated:** Phase 4 in progress (reviewer + scribe agents landed; planner/gate framework underway; post-v0.2.0).
+> **Last updated:** Phase 4 in progress — Tasks 1–4 (reviewer, scribe, planner/gates, test-writer) + the escalate-last system + the **contract-first** build system + **free-GLM model providers** (Z.ai + Puter) landed; **Task 5 (Productivity) remaining**. 359 tests. Post-v0.2.0.
 
 > **Detailed per-phase write-ups** (verbose — concepts + the decisions behind them, and *why*):
 > [`PHASE-0-1.md`](PHASE-0-1.md) · [`PHASE-2.md`](PHASE-2.md) · [`PHASE-3.md`](PHASE-3.md) · [`PHASE-4.md`](PHASE-4.md).

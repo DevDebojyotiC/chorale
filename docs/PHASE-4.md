@@ -1,6 +1,6 @@
 # Phase 4 — Core Agents
 
-> **Status:** in progress (Tasks 1–4 + the escalate-last system + the contract-first system shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 351 passing · **Last updated:** 2026-07-18
+> **Status:** in progress (Tasks 1–4 + the escalate-last system + the contract-first system + free-GLM model providers shipped; Task 5 remaining) · **Branch:** `phase-4` · **Tests:** 359 passing · **Last updated:** 2026-07-18
 >
 > This is a **living document**. It records what Phase 4 set out to do, everything built so far,
 > and — most importantly — *why* each decision was made. It will be revised and finalized when
@@ -669,20 +669,69 @@ base-only probe missed.*
 
 ---
 
+## 4e. Free GLM model providers — replacing gemma ✅
+
+### 4e.1 Why
+The default heavy tier was `hf:google/gemma-4-31B-it`, but with no HF token configured it silently fell
+back to the paid `gpt-oss-120B` on every call. The goal: a genuinely **free**, capable default. Two
+routes to free GLM (Zhipu/Z.ai's models) were added; both slot into the model registry.
+
+### 4e.2 Z.ai direct — pure config (`zai` provider)
+Z.ai's own API is OpenAI-compatible, so it needs **no code** — a provider on the existing
+`openai-compatible` path. The live-verified base URL is **`https://api.z.ai/api/paas/v4`** (the
+documented `/api/openai/v1` 404s for a standard key). Free models: `glm-4.5-flash` / `glm-4.7-flash`.
+
+### 4e.3 Puter — a custom shim (`puter` provider, `src/core/puter-provider.ts`)
+Puter fronts the *whole* GLM lineup for free, but exposes AI **only** through the `puter.ai.chat` JS
+function (no REST endpoint). Since that call is itself OpenAI-Chat-shaped (messages+roles, `tools`,
+`tool_calls`), the provider reuses the openai-compatible model with a **custom `fetch`** that routes
+`/chat/completions` through `puter.ai.chat` and re-wraps the reply in the OpenAI envelope — no bespoke
+AI-SDK model. Two real Node bugs were found and fixed live: puter.js opens a realtime **WebSocket that
+crashes on close in undici** ("Maximum call stack size exceeded") → a tightly-scoped, lazy guard swallows
+only that noise; and puter rejects with a **plain object** (not an `Error`) → surface `.message`/`.code`
+so failures like `insufficient_funds` are legible. Auth is a browser-login token (`getAuthToken()`).
+
+### 4e.4 Live validation
+Text **and multi-step tool calling** (chorale's critical path) verified through the real SDK → shim on
+`zai:glm-4.5-flash`, `puter:z-ai/glm-4.6`, and `puter:z-ai/glm-5.2`. Working Puter GLM IDs: glm-4.6,
+glm-5.2, glm-5.1, glm-4.5-air, deepseek-chat; **glm-4.7 and glm-5 error out**.
+
+### 4e.5 What the live builds taught us (honest limits)
+- **`glm-4.5-flash` is too weak for the structured planner** — it emitted an unrepairable **cyclic
+  plan**, so the whole contract-first pipeline was bypassed and the build collapsed to one direct
+  delegation that produced an empty shell (config + test stubs, no server).
+- **`glm-4.6` is a capable workhorse** — a valid 9-step plan, 8/9 steps, a real full-structure app
+  (backend + auth + JWT + DB + frontend + tests + docs); the contract-first skeleton fired (added `.env`
+  + a dep). But it **did not finish booting** because of the next point.
+- **Puter's "free unlimited" is a 25M-unit MONTHLY allowance** (`GET /metering/usage` →
+  `allowanceInfo`). **One glm-4.6 build consumed ~24.7M (~99%)** — i.e. **≈ one build per month**, and it
+  exhausted mid-repair (`insufficient_funds`), which is why the build never reached a clean boot.
+
+### 4e.6 Decision (the current default)
+Free-and-capable-and-sustained isn't available, so the chain leads with reliability and keeps GLM as an
+opportunistic free fallback (usable again after Puter's monthly reset):
+**`fireworks:gpt-oss-120b` (default) → `puter:z-ai/glm-4.6` → `zai:glm-4.5-flash` → `ollama:qwen3:4b`**,
+across all seven agents. Fireworks-primary also means normal calls never waste a failed Puter attempt.
+See the memory note *puter-free-tier* for the economics.
+
+---
+
 ## 5. Current state at a glance
 
 | Item | State |
 |------|-------|
 | Branch | `phase-4` |
-| Tests | **351 passing**, typecheck clean, `npm audit` 0 vulnerabilities |
+| Tests | **359 passing**, typecheck clean, `npm audit` 0 vulnerabilities |
 | Task 1 — Reviewer | ✅ shipped (5 suites green, 3 production modes) |
 | Task 2 — Scribe | ✅ shipped (22 capability checks green, multi-format I/O, 3 design tiers, 10 profiles, 3 permanent doc rules, `check_length`) |
 | Task 3 — Planner/Gates | ✅ shipped — planner agent + `plan.ts` (validate-repair), generalized gates (ancestor-exclusion loop guard, on-demand + auto), benchmark, plan-first wiring |
 | Task 4 — Test-writer | ✅ shipped — writes+runs tests, mutation-graded |
 | Fullstack levers | ✅ #1 plan-exec · #2 shared contract · #3 runnability gate · #5 escalation (opt-in `CHORALE_PLAN_EXEC`) |
 | Escalate-last system | ✅ shipped — Playbook (intelligent trust + per-model capability), repair ladder (recall → research → escalate, write-back), 18 seeded fixes, tiered foundational repair, no-op-write guard, dynamic boot gate w/ dep install, `unrunnable-entry` + `missing-endpoint` checks, `chorale playbook` |
-| Task 5 — Productivity | ⏳ not started |
-| Default model | `hf:google/gemma-4-31B-it` (≈$0) · escalation `fireworks:…/gpt-oss-120b` |
+| Contract-first (§4d) | ✅ shipped — up-front interface contract, deterministic skeleton + start-script repair, per-step drift check, real-runner boot + full-contract probe (`CHORALE_NO_CONTRACT` A/B switch) |
+| Free-GLM providers (§4e) | ✅ shipped — `zai` (OpenAI-compatible) + `puter` (custom shim over `puter.ai.chat`); text + tool calling live-verified; Puter free = ~1 build/month |
+| Task 5 — Productivity | ⏳ not started — email / calendar / notes via MCP (the Claude-Desktop-replacement pillar) |
+| Default model | `fireworks:…/gpt-oss-120b` (reliable) · fallback `puter:z-ai/glm-4.6` (free, ~1 build/mo) → `zai:glm-4.5-flash` → `ollama:qwen3:4b` |
 
 ### Key modules touched this phase
 - `agents/*.md` — reviewer/scribe/planner/test-writer personas + examples; `gates` allow-lists.
@@ -698,9 +747,18 @@ base-only probe missed.*
 - `src/core/repair.ts` — the repair ladder (recall → research → escalate), capability shortcuts,
   no-op-write guard, verified write-back.
 - `src/core/smoke-run.ts` — dynamic boot gate; `ensureServerDeps` (install + failure classification),
-  `npmError`.
+  `npmError`; contract-first: `bootLaunch` (real tsx/ts-node/node runner), full-contract probing,
+  `containerInstallArgs`/`dockerAvailable` (opt-in toolchain container).
+- `src/core/design-contract.ts` — the up-front interface contract (§4d): `DesignContract`, formatting,
+  and `contractDrift`/`driftDirective` (per-step drift check).
+- `src/core/skeleton.ts` / `dependency-registry.ts` — deterministic skeleton (§4d): `planSkeleton`
+  (package.json + .env reconciliation) and `repairStartScripts`; curated version ranges.
+- `src/core/puter-provider.ts` — free-GLM Puter provider (§4e): OpenAI-envelope shim over
+  `puter.ai.chat`, WebSocket-crash guard, legible error surfacing.
+- `src/core/model-registry.ts` / `config.ts` — `puter` provider type; `zai` + `puter` providers.
 - `src/core/runtime.ts` — `runGate`, gates, `RunResult.{unmetGates,plan}`, plan-exec + #2/#3/#5 wiring,
-  tiered runnability repair + boot gate wired to the ladder.
+  tiered runnability repair + boot gate wired to the ladder; contract-first threading + deterministic
+  pre-passes; `CHORALE_NO_CONTRACT` A/B switch.
 - `src/index.ts` — `chorale playbook` (fix trust + per-model capability view).
 - `src/tools/gate-tool.ts` / `plan-tool.ts` — the `gate()` and `plan` tools.
 - `src/tools/documents.ts` — `read_doc`/`write_doc`/`write_sheet`/`convert`/`check_length`.
