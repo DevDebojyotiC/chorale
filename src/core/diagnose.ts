@@ -82,6 +82,12 @@ export const DIAGNOSES: Diagnosis[] = [
       "The app runs TypeScript through ts-node (or a plain-node entry that imports .ts with no loader). ts-node breaks against newer TypeScript versions and is fragile in ESM. Use tsx instead: add tsx as a devDependency and set the start script to `tsx <entry>` (e.g. \"start\": \"tsx index.js\"); remove any `require('ts-node').register(...)` call. tsx uses esbuild and does not depend on the installed TypeScript version.",
   },
   {
+    key: "undeclared-package",
+    test: /Cannot find package ['"][^'"]+['"]|ERR_MODULE_NOT_FOUND[\s\S]*?imported from/i,
+    hint:
+      "A package is imported but not installed — it is missing from package.json, so npm install never fetched it. Add it to \"dependencies\" (or \"devDependencies\" if only tests/build use it) with a valid version range, then reinstall. Do NOT delete the import; the code needs the package.",
+  },
+  {
     key: "native-build",
     test: /node-gyp|prebuild-install|gyp ERR|find VS|MSB\d|node_pre_gyp|Visual Studio/i,
     hint:

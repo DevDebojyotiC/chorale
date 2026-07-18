@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, missingEndpointDirective, unrunnableEntryDirective, unexposedFeatureDirective, planWireUp, scaffoldRoutes, directiveFor, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
+import { checkRunnable, runnableFeedback, tiersOf, foundationalDirective, contractDirective, missingImportDirective, missingEndpointDirective, unrunnableEntryDirective, unexposedFeatureDirective, missingDependencyDirective, planWireUp, scaffoldRoutes, directiveFor, findStubEntry, RUNNABLE_TIER, type RunnableIssue } from "../src/core/runnable";
 import type { SourceFile as SF } from "../src/core/contract";
 
 /** Apply planWireUp edits back onto a file set (what the repair loop does on disk). */
@@ -453,6 +453,73 @@ describe("Phase 4 — unexposed features (build completeness, the BookIt gap)", 
     const { text, note } = directiveFor([issue], [issue], files);
     expect(note).toMatch(/expose the implemented features/i);
     expect(text).toMatch(/dead code/i);
+  });
+});
+
+describe("Phase 4 — missing npm dependency (imported but not in package.json)", () => {
+  const mkPkg = (deps: Record<string, string> = {}, extra: object = {}) => JSON.stringify({ dependencies: deps, ...extra });
+
+  it("flags a package imported but declared in no package.json (the OpsHub ws/jwt boot crash)", () => {
+    const files: SourceFile[] = [
+      { path: "backend/package.json", content: mkPkg({ express: "^4" }) }, // jsonwebtoken + ws NOT declared
+      { path: "backend/src/index.ts", content: "import express from 'express'; import jwt from 'jsonwebtoken'; import { WebSocketServer } from 'ws'; const app = express(); app.listen(process.env.PORT);" },
+    ];
+    const md = checkRunnable(files, pathsOf(files)).find((i) => i.kind === "missing-dependency");
+    expect(md?.message).toMatch(/jsonwebtoken/);
+    expect(md?.message).toMatch(/\bws\b/);
+    expect(md?.message).not.toMatch(/express/); // declared → not flagged
+    expect(missingDependencyDirective(files, pathsOf(files))).toMatch(/do NOT remove the imports/i);
+  });
+
+  it("does NOT flag Node builtins (bare or node:), including node:sqlite", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: mkPkg({ express: "^4" }) },
+      { path: "server.js", content: "import fs from 'fs'; import path from 'node:path'; import { DatabaseSync } from 'node:sqlite'; import { readFile } from 'fs/promises'; import express from 'express'; const app=express(); app.listen(process.env.PORT);" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "missing-dependency")).toBe(false);
+  });
+
+  it("does NOT flag tsconfig path aliases (@/…), ~/…, or #imports", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: mkPkg({ express: "^4" }) },
+      { path: "tsconfig.json", content: '{ "compilerOptions": { "baseUrl": ".", "paths": { "@app/*": ["src/*"], "@config": ["src/config.ts"] } } } // trailing comment' },
+      { path: "src/index.ts", content: "import express from 'express'; import { x } from '@app/util'; import cfg from '@config'; import y from '~/lib/y'; import z from '#internal/z'; const app=express(); app.listen(process.env.PORT);" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "missing-dependency")).toBe(false);
+  });
+
+  it("does NOT flag a bare specifier that resolves to a local file (baseUrl), or a workspace/self name", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: mkPkg({ express: "^4" }, { name: "myapp", workspaces: ["pkgs/*"] }) },
+      { path: "pkgs/shared/package.json", content: mkPkg({}, { name: "@myapp/shared" }) },
+      { path: "src/index.ts", content: "import express from 'express'; import { helper } from 'utils/helper'; import { s } from '@myapp/shared'; const app=express(); app.listen(process.env.PORT);" },
+      { path: "src/utils/helper.ts", content: "export const helper = 1;" }, // 'utils/helper' resolves here via baseUrl
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "missing-dependency")).toBe(false);
+  });
+
+  it("is lenient across a monorepo — a package declared at the ROOT is fine for a workspace", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: mkPkg({ zod: "^3" }, { workspaces: ["backend"] }) }, // zod at root
+      { path: "backend/package.json", content: mkPkg({ express: "^4" }) }, // backend doesn't redeclare zod
+      { path: "backend/src/index.ts", content: "import express from 'express'; import { z } from 'zod'; const app=express(); app.listen(process.env.PORT);" },
+    ];
+    expect(checkRunnable(files, pathsOf(files)).some((i) => i.kind === "missing-dependency")).toBe(false);
+  });
+
+  it("does NOT flag a type-only import, and maps a scoped subpath to its package", () => {
+    const files: SourceFile[] = [
+      { path: "package.json", content: mkPkg({ express: "^4", "@scope/ui": "^1" }) },
+      { path: "src/index.ts", content: "import express from 'express'; import type { Foo } from 'some-types-only-pkg'; import { Button } from '@scope/ui/button'; const app=express(); app.listen(process.env.PORT);" },
+    ];
+    const md = checkRunnable(files, pathsOf(files)).filter((i) => i.kind === "missing-dependency");
+    expect(md).toHaveLength(0); // type-only import ignored; @scope/ui/button → @scope/ui (declared)
+  });
+
+  it("routes through directiveFor at tier 1", () => {
+    expect(RUNNABLE_TIER["missing-dependency"]).toBe(1);
+    const issue: RunnableIssue = { kind: "missing-dependency", where: ".", message: "m" };
+    expect(directiveFor([issue], [issue], [{ path: "package.json", content: "{}" }]).note).toMatch(/declare the imported packages/i);
   });
 });
 

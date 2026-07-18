@@ -10,10 +10,14 @@
  * .env, and any local import that resolves to nothing (incoherence). Pure/testable — no execution.
  */
 
+import { builtinModules } from "node:module";
 import { extractContract, type SourceFile } from "./contract.js";
 
+/** Node's built-in modules (fs, path, crypto, node:sqlite, …) — never npm dependencies. */
+const NODE_BUILTINS = new Set(builtinModules);
+
 export interface RunnableIssue {
-  kind: "no-entry" | "broken-start" | "unrunnable-entry" | "missing-import" | "missing-env" | "unmounted-routes" | "unexposed-feature" | "frontend-backend-mismatch" | "missing-endpoint";
+  kind: "no-entry" | "broken-start" | "unrunnable-entry" | "missing-import" | "missing-dependency" | "missing-env" | "unmounted-routes" | "unexposed-feature" | "frontend-backend-mismatch" | "missing-endpoint";
   where?: string;
   message: string;
 }
@@ -150,6 +154,99 @@ export function contractDirective(files: SourceFile[]): string {
 
 const norm = (p: string): string => p.replace(/\\/g, "/");
 const dirOf = (p: string): string => norm(p).split("/").slice(0, -1).join("/");
+
+// ── missing npm dependencies (imported but not in package.json) ────────────────
+
+/** The npm package a bare import specifier belongs to, or null if it's not a package (relative,
+ *  builtin, `node:`, or a path alias like `@/x` / `~/x` / `#x`). Scoped + subpaths handled. */
+function packageOf(spec: string): string | null {
+  if (/^[./]/.test(spec) || spec.startsWith("node:") || /^(@\/|~|#)/.test(spec)) return null;
+  const pkg = spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0]!;
+  if (!/^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i.test(pkg)) return null; // not a valid package name (e.g. an alias)
+  return NODE_BUILTINS.has(pkg) ? null : pkg;
+}
+
+/** Bare (non-relative) import specifiers in a file — value imports only (type-only imports are erased). */
+function bareSpecs(content: string): string[] {
+  const src = content.replace(/^[ \t]*\/\/.*$/gm, "");
+  const out: string[] = [];
+  for (const m of src.matchAll(/\bimport\s+(?!type\b)[^;'"]*?\bfrom\s*['"]([^'"]+)['"]/g)) out.push(m[1]!);
+  for (const m of src.matchAll(/\bimport\s*['"]([^'"]+)['"]/g)) out.push(m[1]!); // side-effect import
+  for (const m of src.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) out.push(m[1]!);
+  for (const m of src.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]/g)) out.push(m[1]!); // dynamic import
+  return out;
+}
+
+/** Every package name declared anywhere in the project (any package.json's deps + its own name). */
+function declaredPackages(files: SourceFile[]): Set<string> {
+  const s = new Set<string>();
+  for (const f of files.filter((x) => norm(x.path).endsWith("package.json"))) {
+    try {
+      const p = JSON.parse(f.content) as Record<string, unknown> & { name?: string };
+      for (const field of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) for (const k of Object.keys((p[field] as object) ?? {})) s.add(k);
+      if (p.name) s.add(p.name); // a workspace/self package name resolves without being a dependency
+    } catch {
+      /* malformed package.json — a different problem */
+    }
+  }
+  return s;
+}
+
+/** Path-alias prefixes from tsconfig/jsconfig `compilerOptions.paths` — imports through them aren't packages. */
+function aliasPrefixes(files: SourceFile[]): Set<string> {
+  const s = new Set<string>();
+  for (const f of files.filter((x) => /(^|\/)(t|j)sconfig(\.\w+)?\.json$/.test(norm(x.path)))) {
+    try {
+      const stripped = f.content.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/,(\s*[}\]])/g, "$1");
+      const paths = (JSON.parse(stripped) as { compilerOptions?: { paths?: Record<string, unknown> } }).compilerOptions?.paths ?? {};
+      for (const key of Object.keys(paths)) s.add(key.replace(/\/?\*+$/, ""));
+    } catch {
+      /* best-effort */
+    }
+  }
+  return s;
+}
+
+/**
+ * Imported npm packages that are declared in NO package.json (the OpsHub boot failure: `jsonwebtoken`
+ * and `zod` were imported but never added to package.json, so `npm install` never fetched them and the
+ * app died on load with ERR_MODULE_NOT_FOUND). The npm-package analog of `missing-import`. Deliberately
+ * LENIENT — a package declared anywhere counts (so monorepo hoisting never false-flags) — and guarded
+ * against builtins, `node:`, path aliases (tsconfig paths / @|~|#), and bare specifiers that actually
+ * resolve to a local project file (baseUrl).
+ */
+function checkMissingDeps(files: SourceFile[], allPaths: Set<string>): RunnableIssue[] {
+  if (!files.some((f) => norm(f.path).endsWith("package.json"))) return []; // no manifest to declare against
+  const declared = declaredPackages(files);
+  const aliases = aliasPrefixes(files);
+  const isAlias = (spec: string): boolean => [...aliases].some((a) => a && (spec === a || spec.startsWith(a + "/") || spec.startsWith(a)));
+  const resolvesLocal = (spec: string): boolean => RESOLVE_SUFFIXES.some((s) => allPaths.has(spec + s) || [...allPaths].some((p) => norm(p).endsWith("/" + spec + s)));
+
+  const missing = new Map<string, string>(); // package → first importing file
+  for (const f of files.filter((x) => isCode(x.path) && !STATIC_FRONTEND_RE.test("/" + norm(x.path)))) {
+    for (const spec of bareSpecs(f.content)) {
+      if (isAlias(spec) || resolvesLocal(spec)) continue;
+      const pkg = packageOf(spec);
+      if (pkg && !declared.has(pkg) && !missing.has(pkg)) missing.set(pkg, f.path);
+    }
+  }
+  if (missing.size === 0) return [];
+  const list = [...missing].slice(0, 8).map(([p, f]) => `${p} (imported in ${f})`).join(", ");
+  return [
+    {
+      kind: "missing-dependency",
+      where: ".",
+      message: `these packages are imported but declared in no package.json — npm install will not fetch them, so the app crashes at load with "Cannot find package": ${list}. Add each to the "dependencies" of the package.json for the unit that imports it (or "devDependencies" if only tests/config use it), with a valid published version range.`,
+    },
+  ];
+}
+
+/** Directive for undeclared npm dependencies — add them to package.json, don't delete the imports. */
+export function missingDependencyDirective(files: SourceFile[], allPaths: Set<string>): string {
+  const issues = checkMissingDeps(files, allPaths);
+  if (issues.length === 0) return "";
+  return issues[0]!.message + " The code genuinely needs these packages — declare them and let npm install fetch them; do NOT remove the imports. Pin native modules (better-sqlite3, bcrypt, sharp) to a current major so a prebuilt binary exists for the target Node.";
+}
 
 /** Is `name` (e.g. ".env") present in `dir` or any ancestor directory up to the project root? */
 function envInDirOrAncestors(dir: string, allPaths: Set<string>, name: string): boolean {
@@ -350,6 +447,9 @@ export function checkRunnable(files: SourceFile[], allPaths: Set<string>): Runna
     }
   }
 
+  // imported npm packages that no package.json declares → npm install won't fetch them → crash at load
+  issues.push(...checkMissingDeps(files, allPaths));
+
   // build completeness: implemented feature layers (repos/services/controllers) the API never serves
   issues.push(...checkUnexposedFeatures(files, allPaths));
 
@@ -372,6 +472,7 @@ export const RUNNABLE_TIER: Record<RunnableIssue["kind"], number> = {
   "broken-start": 0,
   "unrunnable-entry": 0, // the start command cannot execute its own entry — nothing else matters
   "missing-import": 1,
+  "missing-dependency": 1, // imported npm package absent from package.json — crashes at load
   "missing-env": 1,
   "unmounted-routes": 2,
   "unexposed-feature": 2, // same family as unmounted-routes: implemented code the API never serves
@@ -701,6 +802,7 @@ export function directiveFor(tier: RunnableIssue[], allIssues: RunnableIssue[], 
   const has = (k: RunnableIssue["kind"]): boolean => tier.some((i) => i.kind === k);
   if (has("no-entry") || has("broken-start")) return { text: foundationalDirective(allIssues, files), note: " (create the server entry that mounts every router)" };
   if (has("unrunnable-entry")) return { text: unrunnableEntryDirective(tier), note: " (make the start command able to run its own entry)" };
+  if (has("missing-dependency")) return { text: missingDependencyDirective(files, new Set(files.map((f) => f.path.replace(/\\/g, "/")))), note: " (declare the imported packages in package.json)" };
   if (has("missing-import")) return { text: missingImportDirective(tier, files), note: " (point each dangling import at the real file or create it)" };
   if (has("unexposed-feature")) return { text: unexposedFeatureDirective(files), note: " (expose the implemented features through mounted routes)" };
   if (has("frontend-backend-mismatch")) return { text: contractDirective(files), note: " (align the frontend API client to the backend's real routes)" };

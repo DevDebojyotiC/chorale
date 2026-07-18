@@ -570,6 +570,24 @@ modular routers and the build reaches **0 runnability issues**. (The boot gate c
 reported that as *inconclusive*, not a repairable bug, exactly as intended.) Each stress build has found
 exactly one-or-two new failure classes, every one a real defect turned into a check + a test.
 
+**Two more, from actually trying to boot OpsHub past the native wall.** (1) The boot gate's install
+failure was a **stale native module** — `better-sqlite3@^9` has no prebuilt binary for Node 22, so
+`node-gyp` tried to compile it and failed for want of a C++ toolchain (`gyp ERR! find VS`). That is not
+an environment wall: bumping to `^12` installs a prebuild in seconds, no compiler. So it's now a
+*repairable* class — `classifyInstallError` recognizes the `native-build` signature, **names the
+module**, and the ladder is told to bump it to a current major (or switch to build-free `node:sqlite`),
+never to add a toolchain. (2) With deps installing, the boot revealed `jsonwebtoken`, `zod`, and `ws`
+were **imported but declared in no `package.json`** — so `npm install` never fetched them and the app
+died on load. This is the npm-package analog of `missing-import`, now its own check:
+**`missing-dependency`** collects every bare import, drops Node builtins (`node:`-prefixed and the real
+`builtinModules` set), path aliases (`@/`, `~/`, `#`, and tsconfig `paths`), and specifiers that
+resolve to a local file (baseUrl), then flags any package **no** `package.json` declares (lenient, so
+monorepo hoisting never false-flags). Run over the five builds it found real misses in three
+(`cors`/`helmet`/`express-rate-limit`/`@jest/globals`; `ws` in both real-time apps — the very reason
+their WebSockets couldn't work) and **zero false positives** on the two that were clean. Both classes
+carry a diagnose entry + seed so the boot ladder recalls them, and the coder persona now pins native
+modules to a current major.
+
 **Honest limits.** A *fully working* app from one cheap-model run remains out of reach, and the frontier
 keeps *moving* — every fix reveals the next class, and each of these checks is a heuristic that can only
 see what it models (nothing here verifies business logic, auth correctness, or data integrity). What is

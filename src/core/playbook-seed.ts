@@ -83,6 +83,12 @@ const SEED_META: Record<string, SeedMeta> = {
     keywords: ["ts-node", "typescript", "register", "fileexists", "loader", "startup"],
     rootCause: "ts-node runs the TypeScript app but breaks against newer TypeScript versions and is fragile in ESM",
   },
+  "undeclared-package": {
+    sample: "Cannot find package 'jsonwebtoken' imported from src/app.ts — ERR_MODULE_NOT_FOUND: the package is used in code but not listed in package.json.",
+    title: "Package imported but not declared in package.json",
+    keywords: ["cannot", "find", "package", "imported", "err_module_not_found", "dependency", "install"],
+    rootCause: "code imports an npm package that no package.json declares, so npm install never fetched it and it fails to resolve at load",
+  },
   "native-build": {
     sample: "npm install failed — the native module better-sqlite3 has no prebuilt binary for this Node and node-gyp cannot find Visual Studio to compile it (gyp ERR! find VS).",
     title: "Native module fails to build (stale version, no prebuild for this Node)",
