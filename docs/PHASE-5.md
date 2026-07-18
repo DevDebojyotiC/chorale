@@ -1,6 +1,6 @@
 # Phase 5 — Desktop UI
 
-> **Status:** in progress · **Branch:** `phase-5` · **Last updated:** 2026-07-18
+> **Status:** UI complete end-to-end (installer builds + runs) · **Branch:** `phase-5` · **Last updated:** 2026-07-19
 
 A native desktop GUI over the **UI-agnostic core** — the Claude-Desktop-replacement front end. The core
 already exposes exactly the seam a GUI needs, so the UI is a *delivery layer*, not a capability change.
@@ -25,26 +25,35 @@ already exposes exactly the seam a GUI needs, so the UI is a *delivery layer*, n
   `theme.css` (design tokens), `bridge.ts` (typed `window.chorale` + per-agent color map).
 - Native modules (`better-sqlite3`) are rebuilt for Electron's ABI via `@electron/rebuild`.
 
-## 3. Shipped so far
-- **Shell** — left nav (Chat / Agents / Config / Sessions + Observe stubs), top bar, theme toggle, keys.
-- **Chat** — agent picker (per-agent color), streaming replies via IPC, the **live activity rail** that
-  visualizes the pipeline (tool / verify / heal / fallback / lesson events), per-turn token readout;
-  **multi-turn history** threaded into every run, **New chat** control.
-- **Sessions** — browse saved conversations and **resume** one back into Chat.
-- **Persistence** — user/assistant messages + usage saved to the SQLite `SessionStore`; **best-effort**,
-  so if `better-sqlite3` didn't load the app still opens and chats (no persistence), mirroring how the
-  core guards its lesson store.
-- **Agents** — the roster from the real `agent.md` files (model, fallbacks, tools, tier, toggles).
-- **Config** — providers (status from resolved keys), agent→model routing, defaults, workspace.
+## 3. Shipped — the 7 completion steps (all done)
+1. **Verify & harden** — a mock bridge lets the renderer run in a plain browser for visual verification;
+   every screen verified live; UI-level **turn cancellation** (Stop button).
+2. **Workspace + first-run** — dev uses the repo cwd; packaged seeds a per-user workspace under userData
+   from the bundled defaults (`desktop/workspace.ts`, unit-tested).
+3. **Settings write-back** — editable, masked **provider keys** written to the workspace `.env` with a
+   live registry reload (status flips immediately).
+4. **Tool-permission approval** — a pluggable approver seam (`setApprover`) routes shell approvals to a
+   GUI **modal** instead of a (nonexistent) TTY; a per-turn **mode selector** (read-only/auto-edit/full-auto).
+5. **Agents editor** — click a card to edit its `agent.md` source; **New agent** from a template; saves
+   validate by loading, so a broken file surfaces an error instead of a broken agent.
+6. **Observe** — **Cost & usage** (per-model tokens + est. cost), **Playbook** (learned fixes), **Doctor**
+   (provider reachability).
+7. **Packaging** — `electron-builder` → **`Chorale-Setup-0.2.0.exe`** (NSIS installer). First-run seeding
+   and `better-sqlite3` (N-API, no rebuild) verified in the packaged app.
+
+Plus the foundation: shell/nav/theme, Chat (streaming + live activity rail + tokens + multi-turn history),
+Sessions (browse + resume), best-effort persistence.
 
 ## 4. Run it
 ```
-npm run ui:rebuild   # once — rebuilds better-sqlite3 for Electron's ABI (needs a C++ toolchain)
-npm run ui           # build main+preload+renderer, then launch the window
-npm run ui:dev       # dev mode: Vite HMR for the renderer + Electron
+npm run ui           # build + launch the window (dev)
+npm run ui:dev       # dev mode: Vite HMR + Electron
+npm run dist         # build the installer (release/Chorale-Setup-<version>.exe)
 ```
+Note: on Windows, if `dist` hits an `EPERM` renaming `win-unpacked` (Defender locking the fresh Electron
+extract), build to a temp dir: `npx electron-builder -c.directories.output=%TEMP%/chorale-rel`.
 
-## 5. Next (planned)
-`5d` Agents editor (edit the `agent.md` in-UI) · `5e` Config write-back (edit providers/routing → the same
-files the CLI reads) · `5f` Observe (Cost & usage charts, Playbook & Lessons, Doctor) · session titles ·
-`5g` packaging (`electron-builder`).
+## 5. Polish backlog (non-blocking)
+Custom app icon (ships with the default Electron icon today) · true backend run-cancellation (currently
+UI-level) · defaults editing in Config · session titles · cross-platform installer testing (mac/linux
+config present, built on Windows only).
