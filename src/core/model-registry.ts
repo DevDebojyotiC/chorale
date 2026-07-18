@@ -2,6 +2,7 @@ import { createProviderRegistry } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { ChoraleConfig } from "./config.js";
+import { puterFetch } from "./puter-provider.js";
 
 /** A "<provider>:<model>" reference, e.g. "ollama:llama3.2". */
 export type ModelRef = `${string}:${string}`;
@@ -45,6 +46,16 @@ export function buildRegistry(config: ChoraleConfig) {
       });
     } else if (p.api === "anthropic") {
       providers[name] = createAnthropic({ apiKey: p.apiKey, headers: p.headers });
+    } else if (p.api === "puter") {
+      // Reuse the openai-compatible model, but route every request through puter.ai.chat via a custom
+      // fetch. The base URL is a placeholder the shim never actually hits; apiKey is the Puter token.
+      providers[name] = createOpenAICompatible({
+        name,
+        baseURL: p.baseUrl ?? "https://api.puter.local/v1",
+        apiKey: p.apiKey ?? "puter",
+        headers: p.headers,
+        fetch: puterFetch(p.apiKey),
+      });
     }
   }
 

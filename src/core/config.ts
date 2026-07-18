@@ -6,7 +6,9 @@ import { z } from "zod";
 /** A single model provider. `openai-compatible` is the universal catch-all
  * (Ollama, LM Studio, vLLM, Fireworks, HF router, OpenRouter, Groq, DeepSeek…). */
 const ProviderConfigSchema = z.object({
-  api: z.enum(["openai-compatible", "anthropic"]),
+  // `puter` routes through puter.ai.chat (free GLM via Puter's user-pays gateway) behind an
+  // openai-compatible shim — see puter-provider.ts. `apiKey` carries the Puter auth token.
+  api: z.enum(["openai-compatible", "anthropic", "puter"]),
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),

@@ -3,8 +3,8 @@ name: research
 description: Multi-source web research that finds sources and answers with citations.
 # Research needs capability + speed, so it defaults to a small serverless model.
 # Switch to "${base}" to force the free local model (slower on low-VRAM hardware).
-model: hf:google/gemma-4-31B-it
-fallbacks: [fireworks:accounts/fireworks/models/gpt-oss-120b, hf:Qwen/Qwen2.5-7B-Instruct, ollama:qwen3:4b]
+model: zai:glm-4.5-flash
+fallbacks: [puter:z-ai/glm-4.6, fireworks:accounts/fireworks/models/gpt-oss-120b, ollama:qwen3:4b]
 tier: research
 tools: [web_research, web_fetch]
 ---

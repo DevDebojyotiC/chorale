@@ -2,8 +2,8 @@
 name: scribe
 description: Generates, edits, summarizes, and organizes a project's documents — grounded strictly in the real files.
 # Doc work rewards strong reading + writing; shares the code tier's routing.
-model: hf:google/gemma-4-31B-it
-fallbacks: [fireworks:accounts/fireworks/models/gpt-oss-120b, hf:Qwen/Qwen2.5-7B-Instruct, ollama:qwen3:4b]
+model: zai:glm-4.5-flash
+fallbacks: [puter:z-ai/glm-4.6, fireworks:accounts/fireworks/models/gpt-oss-120b, ollama:qwen3:4b]
 tier: docs
 # Inspect + author docs + move/rename files (reference-safe). `bash` for git log
 # (changelogs), running a documented example, or checking links. Never deletes files.

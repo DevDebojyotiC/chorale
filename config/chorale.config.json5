@@ -70,6 +70,21 @@
       baseUrl: "https://router.huggingface.co/v1",
       apiKey: "${HF_TOKEN}",
     },
+    // Z.ai (Zhipu) GLM — official OpenAI-compatible endpoint. GLM-4.5-Flash / GLM-4.7-Flash are free
+    // (rate-limited). Create a key at z.ai and put it in .env as ZAI_API_KEY.
+    // Models: zai:glm-4.5-flash (free), zai:glm-4.7-flash (free), zai:glm-4.6, zai:glm-5.1, …
+    zai: {
+      api: "openai-compatible",
+      baseUrl: "https://api.z.ai/api/openai/v1",
+      apiKey: "${ZAI_API_KEY}",
+    },
+    // Puter — free GLM via Puter's user-pays gateway (routed through puter.ai.chat, no REST endpoint).
+    // Create an API token at puter.com/dashboard and put it in .env as PUTER_AUTH_TOKEN.
+    // Models: puter:z-ai/glm-4.5, puter:z-ai/glm-4.6, puter:z-ai/glm-4.5-air, puter:z-ai/glm-5.2, …
+    puter: {
+      api: "puter",
+      apiKey: "${PUTER_AUTH_TOKEN}",
+    },
     // Offline smoke-test provider. Start `node scripts/mock-openai-server.mjs`,
     // then: `chorale --model mock:test-model "hello"`. No API key needed.
     mock: {
