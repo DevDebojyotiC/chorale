@@ -23,7 +23,8 @@ already exposes exactly the seam a GUI needs, so the UI is a *delivery layer*, n
   stream to the renderer over `run:msg`; the live activity rail renders those events.
 - **`desktop/renderer/`** — the React app: `App` (shell/nav/theme), `screens/{Chat,Agents,Config}`,
   `theme.css` (design tokens), `bridge.ts` (typed `window.chorale` + per-agent color map).
-- Native modules (`better-sqlite3`) are rebuilt for Electron's ABI via `@electron/rebuild`.
+- Storage is Node's built-in **`node:sqlite`** (via `src/core/sqlite.ts`) — no native module, so it runs
+  in Electron with no rebuild.
 
 ## 3. Shipped — the 7 completion steps (all done)
 1. **Verify & harden** — a mock bridge lets the renderer run in a plain browser for visual verification;
@@ -41,13 +42,13 @@ already exposes exactly the seam a GUI needs, so the UI is a *delivery layer*, n
 7. **Packaging** — `electron-builder` → **`Chorale-Setup-0.2.0.exe`** (NSIS installer). First-run seeding
    verified in the packaged app.
 
-**Persistence caveat (honest):** `better-sqlite3` is a native addon built for Node's ABI, not Electron's,
-and it needs a C++ compiler to rebuild (none on the build machine). So in both the dev and packaged app
-the SQLite store fails to load — the app **degrades gracefully**: chat (incl. multi-turn within a session,
-held in the renderer) works, but cross-session **persistence, the Sessions list, and store-backed Cost &
-usage are inactive**. The run loop's self-learn path is guarded the same way. Proper fix (planned):
-migrate the store to Node's built-in `node:sqlite` (no native module, ABI-agnostic — works in Node *and*
-Electron with no rebuild), or build the installer on a machine with a compiler.
+**Persistence — resolved (post-Phase-5).** The store was migrated from `better-sqlite3` (a native addon
+that couldn't load in Electron without a compiler-rebuild) to Node's built-in **`node:sqlite`** — no
+native module, ABI-agnostic — so persistence, the Sessions list, and store-backed Cost & usage work in
+dev **and** the packaged app with zero rebuild. `src/core/sqlite.ts` is a thin better-sqlite3-compatible
+shim; `better-sqlite3` / `@electron/rebuild` were removed entirely. The graceful-degradation guards
+(store probe at init; guarded self-learn) remain as a safety net. Verified: full SessionStore round-trip
+incl. close+reopen; the desktop app launches healthy and persists.
 
 Plus the foundation: shell/nav/theme, Chat (streaming + live activity rail + tokens + multi-turn history),
 Sessions (browse + resume), best-effort persistence.
