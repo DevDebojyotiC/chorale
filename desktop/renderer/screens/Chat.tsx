@@ -8,6 +8,16 @@ import { fuzzyScore } from "../components/CommandPalette";
 import { RemoteFolderPicker } from "../components/RemoteFolderPicker";
 import { DelegationTree, PlanCard } from "../components/Activity";
 
+/** A time-of-day greeting from the local clock. */
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 5) return "Burning the midnight oil";
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  if (h < 21) return "Good evening";
+  return "Winding down for the day";
+}
+
 function PaperclipIcon() {
   return (
     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
@@ -391,8 +401,11 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
           </div>
 
           {turns.length === 0 && !busy && (
-            <div className="body user">
-              Ask anything — the <b>orchestra</b> plans it out and delegates to the right specialists automatically. Want to steer one in particular? Type <b>/coder</b>, <b>/research</b>, … right in your message.
+            <div className="hello">
+              <div className="hello-h">{greeting()}. What are we building today?</div>
+              <div className="hello-sub">
+                Tell me what you need — I&apos;ll map out a plan and bring in the right specialists as we go. Working in a codebase? Point me at a folder. Want a particular agent on it? Just drop <b>/coder</b>, <b>/research</b>, or <b>/scribe</b> into your message.
+              </div>
             </div>
           )}
 
