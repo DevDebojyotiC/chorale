@@ -416,6 +416,14 @@ function registerIpc(): void {
     }
   });
 
+  ipcMain.on(IPC.winSetOverlay, (_e, color: string, symbolColor: string) => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setTitleBarOverlay({ color, symbolColor, height: 52 });
+    } catch {
+      /* platform without overlay support (e.g. macOS) — ignore */
+    }
+  });
+
   ipcMain.on(IPC.permissionResponse, (_e, id: string, approved: boolean) => {
     const resolve = pendingApprovals.get(id);
     if (resolve) {
@@ -465,6 +473,8 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     title: "Chorale",
+    titleBarStyle: "hidden", // frameless — the app renders its own blended top bar
+    titleBarOverlay: { color: "#0e1116", symbolColor: "#8b96a5", height: 52 }, // native min/max/close, blended
     webPreferences: {
       preload: resolve(__dirname, "preload.cjs"),
       contextIsolation: true,

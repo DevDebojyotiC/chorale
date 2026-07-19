@@ -246,6 +246,8 @@ export interface ChoraleBridge {
   loadSession: (id: string) => Promise<ChatTurn[]>;
   /** Start a streaming turn; returns a cancel function. */
   run: (req: RunInput, handlers: RunHandlers) => () => void;
+  /** Recolor the native window-controls overlay to match the current theme (no-op off Electron). */
+  setTitleBarOverlay: (color: string, symbolColor: string) => void;
   /** Subscribe to shell-approval requests; returns an unsubscribe. Respond with respondPermission. */
   onPermission: (cb: (req: PermissionReq) => void) => () => void;
   respondPermission: (id: string, approved: boolean) => void;
@@ -278,4 +280,5 @@ export const IPC = {
   runCancel: "run:cancel",
   permissionRequest: "permission:request",
   permissionResponse: "permission:response",
+  winSetOverlay: "win:set-overlay",
 } as const;

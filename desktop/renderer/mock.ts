@@ -201,4 +201,5 @@ export const mockBridge: ChoraleBridge = {
     };
   },
   respondPermission: (id, approved) => console.log("[mock] permission", id, approved ? "approved" : "denied"),
+  setTitleBarOverlay: () => {},
 };

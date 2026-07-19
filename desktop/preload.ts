@@ -57,6 +57,7 @@ const bridge: ChoraleBridge = {
     return () => ipcRenderer.removeListener(IPC.permissionRequest, listener);
   },
   respondPermission: (id: string, approved: boolean) => ipcRenderer.send(IPC.permissionResponse, id, approved),
+  setTitleBarOverlay: (color: string, symbolColor: string) => ipcRenderer.send(IPC.winSetOverlay, color, symbolColor),
 };
 
 contextBridge.exposeInMainWorld("chorale", bridge);

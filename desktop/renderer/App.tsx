@@ -39,6 +39,9 @@ export function App() {
 
   useEffect(() => {
     if (theme) document.documentElement.setAttribute("data-theme", theme);
+    const effective = theme ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    // Blend the native window-controls overlay into the app's top bar.
+    chorale.setTitleBarOverlay(...(effective === "dark" ? (["#0e1116", "#8b96a5"] as const) : (["#f4f6f8", "#5c6875"] as const)));
   }, [theme]);
 
   useEffect(() => {
