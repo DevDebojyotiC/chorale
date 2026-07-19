@@ -7,6 +7,7 @@ import { Changes, DiffModal } from "../components/Changes";
 import { fuzzyScore } from "../components/CommandPalette";
 import { RemoteFolderPicker } from "../components/RemoteFolderPicker";
 import { DelegationTree, PlanCard } from "../components/Activity";
+import { Resizer } from "../components/Resizer";
 
 /** A time-of-day greeting from the local clock. */
 function greeting(): string {
@@ -44,7 +45,7 @@ interface Turn {
 }
 type Ev = ActivityEvent;
 
-export function Chat({ resume, onResumed }: { resume?: { id: string; folder: string | null; title: string | null } | null; onResumed?: () => void }) {
+export function Chat({ resume, onResumed, newChatSignal }: { resume?: { id: string; folder: string | null; title: string | null } | null; onResumed?: () => void; newChatSignal?: number }) {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [agent, setAgent] = useState("orchestrator");
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -71,6 +72,26 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   const [fileList, setFileList] = useState<FileRef[]>([]);
   const bottom = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const firstSignal = useRef(true);
+
+  // "New chat" from the nav bumps newChatSignal — start a fresh conversation (skip the initial mount).
+  useEffect(() => {
+    if (firstSignal.current) {
+      firstSignal.current = false;
+      return;
+    }
+    newChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newChatSignal]);
+
+  // Auto-grow the composer to fit its content, up to ~10 lines, then let it scroll.
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 220) + "px";
+  }, [input]);
 
   useEffect(() => {
     chorale.listAgents().then((a) => {
@@ -297,7 +318,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
 
   return (
     <div className={"chat" + (explorerOpen ? " with-explorer" : "")}>
-      {explorerOpen && folder && <Explorer folder={folder} onOpen={setPreviewPath} active={previewPath} />}
+      {explorerOpen && folder && <Explorer folder={folder} onOpen={setPreviewPath} active={previewPath} nonce={changesNonce} />}
       {previewPath && <FilePreviewModal path={previewPath} onClose={() => setPreviewPath(null)} />}
       {diffPath && folder && <DiffModal folder={folder} path={diffPath} onClose={() => setDiffPath(null)} />}
       {remotePicker && <RemoteFolderPicker onPick={pickRemoteFolder} onClose={() => setRemotePicker(false)} />}
@@ -393,11 +414,6 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
               <option value="auto-edit">auto-edit</option>
               <option value="full-auto">full-auto</option>
             </select>
-            {turns.length > 0 && (
-              <button className="apill newchat" onClick={newChat} disabled={busy} title="Start a new conversation">
-                ＋ new chat
-              </button>
-            )}
           </div>
 
           {turns.length === 0 && !busy && (
@@ -505,6 +521,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
               </button>
             )}
             <textarea
+              ref={taRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -556,6 +573,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
       </div>
 
       <aside className="rail">
+        <Resizer cssVar="--rail-w" min={260} max={560} dir={-1} className="panel-resizer-l" />
         <div className="railtabs">
           <button className="railtab" data-on={railTab === "activity" ? "1" : "0"} onClick={() => setRailTab("activity")}>
             <span className={"live" + (busy ? " on" : "")} />

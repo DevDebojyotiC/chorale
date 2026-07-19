@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { DirEntry, FilePreview } from "../../shared/ipc";
 import { chorale } from "../bridge";
 import { Message, CopyBtn } from "./Message";
+import { Resizer } from "./Resizer";
 
 const EXT_LANG: Record<string, string> = { ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx", mjs: "javascript", cjs: "javascript", json: "json", json5: "json", md: "markdown", css: "css", scss: "scss", html: "html", py: "python", rs: "rust", go: "go", sh: "bash", yml: "yaml", yaml: "yaml", sql: "sql", toml: "ini", env: "bash" };
 const langOf = (name: string): string => EXT_LANG[name.slice(name.lastIndexOf(".") + 1).toLowerCase()] ?? "";
@@ -42,11 +43,14 @@ function TreeNode({ entry, depth, onOpen, active }: { entry: DirEntry; depth: nu
   );
 }
 
-export function Explorer({ folder, onOpen, active }: { folder: string; onOpen: (p: string) => void; active: string | null }) {
+export function Explorer({ folder, onOpen, active, nonce }: { folder: string; onOpen: (p: string) => void; active: string | null; nonce?: number }) {
   const [roots, setRoots] = useState<DirEntry[] | null>(null);
+  // Reload when the folder changes, and after each run (nonce) so newly-created files show up.
   useEffect(() => {
-    setRoots(null);
     void chorale.readDir(folder).then(setRoots);
+  }, [folder, nonce]);
+  useEffect(() => {
+    setRoots(null); // show the loader only on a real folder switch, not on a refresh
   }, [folder]);
   return (
     <aside className="explorer">
@@ -58,9 +62,18 @@ export function Explorer({ folder, onOpen, active }: { folder: string; onOpen: (
       </div>
       <div className="tree">
         {roots === null && <div className="empty">loading…</div>}
-        {roots?.length === 0 && <div className="empty">empty folder</div>}
+        {roots?.length === 0 && (
+          <div className="explorer-empty">
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--faint)" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+            </svg>
+            <div className="ee-h">This folder is empty</div>
+            <div className="ee-sub">Anything the agent creates here shows up automatically.</div>
+          </div>
+        )}
         {roots?.map((e) => <TreeNode key={e.path} entry={e} depth={0} onOpen={onOpen} active={active} />)}
       </div>
+      <Resizer cssVar="--explorer-w" min={180} max={460} dir={1} className="panel-resizer-r" />
     </aside>
   );
 }

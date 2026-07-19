@@ -2,6 +2,23 @@ import { useState } from "react";
 import type { ActivityEvent } from "../../shared/ipc";
 import { agentColor, eventStyle } from "../bridge";
 
+/** Truncated text that expands to full (wrapped) on click. */
+function ExpandText({ text, className }: { text: string; className: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      className={className + (open ? " expanded" : "")}
+      title={open ? "" : text}
+      onClick={(e) => {
+        e.stopPropagation();
+        setOpen((o) => !o);
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
 interface Leaf {
   type: string;
   text: string;
@@ -57,7 +74,7 @@ function TreeNode({ node, highlight, root = false }: { node: Node; highlight: Se
           {node.steps.map((s, i) => (
             <div className="tstep" key={i}>
               <span className="sw sm" style={{ background: agentColor(s.agent) }} />
-              <span className="tstep-t">{s.title}</span>
+              <ExpandText text={s.title} className="tstep-t" />
             </div>
           ))}
         </div>
@@ -67,7 +84,7 @@ function TreeNode({ node, highlight, root = false }: { node: Node; highlight: Se
         return (
           <div className={"tleaf" + (e.type === "task" ? " task" : "")} key={i} style={{ ["--acc" as string]: st.color }}>
             <span className="dotc" />
-            <span className="tleaf-t">{e.text}</span>
+            <ExpandText text={e.text} className="tleaf-t" />
           </div>
         );
       })}
@@ -137,7 +154,7 @@ export function PlanCard({ events, named, collapsible = false }: { events: Activ
             <span className="sw sm" style={{ background: agentColor(s.agent) }} />
             <span className="pc-agent">{s.agent}</span>
             {named.has(s.agent) && <span className="tstar" title="you asked for this agent">★</span>}
-            <span className="pc-title">{s.title}</span>
+            <ExpandText text={s.title} className="pc-title" />
           </div>
         );
       })}

@@ -9,6 +9,7 @@ import { Doctor } from "./screens/Doctor";
 import { Remote } from "./screens/Remote";
 import { PermissionModal } from "./components/PermissionModal";
 import { CommandPalette, type Command } from "./components/CommandPalette";
+import { Resizer, initPanelWidths } from "./components/Resizer";
 import { IS_MOCK, chorale } from "./bridge";
 
 type Screen = "chat" | "agents" | "config" | "sessions" | "cost" | "playbook" | "doctor" | "remote";
@@ -33,10 +34,31 @@ export function App() {
   const [resume, setResume] = useState<{ id: string; folder: string | null; title: string | null } | null>(null); // session to open in Chat
   const [workspace, setWorkspace] = useState("workspace");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [newChatNonce, setNewChatNonce] = useState(0); // bump to start a fresh chat from the nav
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("nav-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     chorale.getAppInfo().then((i) => setWorkspace(i.workspace.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "workspace"));
+    initPanelWidths({ "--nav-w": "216px", "--explorer-w": "250px", "--rail-w": "340px" });
   }, []);
+
+  const toggleNav = () => {
+    setNavCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("nav-collapsed", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (theme) document.documentElement.setAttribute("data-theme", theme);
@@ -50,6 +72,11 @@ export function App() {
       if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) {
+        e.preventDefault();
+        toggleNav();
         return;
       }
       if (e.target instanceof HTMLElement && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT")) return;
@@ -77,7 +104,7 @@ export function App() {
   ];
 
   return (
-    <div className="app">
+    <div className={"app" + (navCollapsed ? " nav-collapsed" : "")}>
       <div className="brand">
         <svg className="glyph" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <rect x="2.5" y="9" width="3" height="6" rx="1.5" fill="var(--a-research)" />
@@ -86,9 +113,15 @@ export function App() {
           <rect x="16" y="6.5" width="3" height="11" rx="1.5" fill="var(--a-planner)" />
           <rect x="20.5" y="9.5" width="1.6" height="5" rx=".8" fill="var(--a-reviewer)" />
         </svg>
-        <div>
+        <div className="brand-name">
           <b>Chorale</b> <span>console</span>
         </div>
+        <button className="navtoggle" onClick={toggleNav} title={(navCollapsed ? "Expand" : "Collapse") + " sidebar (Ctrl+B)"} aria-label="Toggle sidebar">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M9 4v16" />
+          </svg>
+        </button>
       </div>
 
       <div className="top">
@@ -111,6 +144,19 @@ export function App() {
       </div>
 
       <nav>
+        <button
+          className="newchat-nav"
+          onClick={() => {
+            setScreen("chat");
+            setNewChatNonce((n) => n + 1);
+          }}
+          title="Start a new conversation"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span>New chat</span>
+        </button>
         {NAV.map((n) => (
           <button key={n.id} className="navitem" aria-current={screen === n.id} onClick={() => setScreen(n.id)}>
             <Icon>{n.icon}</Icon>
@@ -139,10 +185,11 @@ export function App() {
           <Icon><><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></></Icon>
           <span>Remote hosts</span>
         </button>
+        {!navCollapsed && <Resizer cssVar="--nav-w" min={176} max={340} dir={1} className="nav-resizer" />}
       </nav>
 
       <main>
-        {screen === "chat" && <Chat resume={resume} onResumed={() => setResume(null)} />}
+        {screen === "chat" && <Chat resume={resume} onResumed={() => setResume(null)} newChatSignal={newChatNonce} />}
         {screen === "agents" && <Agents />}
         {screen === "config" && <Config />}
         {screen === "sessions" && (
