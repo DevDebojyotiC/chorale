@@ -469,7 +469,7 @@ function registerIpc(): void {
         cwd: rw ? rw.path : req.folder && existsSync(req.folder) ? req.folder : undefined, // where the agent works
         backend: rw ? remote.makeToolBackend(rw.host) : undefined, // route tools over SSH when remote
         onToken: (text) => send({ runId: req.runId, kind: "token", text }),
-        onEvent: (ev) => send({ runId: req.runId, kind: "event", eventType: ev.type, text: ev.text }),
+        onEvent: (ev) => send({ runId: req.runId, kind: "event", event: { type: ev.type, text: ev.text, agent: ev.agent, depth: ev.depth, target: ev.target, steps: ev.steps } }),
       });
       const usage = res.usage ? { inputTokens: res.usage.inputTokens ?? 0, outputTokens: res.usage.outputTokens ?? 0 } : null;
       if (persist) {

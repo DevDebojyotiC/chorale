@@ -288,10 +288,18 @@ export interface RunOptions {
   backend?: ToolBackend;
 }
 
-/** A structured activity event for a renderer (the TUI subscribes to these). */
+/** A structured activity event for a renderer (the TUI / desktop rail subscribe to these). */
 export interface RunEvent {
-  type: "tool" | "salvage" | "verify" | "heal" | "fallback" | "lesson";
+  type: "tool" | "salvage" | "verify" | "heal" | "fallback" | "lesson" | "delegate" | "delegate-done" | "plan";
   text: string;
+  /** The agent that produced this event — the top orchestrator, or a delegated specialist. */
+  agent?: string;
+  /** Delegation depth: 0 = the entry agent, 1 = a specialist it delegated to, … (drives the tree). */
+  depth?: number;
+  /** For "delegate"/"delegate-done": the specialist being called. */
+  target?: string;
+  /** For "plan": the decomposition, so a renderer can show the checklist. */
+  steps?: { agent: string; title: string }[];
 }
 
 /**
@@ -382,6 +390,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const originals = new Map<string, string>();
   // Content the agent reads this turn (the "source of truth" for the design-fidelity check).
   const reads: string[] = [];
+  // Every activity event is stamped with this agent's name + delegation depth so a renderer can build
+  // the orchestrator→specialist tree. Nested delegations bubble their own events up through opts.onEvent.
+  const runDepth = opts.depth ?? 0;
+  const emit = (e: RunEvent): void => opts.onEvent?.({ ...e, agent: e.agent ?? agent.name, depth: e.depth ?? runDepth });
   const tools: ToolSet = {
     ...buildToolSet(agent.tools, { mode: permissionMode, cwd, touched, originals, reads, backend: opts.backend, posix: remoteBackend }),
     ...mcp.tools,
@@ -400,6 +412,8 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       permissionMode,
       path: [...(opts.delegationPath ?? []), agent.name],
       run: runAgent,
+      onEvent: opts.onEvent, // bubble the specialist's activity up to the same rail (attributed by depth)
+      parent: agent.name,
     });
     const specialists = listAgents(config.agents.dir).filter((a) => a.delegable && a.name !== agent.name);
     if (specialists.length > 0) {
@@ -483,6 +497,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     if (!r.ok) {
       unmetGates.push(`${pg.agent}: ${r.reason}`);
       continue;
+    }
+    if (r.plan && r.plan.steps.length > 0) {
+      // Surface the decomposition as a plan node under this agent (e.g. orchestrator → planner).
+      emit({ type: "plan", text: `decomposed → ${r.plan.steps.length} step(s)`, agent: pg.agent, depth: runDepth + 1, steps: r.plan.steps.map((s) => ({ agent: s.agent, title: s.title })) });
     }
     if (r.plan) {
       if (r.plan.complexity === "complex") {
@@ -891,7 +909,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
               const preview = input.length > 140 ? `${input.slice(0, 140)}…` : input;
               log.debug(`\n[tool] ${call.toolName} ${preview}\n`);
               const p = (call.input as { path?: string })?.path;
-              opts.onEvent?.({ type: "tool", text: typeof p === "string" ? `${call.toolName} ${p}` : call.toolName });
+              emit({ type: "tool", text: typeof p === "string" ? `${call.toolName} ${p}` : call.toolName });
             }
           },
           onError: ({ error }) => {
@@ -940,7 +958,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         log.info(`\n[chorale] model "${ref}" failed: ${msg}\n`);
         if (ref !== chain[chain.length - 1]) {
           log.info(`[chorale] falling back to next model…\n`);
-          opts.onEvent?.({ type: "fallback", text: `${ref} failed — falling back` });
+          emit({ type: "fallback", text: `${ref} failed — falling back` });
         }
         break; // give up on this model, advance to the next in the chain
       }
@@ -1043,7 +1061,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           for (const n of fab.slice(0, 8)) log.info(`    ${n}\n`);
           parts.push(fidelityFeedback({ fabricated: fab }));
         }
-        opts.onEvent?.({ type: "verify", text: `docs: ${missing.length + dropped.length + fab.length} issue(s) — fixing` });
+        emit({ type: "verify", text: `docs: ${missing.length + dropped.length + fab.length} issue(s) — fixing` });
         messages.push({ role: "assistant", content: result.text || "(wrote docs)" });
         messages.push({ role: "user", content: parts.join("\n\n") });
         result = await attempt(repairTemp(round));
@@ -1071,7 +1089,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         }
         log.info(`\n[chorale] ⚠ plan: ${issues.length} issue(s) — asking to fix…\n`);
         for (const i of issues.slice(0, 6)) log.info(`    ${i.message}\n`);
-        opts.onEvent?.({ type: "verify", text: `plan: ${issues.length} issue(s) — fixing` });
+        emit({ type: "verify", text: `plan: ${issues.length} issue(s) — fixing` });
         messages.push({ role: "assistant", content: result.text || "(emitted a plan)" });
         messages.push({ role: "user", content: planFeedback(issues) });
         capturedPlan = null; // force a fresh capture on the repair round (avoid a stale plan)
@@ -1122,7 +1140,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
           if (findings.length > 0) {
             log.info(`\n[chorale] ⚠ review gate: ${findings.length} blocking finding(s) — asking the coder to fix…\n`);
             for (const f of findings.slice(0, 6)) log.info(`    ${f}\n`);
-            opts.onEvent?.({ type: "verify", text: `review gate: ${findings.length} finding(s) — fixing` });
+            emit({ type: "verify", text: `review gate: ${findings.length} finding(s) — fixing` });
             messages.push({ role: "assistant", content: result.text || "(wrote files)" });
             messages.push({
               role: "user",
@@ -1151,7 +1169,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         break;
       }
       log.info(`\n[chorale] ⚠ ${kind} found ${issues.length} issue(s) — asking the model to fix…\n`);
-      opts.onEvent?.({ type: kind.startsWith("runtime") ? "heal" : "verify", text: `${issues.length} issue(s) — repairing` });
+      emit({ type: kind.startsWith("runtime") ? "heal" : "verify", text: `${issues.length} issue(s) — repairing` });
       for (const i of issues.slice(0, 6)) log.info(`    ${i.file}: ${i.message}\n`);
       messages.push({ role: "assistant", content: result.text || "(wrote files)" });
       messages.push({ role: "user", content: feedback });
@@ -1166,7 +1184,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       const draft = result.text;
       messages.push({ role: "assistant", content: draft });
       messages.push({ role: "user", content: SELF_CRITIQUE_PROMPT });
-      opts.onEvent?.({ type: "verify", text: "self-critique — validating findings" });
+      emit({ type: "verify", text: "self-critique — validating findings" });
       log.debug(`\n[chorale] self-critique pass…\n`);
       suppressOutput = false; // the corrected answer is the visible output
       try {

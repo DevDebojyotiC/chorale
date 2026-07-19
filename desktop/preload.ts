@@ -39,7 +39,7 @@ const bridge: ChoraleBridge = {
     const listener = (_e: unknown, msg: RunMsg): void => {
       if (msg.runId !== runId) return;
       if (msg.kind === "token") handlers.onToken?.(msg.text);
-      else if (msg.kind === "event") handlers.onEvent?.(msg.eventType, msg.text);
+      else if (msg.kind === "event") handlers.onEvent?.(msg.event);
       else if (msg.kind === "done") {
         handlers.onDone?.(msg.model, msg.text, msg.usage);
         cleanup();

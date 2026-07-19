@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AgentSummary, FileRef, PermissionMode } from "../../shared/ipc";
+import type { ActivityEvent, AgentSummary, FileRef, PermissionMode } from "../../shared/ipc";
 import { chorale, agentColor, eventStyle } from "../bridge";
 import { Message, CopyBtn } from "../components/Message";
 import { Explorer, FilePreviewModal } from "../components/Explorer";
@@ -27,10 +27,7 @@ interface Turn {
   /** File names attached to a user turn (shown as chips under the message). */
   attachments?: string[];
 }
-interface Ev {
-  type: string;
-  text: string;
-}
+type Ev = ActivityEvent;
 
 export function Chat({ resume, onResumed }: { resume?: { id: string; folder: string | null; title: string | null } | null; onResumed?: () => void }) {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -199,7 +196,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
         acc += tk;
         setStreaming(acc);
       },
-      onEvent: (type, txt) => setEvents((e) => [...e, { type, text: txt }]),
+      onEvent: (ev) => setEvents((e) => [...e, ev]),
       onDone: (model, final, u) => {
         cancelRef.current = null;
         setTurns((t) => [...t, { role: "assistant", text: final || acc, agent, model }]);

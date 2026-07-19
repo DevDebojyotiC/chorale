@@ -6,7 +6,7 @@ import { loadAgent } from "../agents/loader.js";
 import type { AgentSpec } from "../agents/loader.js";
 import type { ChoraleConfig } from "../core/config.js";
 import type { Registry } from "../core/model-registry.js";
-import type { RunResult } from "../core/runtime.js";
+import type { RunResult, RunEvent } from "../core/runtime.js";
 import type { PermissionMode } from "./permissions.js";
 import { log } from "../core/log.js";
 
@@ -20,6 +20,7 @@ export type Runner = (opts: {
   stream: boolean;
   permissionMode: PermissionMode;
   delegationPath: string[];
+  onEvent?: (e: RunEvent) => void;
 }) => Promise<RunResult>;
 
 export interface DelegateContext {
@@ -31,6 +32,10 @@ export interface DelegateContext {
   /** Agent names already on the delegation path (for cycle detection). */
   path?: string[];
   run: Runner;
+  /** Bubble the specialist's activity up to the caller's rail (attributed by depth). */
+  onEvent?: (e: RunEvent) => void;
+  /** The delegating agent's name (so delegate events attribute to the parent node). */
+  parent?: string;
 }
 
 /**
@@ -39,7 +44,7 @@ export interface DelegateContext {
  * prevent runaway delegation.
  */
 export function createDelegateTool(ctx: DelegateContext) {
-  const { config, registry, depth, maxDepth, permissionMode, path = [], run } = ctx;
+  const { config, registry, depth, maxDepth, permissionMode, path = [], run, onEvent, parent } = ctx;
   return tool({
     description:
       "Delegate a self-contained sub-task to a specialist agent (e.g. research). The specialist cannot see this conversation, so give it a clear, standalone task. Returns the specialist's result.",
@@ -65,11 +70,16 @@ export function createDelegateTool(ctx: DelegateContext) {
       }
 
       process.stderr.write(`\n[delegate → ${agentName}] ${task.slice(0, 90)}\n`);
+      // Announce the delegation on the caller's rail (attributed to the parent node).
+      onEvent?.({ type: "delegate", text: task.replace(/\s+/g, " ").slice(0, 140), target: agentName, agent: parent, depth });
       try {
-        // Sub-agents run silent by default; CHORALE_TRACE streams their work live for full visibility.
-        const res = await run({ config, registry, agent: spec, prompt: task, depth: depth + 1, stream: process.env.CHORALE_TRACE === "1", permissionMode, delegationPath: [...path, agentName] });
+        // Sub-agents run silent (no onToken) by default; CHORALE_TRACE streams their tokens too. onEvent
+        // is always passed so the specialist's activity bubbles up into the same tree (tagged depth+1).
+        const res = await run({ config, registry, agent: spec, prompt: task, depth: depth + 1, stream: process.env.CHORALE_TRACE === "1", permissionMode, delegationPath: [...path, agentName], onEvent });
+        onEvent?.({ type: "delegate-done", text: `${agentName} finished`, target: agentName, agent: parent, depth });
         return { agent: agentName, model: res.model, result: res.text };
       } catch (e) {
+        onEvent?.({ type: "delegate-done", text: `${agentName} failed`, target: agentName, agent: parent, depth });
         return { error: `Delegation to "${agentName}" failed: ${e instanceof Error ? e.message : String(e)}` };
       }
     },

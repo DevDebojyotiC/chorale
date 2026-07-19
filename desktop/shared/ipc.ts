@@ -90,17 +90,32 @@ export interface RunInput {
   folder: string | null;
 }
 
+/** A structured activity event from a run — the orchestrator's + delegated specialists' work. */
+export interface ActivityEvent {
+  /** tool · salvage · verify · heal · fallback · lesson · delegate · delegate-done · plan */
+  type: string;
+  text: string;
+  /** Which agent produced it (the orchestrator, or a delegated specialist). */
+  agent?: string;
+  /** Delegation depth: 0 = entry agent, 1 = a specialist it delegated to, … (drives the tree). */
+  depth?: number;
+  /** For delegate/delegate-done: the specialist being called. */
+  target?: string;
+  /** For plan: the decomposition, so the UI can show a checklist. */
+  steps?: { agent: string; title: string }[];
+}
+
 /** Streaming messages the main process pushes back over `run:msg`. */
 export type RunMsg =
   | { runId: string; kind: "token"; text: string }
-  | { runId: string; kind: "event"; eventType: string; text: string }
+  | { runId: string; kind: "event"; event: ActivityEvent }
   | { runId: string; kind: "done"; model: string; text: string; usage: { inputTokens: number; outputTokens: number } | null }
   | { runId: string; kind: "error"; message: string };
 
 /** Callbacks the renderer passes to `window.chorale.run`. */
 export interface RunHandlers {
   onToken?: (text: string) => void;
-  onEvent?: (eventType: string, text: string) => void;
+  onEvent?: (event: ActivityEvent) => void;
   onDone?: (model: string, text: string, usage: { inputTokens: number; outputTokens: number } | null) => void;
   onError?: (message: string) => void;
 }

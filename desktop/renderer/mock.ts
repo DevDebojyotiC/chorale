@@ -1,4 +1,4 @@
-import type { ChoraleBridge, AgentSummary, ConfigSummary, SessionInfo, ChatTurn, RunHandlers, RunInput, RemoteHost } from "../shared/ipc";
+import type { ChoraleBridge, AgentSummary, ConfigSummary, SessionInfo, ChatTurn, RunHandlers, RunInput, RemoteHost, ActivityEvent } from "../shared/ipc";
 
 const MOCK_HOSTS: RemoteHost[] = [
   { id: "h1", label: "prod-box", host: "203.0.113.10", port: 22, username: "deploy", auth: "key", privateKeyPath: "~/.ssh/id_ed25519" },
@@ -64,13 +64,23 @@ Next steps:
 3. A short \`README\`
 
 Run it with \`npm start\` once the deps install.`;
-const EVENTS: [string, string][] = [
-  ["verify", "plan validated & injected · 9 steps · DAG ok"],
-  ["tool", "coder wrote src/db/index.ts, src/utils/jwt.ts"],
-  ["tool", "skeleton reconciled .env (PORT, JWT_SECRET) — no model call"],
-  ["verify", "review gate: 1 finding fixed — express 5 → 4.x"],
-  ["fallback", "glm-4.6 no-op → escalating to glm-5.2"],
-  ["tool", "writing src/server.ts — mounting /api/auth, /api/bookmarks"],
+// A realistic orchestrator → planner → research/coder flow, attributed by agent + depth so the rail
+// can build the delegation tree and the chat can show a plan checklist that ticks off.
+const EVENTS: ActivityEvent[] = [
+  { type: "plan", agent: "planner", depth: 1, text: "decomposed → 3 steps", steps: [
+    { agent: "research", title: "Find trending tic-tac-toe UI/UX design decisions" },
+    { agent: "coder", title: "Build the browser game in vanilla JS" },
+    { agent: "scribe", title: "Write a short README" },
+  ] },
+  { type: "delegate", agent: "orchestrator", depth: 0, target: "research", text: "find trending tic-tac-toe design decisions" },
+  { type: "tool", agent: "research", depth: 1, text: "web_search modern tic-tac-toe UI 2026" },
+  { type: "tool", agent: "research", depth: 1, text: "web_fetch dribbble.com/search/tic-tac-toe" },
+  { type: "delegate-done", agent: "orchestrator", depth: 0, target: "research", text: "research finished" },
+  { type: "delegate", agent: "orchestrator", depth: 0, target: "coder", text: "build the browser tic-tac-toe game in JS" },
+  { type: "tool", agent: "coder", depth: 1, text: "write index.html" },
+  { type: "tool", agent: "coder", depth: 1, text: "write game.js" },
+  { type: "verify", agent: "coder", depth: 1, text: "node --check ✓ clean" },
+  { type: "delegate-done", agent: "orchestrator", depth: 0, target: "coder", text: "coder finished" },
 ];
 
 let sessionSeq = 0;
@@ -222,7 +232,7 @@ export const mockBridge: ChoraleBridge = {
   run: (_req: RunInput, handlers: RunHandlers) => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     let cancelled = false;
-    EVENTS.forEach(([type, text], i) => timers.push(setTimeout(() => !cancelled && handlers.onEvent?.(type, text), 250 + i * 550)));
+    EVENTS.forEach((ev, i) => timers.push(setTimeout(() => !cancelled && handlers.onEvent?.(ev), 250 + i * 550)));
     const words = REPLY.split(" ");
     words.forEach((w, i) => timers.push(setTimeout(() => !cancelled && handlers.onToken?.(w + " "), 400 + i * 45)));
     timers.push(
