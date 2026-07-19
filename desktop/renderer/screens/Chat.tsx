@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentSummary, PermissionMode } from "../../shared/ipc";
 import { chorale, agentColor, eventStyle } from "../bridge";
 import { Message, CopyBtn } from "../components/Message";
 import { Explorer, FilePreviewModal } from "../components/Explorer";
 import { Changes, DiffModal } from "../components/Changes";
+import { fuzzyScore } from "../components/CommandPalette";
 
 interface Turn {
   role: "user" | "assistant";
@@ -33,6 +34,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   const [railTab, setRailTab] = useState<"activity" | "changes">("activity");
   const [diffPath, setDiffPath] = useState<string | null>(null);
   const [changesNonce, setChangesNonce] = useState(0);
+  const [slashSel, setSlashSel] = useState(0);
   const bottom = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
 
@@ -145,6 +147,49 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
     setBusy(false);
   }
 
+  // Slash commands — typed in the composer, they act on chat state instead of sending a message.
+  interface SlashCmd {
+    id: string;
+    label: string;
+    hint?: string;
+    run: () => void;
+  }
+  const slashCommands: SlashCmd[] = [
+    { id: "new", label: "/new", hint: "start a new conversation", run: newChat },
+    { id: "folder", label: "/folder", hint: "choose a project folder", run: () => void chooseFolder() },
+    { id: "read-only", label: "/read-only", hint: "mode → read-only", run: () => setMode("read-only") },
+    { id: "auto-edit", label: "/auto-edit", hint: "mode → auto-edit", run: () => setMode("auto-edit") },
+    { id: "full-auto", label: "/full-auto", hint: "mode → full-auto", run: () => setMode("full-auto") },
+    ...(folder
+      ? [
+          { id: "files", label: "/files", hint: "toggle the file explorer", run: () => setShowFiles((v) => !v) },
+          { id: "changes", label: "/changes", hint: "show changed files", run: () => setRailTab("changes") },
+          { id: "clear-folder", label: "/clear-folder", hint: "use the default workspace", run: clearFolder },
+        ]
+      : []),
+    ...agents.map((a) => ({ id: `agent-${a.name}`, label: `/${a.name}`, hint: `switch to the ${a.name} agent`, run: () => setAgent(a.name) })),
+  ];
+  const slashOpen = input.startsWith("/");
+  const slashMatches = useMemo(() => {
+    if (!slashOpen) return [];
+    const q = input.slice(1).toLowerCase();
+    return slashCommands
+      .map((c) => ({ c, s: fuzzyScore(c.label.slice(1) + " " + (c.hint ?? ""), q) }))
+      .filter((x): x is { c: SlashCmd; s: number } => x.s !== null)
+      .sort((a, b) => b.s - a.s)
+      .map((x) => x.c);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input, folder, agents]);
+  const slashActive = slashOpen && slashMatches.length > 0;
+  const slashIdx = Math.min(slashSel, slashMatches.length - 1);
+  useEffect(() => setSlashSel(0), [input]);
+
+  function runSlash(cmd: SlashCmd | undefined) {
+    if (!cmd) return;
+    setInput("");
+    cmd.run();
+  }
+
   const explorerOpen = showFiles && !!folder;
 
   return (
@@ -239,17 +284,54 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
         </div>
 
         <div className="composer-wrap">
+          {slashActive && (
+            <div className="slashmenu">
+              {slashMatches.map((c, i) => (
+                <button key={c.id} className="slashitem" data-sel={i === slashIdx ? "1" : "0"} onMouseMove={() => setSlashSel(i)} onClick={() => runSlash(c)}>
+                  <span className="slashlabel">{c.label}</span>
+                  {c.hint && <span className="slashhint">{c.hint}</span>}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="box">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
+                if (slashActive) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setSlashSel((s) => Math.min(s + 1, slashMatches.length - 1));
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setSlashSel((s) => Math.max(s - 1, 0));
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setInput("");
+                    return;
+                  }
+                  if (e.key === "Tab") {
+                    e.preventDefault();
+                    setInput(slashMatches[slashIdx]!.label + " ");
+                    return;
+                  }
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    runSlash(slashMatches[slashIdx]);
+                    return;
+                  }
+                }
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   submit();
                 }
               }}
-              placeholder={busy ? "the chorale is working…" : `Message ${agent} — Enter to send, Shift+Enter for a new line`}
+              placeholder={busy ? "the chorale is working…" : `Message ${agent} — Enter to send · / for commands`}
               rows={1}
             />
             {busy ? (

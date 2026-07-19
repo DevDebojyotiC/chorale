@@ -7,6 +7,7 @@ import { CostUsage } from "./screens/CostUsage";
 import { Playbook } from "./screens/Playbook";
 import { Doctor } from "./screens/Doctor";
 import { PermissionModal } from "./components/PermissionModal";
+import { CommandPalette, type Command } from "./components/CommandPalette";
 import { IS_MOCK, chorale } from "./bridge";
 
 type Screen = "chat" | "agents" | "config" | "sessions" | "cost" | "playbook" | "doctor";
@@ -30,6 +31,7 @@ export function App() {
   const [theme, setTheme] = useState<"dark" | "light" | null>(null);
   const [resume, setResume] = useState<{ id: string; folder: string | null } | null>(null); // session to open in Chat
   const [workspace, setWorkspace] = useState("workspace");
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
     chorale.getAppInfo().then((i) => setWorkspace(i.workspace.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "workspace"));
@@ -41,6 +43,11 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        return;
+      }
       if (e.target instanceof HTMLElement && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT")) return;
       if (e.key === "1") setScreen("chat");
       if (e.key === "2") setScreen("agents");
@@ -54,6 +61,15 @@ export function App() {
     const cur = theme ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     setTheme(cur === "dark" ? "light" : "dark");
   };
+
+  const paletteCommands: Command[] = [
+    ...NAV.map((n) => ({ id: `go-${n.id}`, group: "Go to", label: n.label, hint: `⌘${n.key}`, run: () => setScreen(n.id) })),
+    { id: "go-sessions", group: "Go to", label: "Sessions", run: () => setScreen("sessions") },
+    { id: "go-cost", group: "Go to", label: "Cost & usage", run: () => setScreen("cost") },
+    { id: "go-playbook", group: "Go to", label: "Playbook", run: () => setScreen("playbook") },
+    { id: "go-doctor", group: "Go to", label: "Doctor", run: () => setScreen("doctor") },
+    { id: "toggle-theme", group: "View", label: "Toggle light / dark theme", run: toggleTheme },
+  ];
 
   return (
     <div className="app">
@@ -76,6 +92,12 @@ export function App() {
           {IS_MOCK && <span style={{ color: "var(--warn)" }}> · preview (mock data)</span>}
         </div>
         <div className="spacer" />
+        <button className="cmdk" onClick={() => setPaletteOpen(true)} title="Command palette (Ctrl/⌘K)">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+          </svg>
+          <span className="kbd">⌘K</span>
+        </button>
         <button className="tbtn" onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.8}>
             <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />
@@ -127,6 +149,7 @@ export function App() {
         {screen === "doctor" && <Doctor />}
       </main>
       <PermissionModal />
+      {paletteOpen && <CommandPalette commands={paletteCommands} onClose={() => setPaletteOpen(false)} />}
     </div>
   );
 }
