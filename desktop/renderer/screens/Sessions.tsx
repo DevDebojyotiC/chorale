@@ -36,10 +36,10 @@ export function Sessions({ onOpen }: { onOpen: (session: SessionInfo) => void })
     <div className="pad">
       <div className="pagehead">
         <h1>Sessions</h1>
-        <p>Past conversations — pick one to resume it in Chat. Stored locally in the same SQLite the CLI uses.</p>
+        <p>Past conversations. Pick one to resume it in Chat. Stored locally in the same SQLite the CLI uses.</p>
       </div>
       <div className="grid" style={{ gridTemplateColumns: "1fr", maxWidth: 720 }}>
-        {sessions.length === 0 && <div className="body user mono">No saved sessions yet — start chatting and they'll appear here.</div>}
+        {sessions.length === 0 && <div className="body user mono">No saved sessions yet. Start chatting and they'll show up here.</div>}
         {sessions.map((s) => (
           <div key={s.id} className="card sessioncard" style={{ ["--acc" as string]: agentColor(s.agent) }} onClick={() => editing !== s.id && onOpen(s)} role="button" tabIndex={0}>
             <div className="ch">

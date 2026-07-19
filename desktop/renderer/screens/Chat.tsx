@@ -185,7 +185,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
     const blocks: string[] = [];
     for (const a of attach) {
       const pv = await chorale.readFile(a.path);
-      blocks.push(pv.kind === "text" ? `<file path="${a.name}">\n${pv.content}\n</file>` : `<file path="${a.name}">(${pv.kind} — not included)</file>`);
+      blocks.push(pv.kind === "text" ? `<file path="${a.name}">\n${pv.content}\n</file>` : `<file path="${a.name}">(${pv.kind}, not included)</file>`);
     }
     const preamble = `The user attached these files for context:\n\n${blocks.join("\n\n")}`;
     return text ? `${preamble}\n\n---\n\n${text}` : preamble;
@@ -341,7 +341,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
               </button>
             )}
             <div className="folderwrap">
-              <button className="folderchip" onClick={() => setFolderMenu((v) => !v)} title={folder ?? "Choose where the agent works — local or remote"}>
+              <button className="folderchip" onClick={() => setFolderMenu((v) => !v)} title={folder ?? "Choose where the agent works: a local folder or a remote host"}>
                 {folder && folder.startsWith("ssh://") ? (
                   <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="4" width="18" height="12" rx="2" />
@@ -404,7 +404,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
             <div className="hello">
               <div className="hello-h">{greeting()}. What are we building today?</div>
               <div className="hello-sub">
-                Tell me what you need — I&apos;ll map out a plan and bring in the right specialists as we go. Working in a codebase? Point me at a folder. Want a particular agent on it? Just drop <b>/coder</b>, <b>/research</b>, or <b>/scribe</b> into your message.
+                Say what you want done and I&apos;ll work out the steps, then hand each part to the specialist that fits. Working in a codebase? Pick a folder first. To send a task straight to one agent, put <b>/coder</b>, <b>/research</b>, or <b>/scribe</b> in your message.
               </div>
             </div>
           )}
@@ -535,7 +535,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
                   submit();
                 }
               }}
-              placeholder={busy ? "the chorale is working…" : "Ask anything — Enter to send · / to direct an agent · @ files"}
+              placeholder={busy ? "the chorale is working…" : "Ask anything. Enter to send · / for an agent · @ for files"}
               rows={1}
             />
             {busy ? (

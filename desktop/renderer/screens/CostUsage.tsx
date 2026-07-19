@@ -16,7 +16,7 @@ export function CostUsage() {
     <div className="pad">
       <div className="pagehead">
         <h1>Cost &amp; usage</h1>
-        <p>Token spend by model across your sessions — estimated from public pricing; local and free models cost nothing.</p>
+        <p>Token spend by model across your sessions, estimated from public pricing. Local and free models cost nothing.</p>
       </div>
       <div className="cols" style={{ gridTemplateColumns: "1fr", maxWidth: 820 }}>
         <div className="block">
@@ -37,7 +37,7 @@ export function CostUsage() {
               {u.rows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="fb">
-                    No usage yet — start chatting and it accrues here.
+                    No usage yet. Start chatting and it builds up here.
                   </td>
                 </tr>
               )}

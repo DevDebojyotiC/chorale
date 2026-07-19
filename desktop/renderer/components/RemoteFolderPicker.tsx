@@ -53,7 +53,7 @@ export function RemoteFolderPicker({ onPick, onClose }: { onPick: (uri: string) 
         {!cur ? (
           <div className="rp-body">
             {hosts === null && <div className="empty">loading hosts…</div>}
-            {hosts?.length === 0 && <div className="empty">No hosts yet — add one in Remote hosts.</div>}
+            {hosts?.length === 0 && <div className="empty">No hosts yet. Add one in Remote hosts.</div>}
             {hosts?.map((h) => (
               <button key={h.id} className="rp-host" onClick={() => openHost(h)}>
                 <b>{h.label}</b>

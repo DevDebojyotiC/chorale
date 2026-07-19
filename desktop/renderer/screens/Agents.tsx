@@ -30,7 +30,7 @@ export function Agents() {
         <div style={{ flex: 1 }}>
           <h1>Agents</h1>
           <p>
-            {agents.length} specialists, each a single <span className="mono">agent.md</span> — its own model, tools, and toggles. Click one to edit; author a new one in-app.
+            {agents.length} specialists, each defined by a single <span className="mono">agent.md</span> with its own model, tools, and toggles. Click one to edit, or write a new one here.
           </p>
         </div>
         <button className="btn primary" onClick={() => setEditing({ name: null })}>

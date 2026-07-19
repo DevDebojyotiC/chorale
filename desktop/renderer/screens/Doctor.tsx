@@ -22,7 +22,7 @@ export function Doctor() {
       <div className="pagehead" style={{ display: "flex", alignItems: "flex-end", gap: 16 }}>
         <div style={{ flex: 1 }}>
           <h1>Doctor</h1>
-          <p>Provider reachability — pings each configured provider's endpoint with its key.</p>
+          <p>Provider reachability. Pings each configured provider's endpoint with its key.</p>
         </div>
         <button className="btn" onClick={run} disabled={checking}>
           {checking ? "checking…" : "re-check"}

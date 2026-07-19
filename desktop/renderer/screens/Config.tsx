@@ -73,7 +73,7 @@ export function Config() {
       <div className="pagehead">
         <h1>Config</h1>
         <p>
-          Providers, model routing, and defaults — every provider is a few lines; keys live in <span className="mono">.env</span>, never in the file.
+          Providers, model routing, and defaults. Every provider is a few lines, and keys live in <span className="mono">.env</span>, never in the file.
         </p>
       </div>
       <div className="cols">

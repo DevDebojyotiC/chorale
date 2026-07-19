@@ -19,10 +19,10 @@ export function Playbook() {
     <div className="pad">
       <div className="pagehead">
         <h1>Playbook</h1>
-        <p>Verified fixes the chorale has learned — recalled before it escalates to a stronger model. {items.length} entries.</p>
+        <p>Verified fixes the chorale has learned, recalled before it escalates to a stronger model. {items.length} entries.</p>
       </div>
       <div className="grid" style={{ gridTemplateColumns: "1fr", maxWidth: 820 }}>
-        {items.length === 0 && <div className="body user mono">Empty for now — fixes are recorded as the repair ladder verifies them.</div>}
+        {items.length === 0 && <div className="body user mono">Empty for now. Fixes get recorded as the repair ladder verifies them.</div>}
         {items.map((e) => (
           <div className="card" key={e.id} style={{ ["--acc" as string]: SOURCE_COLOR[e.source] }}>
             <div className="ch">

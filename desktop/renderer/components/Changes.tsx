@@ -20,8 +20,8 @@ export function Changes({ folder, nonce, onOpen }: { folder: string; nonce: numb
   }, [folder, nonce]);
 
   if (status === null) return <div className="empty">reading working tree…</div>;
-  if (!status.repo) return <div className="empty">The session folder isn't a git repository — no changes to show.</div>;
-  if (status.changes.length === 0) return <div className="empty">Working tree clean{status.branch ? ` on ${status.branch}` : ""} — no changes.</div>;
+  if (!status.repo) return <div className="empty">This folder isn't a git repository, so there's nothing to show.</div>;
+  if (status.changes.length === 0) return <div className="empty">Working tree clean{status.branch ? ` on ${status.branch}` : ""}. No changes.</div>;
 
   return (
     <div className="changes">

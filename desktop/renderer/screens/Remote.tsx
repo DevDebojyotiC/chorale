@@ -37,12 +37,12 @@ export function Remote() {
       <div className="pagehead">
         <h1>Remote hosts</h1>
         <p>
-          SSH connections a session can run on. A session folder can point at a remote path (<span className="mono">ssh://host/path</span>) — the explorer, diffs, and the agent's tools then work there. Secrets are never stored: auth is your OpenSSH agent or a private-key file on disk.
+          SSH connections a session can run on. A session folder can point at a remote path (<span className="mono">ssh://host/path</span>), and the explorer, diffs, and the agent's tools all work there. Secrets are never stored: auth is your OpenSSH agent or a private-key file on disk.
         </p>
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: "1fr", maxWidth: 720 }}>
-        {hosts.length === 0 && !form && <div className="body user mono">No hosts yet — add one to connect a session to a remote machine.</div>}
+        {hosts.length === 0 && !form && <div className="body user mono">No hosts yet. Add one to connect a session to a remote machine.</div>}
 
         {hosts.map((h) => {
           const t = tests[h.id];
