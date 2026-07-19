@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentSummary, PermissionMode } from "../../shared/ipc";
 import { chorale, agentColor, eventStyle } from "../bridge";
 import { Message, CopyBtn } from "../components/Message";
+import { Explorer, FilePreviewModal } from "../components/Explorer";
 
 interface Turn {
   role: "user" | "assistant";
@@ -26,6 +27,8 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   const [mode, setMode] = useState<PermissionMode>("auto-edit");
   const [sessionId, setSessionId] = useState("");
   const [folder, setFolder] = useState<string | null>(null);
+  const [showFiles, setShowFiles] = useState(false);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
 
@@ -50,11 +53,14 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
     const f = await chorale.pickFolder();
     if (f === null) return;
     setFolder(f);
+    setShowFiles(true);
     if (sessionId) void chorale.setSessionFolder(sessionId, f);
   }
 
   function clearFolder() {
     setFolder(null);
+    setShowFiles(false);
+    setPreviewPath(null);
     if (sessionId) void chorale.setSessionFolder(sessionId, null);
   }
 
@@ -132,8 +138,12 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
     setBusy(false);
   }
 
+  const explorerOpen = showFiles && !!folder;
+
   return (
-    <div className="chat">
+    <div className={"chat" + (explorerOpen ? " with-explorer" : "")}>
+      {explorerOpen && folder && <Explorer folder={folder} onOpen={setPreviewPath} active={previewPath} />}
+      {previewPath && <FilePreviewModal path={previewPath} onClose={() => setPreviewPath(null)} />}
       <div className="thread">
         <div className="thread-inner">
           <div className="agentbar">
@@ -144,6 +154,15 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
               </button>
             ))}
             <div className="spacer" />
+            {folder && (
+              <button className="filestoggle" data-on={showFiles ? "1" : "0"} onClick={() => setShowFiles((v) => !v)} title={showFiles ? "Hide the file explorer" : "Show the file explorer"}>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+                  <path d="M9 3v16" />
+                </svg>
+                files
+              </button>
+            )}
             <button className="folderchip" onClick={chooseFolder} title={folder ?? "Choose a project folder — the agent works (and is sandboxed) there"}>
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />

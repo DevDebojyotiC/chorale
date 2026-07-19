@@ -114,6 +114,36 @@ export const mockBridge: ChoraleBridge = {
       providers: CONFIG.providers.map((p) => (p.envVar === envVar ? { ...p, hasKey: !!value.trim(), keyMasked: value.trim() ? value.slice(0, 3) + "…" + value.slice(-3) : "" } : p)),
     }),
   pickFolder: () => Promise.resolve("D:/projects/demo-app"),
+  readDir: (path) => {
+    const tree: Record<string, { name: string; type: "file" | "dir" }[]> = {
+      "D:/projects/demo-app": [
+        { name: "src", type: "dir" },
+        { name: "public", type: "dir" },
+        { name: ".env", type: "file" },
+        { name: "package.json", type: "file" },
+        { name: "README.md", type: "file" },
+        { name: "tsconfig.json", type: "file" },
+      ],
+      "D:/projects/demo-app/src": [
+        { name: "api", type: "dir" },
+        { name: "db", type: "dir" },
+        { name: "server.ts", type: "file" },
+        { name: "utils.ts", type: "file" },
+      ],
+      "D:/projects/demo-app/src/api": [
+        { name: "auth.ts", type: "file" },
+        { name: "bookmarks.ts", type: "file" },
+      ],
+    };
+    const norm = path.replace(/[\\/]+$/, "");
+    return Promise.resolve((tree[norm] ?? []).map((e) => ({ name: e.name, path: `${norm}/${e.name}`, type: e.type })));
+  },
+  readFile: (path) => {
+    if (path.endsWith("server.ts"))
+      return Promise.resolve({ path, kind: "text" as const, content: `import express from "express";\nimport { authRouter } from "./api/auth";\n\nconst app = express();\napp.use(express.json());\napp.use("/api/auth", authRouter);\napp.listen(process.env.PORT ?? 3000);\n` });
+    if (path.endsWith("package.json")) return Promise.resolve({ path, kind: "text" as const, content: `{\n  "name": "demo-app",\n  "type": "module",\n  "scripts": { "start": "tsx src/server.ts" },\n  "dependencies": { "express": "^4.21.2" }\n}\n` });
+    return Promise.resolve({ path, kind: "text" as const, content: `// ${path.split("/").pop()}\n(preview)\n` });
+  },
   newSession: () => Promise.resolve(`mem_mock_${sessionSeq++}`),
   setSessionFolder: () => Promise.resolve(),
   listSessions: () => Promise.resolve(SESSIONS),

@@ -9,7 +9,7 @@
  */
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import { resolve, join } from "node:path";
-import { readdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { config as loadDotenv } from "dotenv";
 import JSON5 from "json5";
 import { firstRunSeed, agentCount } from "./workspace.js";
@@ -26,7 +26,7 @@ import { estimateCost } from "../src/core/costs.js";
 import { getPlaybook } from "../src/core/playbook.js";
 import { checkProviders } from "../src/core/doctor.js";
 import type { ChoraleConfig } from "../src/core/config.js";
-import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem } from "./shared/ipc.js";
+import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview } from "./shared/ipc.js";
 
 setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows the activity rail
 
@@ -208,6 +208,31 @@ function registerIpc(): void {
   ipcMain.handle(IPC.pickFolder, async (): Promise<string | null> => {
     const res = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"], title: "Choose a project folder for this session" });
     return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]!;
+  });
+
+  ipcMain.handle(IPC.fsReadDir, (_e, dir: string): DirEntry[] => {
+    try {
+      return readdirSync(dir, { withFileTypes: true })
+        .map((e) => ({ name: e.name, path: join(dir, e.name), type: (e.isDirectory() ? "dir" : "file") as "file" | "dir" }))
+        .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "dir" ? -1 : 1));
+    } catch {
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC.fsReadFile, (_e, path: string): FilePreview => {
+    const IMG: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".bmp": "image/bmp" };
+    try {
+      const st = statSync(path);
+      const ext = path.slice(path.lastIndexOf(".")).toLowerCase();
+      if (IMG[ext] && st.size <= 3 * 1024 * 1024) return { path, kind: "image", content: `data:${IMG[ext]};base64,${readFileSync(path).toString("base64")}` };
+      if (st.size > 512 * 1024) return { path, kind: "toobig", content: `File is ${(st.size / 1024).toFixed(0)} KB — too large to preview.` };
+      const buf = readFileSync(path);
+      if (buf.subarray(0, 8000).includes(0)) return { path, kind: "binary", content: "Binary file — no preview." };
+      return { path, kind: "text", content: buf.toString("utf8") };
+    } catch (e) {
+      return { path, kind: "error", content: e instanceof Error ? e.message : String(e) };
+    }
   });
 
   ipcMain.handle(IPC.sessionNew, (_e, agent: string, folder: string | null): string => {

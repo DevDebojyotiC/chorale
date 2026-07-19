@@ -114,6 +114,21 @@ export interface AgentSaveResult {
   agents?: AgentSummary[];
 }
 
+/** One entry in a directory listing (explorer). */
+export interface DirEntry {
+  name: string;
+  path: string;
+  type: "file" | "dir";
+}
+
+/** A previewed file's content + how to display it. */
+export interface FilePreview {
+  path: string;
+  kind: "text" | "image" | "binary" | "toobig" | "error";
+  /** text: the file text · image: a data: URL · others: a short message. */
+  content: string;
+}
+
 /** App/workspace info for the title bar and status. */
 export interface AppInfo {
   workspace: string;
@@ -184,6 +199,10 @@ export interface ChoraleBridge {
   checkDoctor: () => Promise<ProviderHealthItem[]>;
   /** Open a native folder picker; returns the chosen absolute path, or null if cancelled. */
   pickFolder: () => Promise<string | null>;
+  /** List a directory's immediate children (dirs first). Used by the explorer, lazily per folder. */
+  readDir: (path: string) => Promise<DirEntry[]>;
+  /** Read a file for preview (text, image data URL, or a binary/too-big marker). */
+  readFile: (path: string) => Promise<FilePreview>;
   /** Open a new session for `agent` (optionally bound to a project folder); returns its id. */
   newSession: (agent: string, folder?: string | null) => Promise<string>;
   /** Set (or clear) a session's project folder. */
@@ -212,6 +231,8 @@ export const IPC = {
   sessionLoad: "session:load",
   sessionSetFolder: "session:set-folder",
   pickFolder: "dialog:pick-folder",
+  fsReadDir: "fs:read-dir",
+  fsReadFile: "fs:read-file",
   runStart: "run:start",
   runMsg: "run:msg",
   runCancel: "run:cancel",
