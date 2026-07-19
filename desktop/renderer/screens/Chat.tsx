@@ -47,6 +47,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   const [editingTitle, setEditingTitle] = useState(false);
   const [folder, setFolder] = useState<string | null>(null);
   const [showFiles, setShowFiles] = useState(false);
+  const [agentMenu, setAgentMenu] = useState(false);
   const [folderMenu, setFolderMenu] = useState(false);
   const [remotePicker, setRemotePicker] = useState(false);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
@@ -332,14 +333,26 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
                 </svg>
               </button>
             )}
-            <div className="agentbar-sep" />
-            {agents.map((a) => (
-              <button key={a.name} className="apill" data-on={a.name === agent ? "1" : "0"} style={{ ["--acc" as string]: agentColor(a.name) }} onClick={() => setAgent(a.name)} title={a.description}>
-                <span className="sw" style={{ background: agentColor(a.name) }} />
-                {a.name}
-              </button>
-            ))}
             <div className="spacer" />
+            <div className="leadwrap">
+              <button className="leadchip" onClick={() => setAgentMenu((v) => !v)} title="Lead agent — the orchestrator plans and delegates to specialists automatically. Type /coder, /scribe, … to steer a specific one.">
+                <span className="lead-k">lead</span>
+                <span className="sw" style={{ background: agentColor(agent) }} />
+                <span className="leadname">{agent}</span>
+                <span className="chipcaret">▾</span>
+              </button>
+              {agentMenu && (
+                <div className="foldermenu leadmenu">
+                  {agents.map((a) => (
+                    <button key={a.name} data-on={a.name === agent ? "1" : "0"} onClick={() => { setAgent(a.name); setAgentMenu(false); }} title={a.description}>
+                      <span className="sw" style={{ background: agentColor(a.name) }} />
+                      <span className="lm-name">{a.name}</span>
+                      {a.name === "orchestrator" && <span className="lm-hint">auto-routes</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {folder && (
               <button className="filestoggle" data-on={showFiles ? "1" : "0"} onClick={() => setShowFiles((v) => !v)} title={showFiles ? "Hide the file explorer" : "Show the file explorer"}>
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -409,7 +422,15 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
             )}
           </div>
 
-          {turns.length === 0 && !busy && <div className="body user">Ask the chorale anything — the <b>{agent}</b> agent will take it{agent === "orchestrator" ? ", decomposing and delegating as needed." : "."}</div>}
+          {turns.length === 0 && !busy && (
+            <div className="body user">
+              {agent === "orchestrator" ? (
+                <>Ask anything — the <b>orchestra</b> plans it out and delegates to the right specialists automatically. Want a specific one? Type <b>/</b> for the agent list.</>
+              ) : (
+                <>Talking to the <b>{agent}</b> agent directly. Type <b>/orchestrator</b> to hand back the routing.</>
+              )}
+            </div>
+          )}
 
           {turns.map((t, i) => (
             <div className="msg" key={i}>
