@@ -15,6 +15,7 @@ import { PDFParse } from "pdf-parse";
 import { buildHtmlDoc, injectCharts, isTheme, type ThemeName } from "./doc-themes.js";
 import { resolvePageTarget, assessLength } from "./doc-pages.js";
 import { resolveInside, rel, type ToolContext } from "./permissions.js";
+import { findBrowser } from "../core/headless.js";
 
 const MAX_BYTES = 25 * 1024 * 1024; // don't parse absurdly large binaries
 const TEXT_MAX = 40000;
@@ -55,27 +56,6 @@ function htmlToText(html: string): string {
     .replace(/&gt;/g, ">")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-}
-
-/** Locate a Chromium-based browser for high-fidelity PDF rendering, or null. */
-function findBrowser(): string | null {
-  if (process.env.CHORALE_CHROME && existsSync(process.env.CHORALE_CHROME)) return process.env.CHORALE_CHROME;
-  const candidates =
-    process.platform === "win32"
-      ? [
-          "C:/Program Files/Google/Chrome/Application/chrome.exe",
-          "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
-          "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-          "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
-        ]
-      : process.platform === "darwin"
-        ? [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium",
-          ]
-        : ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/microsoft-edge"];
-  return candidates.find((p) => existsSync(p)) ?? null;
 }
 
 /** Monotonic suffix so concurrent/repeated renders never share a temp filename. */

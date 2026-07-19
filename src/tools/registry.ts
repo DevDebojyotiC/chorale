@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import { webSearch, webFetch, webResearch } from "./web.js";
+import { webSearch, webFetch, webResearch, webBrowse } from "./web.js";
 import { createFileTools, READ_ONLY_FILE_TOOLS, WRITE_FILE_TOOLS } from "./fs.js";
 import { createDocumentTools, READ_ONLY_DOC_TOOLS, WRITE_DOC_TOOLS } from "./documents.js";
 import { createShellTools } from "./shell.js";
@@ -11,6 +11,7 @@ const staticTools: ToolSet = {
   web_research: webResearch,
   web_search: webSearch,
   web_fetch: webFetch,
+  web_browse: webBrowse,
 };
 
 /** Tools handled elsewhere in the runtime (not built here). */

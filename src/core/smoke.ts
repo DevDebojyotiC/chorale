@@ -5,6 +5,7 @@ import { extname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveInside } from "../tools/permissions.js";
 import { diagnose } from "./diagnose.js";
+import { renderDom, headlessAvailable } from "./headless.js";
 
 /**
  * Runtime self-healing checks — the layer beyond syntax verification. Instead of
@@ -82,6 +83,50 @@ export async function smokeTest(files: string[], cwd: string): Promise<SmokeIssu
         const raw = (x.stderr ? x.stderr.toString() : "") || x.message || "failed to load";
         issues.push({ file, message: `throws when imported: ${raw.split("\n").filter(Boolean)[0]?.slice(0, 180) ?? "runtime error"}` });
       }
+    }
+  }
+  return issues;
+}
+
+/**
+ * Does a static HTML page actually render when opened as a file? Catches the classic blank-page
+ * failures a server smoke test can't: ES modules blocked over file://, or a script that throws on load.
+ */
+export async function checkStaticPages(files: string[], cwd: string): Promise<SmokeIssue[]> {
+  const issues: SmokeIssue[] = [];
+  for (const file of files) {
+    const ext = extname(file).toLowerCase();
+    if (ext !== ".html" && ext !== ".htm") continue;
+    let abs: string;
+    let src: string;
+    try {
+      abs = resolveInside(cwd, file);
+      src = readFileSync(abs, "utf8");
+    } catch {
+      continue;
+    }
+    if (!/<html|<body/i.test(src) || !/<script[\s>]/i.test(src)) continue; // not a scripted page
+
+    // (1) Static lint (no browser needed): a relative ES-module <script> is blocked over file://.
+    const moduleRelative =
+      /<script[^>]*type=["']module["'][^>]*\bsrc=["'](?!https?:|\/\/|data:)[^"']+["']/i.test(src) ||
+      /<script[^>]*\bsrc=["'](?!https?:|\/\/|data:)[^"']+["'][^>]*type=["']module["']/i.test(src);
+    if (moduleRelative) {
+      issues.push({
+        file,
+        message: `it loads a local script with <script type="module">, which browsers BLOCK over file:// — opening the page shows a blank screen. Inline the logic in a plain <script> (no type=module, no import/export), or serve the page over http. For a simple standalone page, ship one self-contained index.html.`,
+      });
+      continue;
+    }
+
+    // (2) Headless render: after the page's JS runs, did anything paint at all?
+    if (!headlessAvailable()) continue;
+    const r = renderDom(abs, { virtualTimeMs: 2500 });
+    if (r.ok && r.text.replace(/\s/g, "").length < 2) {
+      issues.push({
+        file,
+        message: `when opened directly it renders a blank page — its scripts produced no visible content (an uncaught error on load, or assets that can't load over file://). Make it run as a standalone file, or serve it.`,
+      });
     }
   }
   return issues;

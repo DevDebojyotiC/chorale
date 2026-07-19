@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { renderDom, headlessAvailable } from "../core/headless.js";
 
 const UA = "Mozilla/5.0 (compatible; ChoraleBot/0.1)";
 const FETCH_TIMEOUT_MS = 15000;
@@ -188,6 +189,26 @@ export const webFetch = tool({
     url: z.string().describe("The absolute URL to fetch, including https://"),
   }),
   execute: async ({ url }) => fetchAndExtract(url, FETCH_MAX_CHARS),
+});
+
+const BROWSE_MAX_CHARS = 6000;
+
+export const webBrowse = tool({
+  description:
+    "Open a URL in a real (headless) browser, run its JavaScript, and return the RENDERED page text. Use this when web_fetch comes back blank or incomplete — single-page apps, JS-rendered content, dashboards, dynamic sites. Slower than web_fetch, so reach for it only when a plain fetch misses the content.",
+  inputSchema: z.object({
+    url: z.string().describe("The absolute URL to open, including https://"),
+  }),
+  execute: async ({ url }) => {
+    if (!/^https?:\/\//i.test(url)) return { url, error: "Provide an absolute http(s) URL." };
+    if (!headlessAvailable()) {
+      const fallback = await fetchAndExtract(url, FETCH_MAX_CHARS);
+      return { ...fallback, note: "No headless browser installed (Chrome/Edge); returned a plain fetch instead — JavaScript was NOT rendered." };
+    }
+    const r = renderDom(url, { timeoutMs: 30000, virtualTimeMs: 5000 });
+    if (!r.ok) return { url, error: r.error ?? "render failed" };
+    return { url, text: r.text.slice(0, BROWSE_MAX_CHARS), truncated: r.text.length > BROWSE_MAX_CHARS };
+  },
 });
 
 export const webResearch = tool({

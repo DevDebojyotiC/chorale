@@ -28,7 +28,7 @@ import { discoverSkills, selectSkills, renderSkillsForPrompt } from "../skills/l
 import { connectMcpServers } from "../mcp/client.js";
 import { createTagStripper, TOOL_MARKUP_TOKENS } from "./stream-filter.js";
 import { verifyFiles, verifyFeedback } from "./verify.js";
-import { smokeTest, smokeFeedback } from "./smoke.js";
+import { smokeTest, smokeFeedback, checkStaticPages } from "./smoke.js";
 import { checkGroundedness, groundednessFeedback, checkFactsPreserved, meaningFeedback, checkDesignFidelity, fidelityFeedback } from "./ground.js";
 import { matchDiagnoses } from "./diagnose.js";
 import { chainWith, canRunGate, withGateChain } from "./gate.js";
@@ -1132,7 +1132,9 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       let kind = "verification";
       if (syntax.length === 0 && agent.selfHeal) {
         const smoke = await smokeTest([...touched], cwd);
-        if (smoke.length > 0) { issues = smoke; feedback = smokeFeedback(smoke); kind = "runtime (self-heal)"; }
+        const staticPages = await checkStaticPages([...touched], cwd); // does a static HTML page render when opened?
+        const runtimeIssues = [...smoke, ...staticPages];
+        if (runtimeIssues.length > 0) { issues = runtimeIssues; feedback = smokeFeedback(runtimeIssues); kind = "runtime (self-heal)"; }
       }
       if (issues.length === 0) {
         // Review gate: a semantic second opinion from the reviewer on the clean code.
