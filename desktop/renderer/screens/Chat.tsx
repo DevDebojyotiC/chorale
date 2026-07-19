@@ -304,6 +304,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
       {diffPath && folder && <DiffModal folder={folder} path={diffPath} onClose={() => setDiffPath(null)} />}
       {remotePicker && <RemoteFolderPicker onPick={pickRemoteFolder} onClose={() => setRemotePicker(false)} />}
       <div className="thread">
+        <div className="thread-scroll">
         <div className="thread-inner">
           <div className="agentbar">
             {editingTitle ? (
@@ -453,6 +454,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
             </div>
           )}
           <div ref={bottom} />
+        </div>
         </div>
 
         <div className="composer-wrap">
