@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActivityEvent, AgentSummary, FileRef, PermissionMode } from "../../shared/ipc";
-import { chorale, agentColor, eventStyle } from "../bridge";
+import { chorale, agentColor } from "../bridge";
 import { Message, CopyBtn } from "../components/Message";
 import { Explorer, FilePreviewModal } from "../components/Explorer";
 import { Changes, DiffModal } from "../components/Changes";
 import { fuzzyScore } from "../components/CommandPalette";
 import { RemoteFolderPicker } from "../components/RemoteFolderPicker";
+import { DelegationTree, PlanCard } from "../components/Activity";
 
 function PaperclipIcon() {
   return (
@@ -26,6 +27,10 @@ interface Turn {
   model?: string;
   /** File names attached to a user turn (shown as chips under the message). */
   attachments?: string[];
+  /** Snapshot of this turn's activity events (for the collapsed plan card above an assistant reply). */
+  activity?: ActivityEvent[];
+  /** Agents the user explicitly /-named for this turn (starred in the plan card). */
+  named?: string[];
 }
 type Ev = ActivityEvent;
 
@@ -48,6 +53,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   const [remotePicker, setRemotePicker] = useState(false);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [railTab, setRailTab] = useState<"activity" | "changes">("activity");
+  const [namedAgents, setNamedAgents] = useState<string[]>([]); // agents the user explicitly /-named this turn
   const [diffPath, setDiffPath] = useState<string | null>(null);
   const [changesNonce, setChangesNonce] = useState(0);
   const [slashSel, setSlashSel] = useState(0);
@@ -177,6 +183,8 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
 
   async function submitText(text: string, base: Turn[], attach: Attachment[] = []) {
     if ((!text && attach.length === 0) || busy) return;
+    // Agents the user explicitly directed with a /name — starred in the activity tree + plan card.
+    setNamedAgents(agents.filter((a) => new RegExp(`/${a.name}\\b`, "i").test(text)).map((a) => a.name));
     // Auto-title a fresh, untitled session from its first prompt.
     if (base.length === 0 && !title && text) {
       const auto = text.replace(/\s+/g, " ").trim().slice(0, 48);
@@ -190,16 +198,21 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
     setUsage(null);
     const history = base.map((t) => ({ role: t.role, content: t.text }));
     const prompt = await buildPrompt(text, attach);
+    const named = agents.filter((a) => new RegExp(`/${a.name}\\b`, "i").test(text)).map((a) => a.name);
     let acc = "";
+    const evAcc: ActivityEvent[] = []; // snapshot of this turn's activity, attached to the reply for the collapsed card
     cancelRef.current = chorale.run({ agent, prompt, sessionId, history, permissionMode: mode, folder }, {
       onToken: (tk) => {
         acc += tk;
         setStreaming(acc);
       },
-      onEvent: (ev) => setEvents((e) => [...e, ev]),
+      onEvent: (ev) => {
+        evAcc.push(ev);
+        setEvents((e) => [...e, ev]);
+      },
       onDone: (model, final, u) => {
         cancelRef.current = null;
-        setTurns((t) => [...t, { role: "assistant", text: final || acc, agent, model }]);
+        setTurns((t) => [...t, { role: "assistant", text: final || acc, agent, model, activity: evAcc.slice(), named }]);
         setStreaming("");
         setUsage(u ? { in: u.inputTokens, out: u.outputTokens } : null);
         setBusy(false);
@@ -385,6 +398,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
 
           {turns.map((t, i) => (
             <div className="msg" key={i}>
+              {t.role === "assistant" && t.activity && t.activity.length > 0 && <PlanCard events={t.activity} named={new Set(t.named ?? [])} collapsible />}
               <div className="who">
                 <span className="sw" style={{ background: t.role === "user" ? "var(--a-general)" : agentColor(t.agent ?? "") }} />
                 <b style={{ color: t.role === "user" ? undefined : agentColor(t.agent ?? "") }}>{t.role === "user" ? "you" : t.agent}</b>
@@ -414,6 +428,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
 
           {busy && (
             <div className="msg">
+              <PlanCard events={events} named={new Set(namedAgents)} />
               <div className="who">
                 <span className="sw" style={{ background: agentColor(agent) }} />
                 <b style={{ color: agentColor(agent) }}>{agent}</b>
@@ -548,21 +563,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
         </div>
         {railTab === "activity" ? (
           <div className="events">
-            {events.length === 0 && <div className="empty">{busy ? "listening…" : "Activity from the run — tool calls, verify, escalation — appears here."}</div>}
-            {events.map((ev, i) => {
-              const st = eventStyle(ev.type);
-              return (
-                <div className="ev" key={i} style={{ ["--acc" as string]: st.color }}>
-                  <span className="ico">
-                    <span className="dotc" />
-                  </span>
-                  <div className="txt">
-                    <span className="h">{ev.text}</span>
-                    <span className="tag">{st.tag}</span>
-                  </div>
-                </div>
-              );
-            })}
+            <DelegationTree events={events} entryAgent={agent} highlight={new Set(namedAgents)} busy={busy} />
           </div>
         ) : (
           <div className="events">{folder && <Changes folder={folder} nonce={changesNonce} onOpen={setDiffPath} />}</div>

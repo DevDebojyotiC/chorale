@@ -190,6 +190,46 @@ main { grid-area: main; overflow: hidden; min-width: 0; }
 .ev .txt { font-size: 12px; padding-top: 1px; min-width: 0; }
 .ev .txt .h { color: var(--text); word-break: break-word; }
 .ev .txt .tag { font-family: var(--mono); font-size: 9.5px; letter-spacing: .4px; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; margin-left: 6px; color: var(--acc); background: color-mix(in oklab, var(--acc) 14%, transparent); }
+
+/* delegation tree */
+.deltree { padding: 4px 2px; }
+.tnode { position: relative; }
+.tnode:not(.root) { margin-left: 11px; padding-left: 11px; border-left: 1px solid var(--line); }
+.tnode-h { display: flex; align-items: center; gap: 7px; padding: 5px 4px; }
+.tnode-h b { font-size: 12px; font-family: var(--mono); }
+.tnode-h .sw { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.tnode-h .tstar { color: var(--warn); font-size: 11px; }
+.tnode-h .tnode-label { font-size: 11px; color: var(--muted); margin-left: 2px; }
+.tsteps { margin: 0 0 4px 15px; display: flex; flex-direction: column; gap: 3px; }
+.tstep { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted); }
+.tstep .sw.sm { width: 6px; height: 6px; border-radius: 2px; flex: none; }
+.tstep-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tleaf { display: flex; align-items: center; gap: 8px; padding: 3px 4px 3px 15px; font-size: 11.5px; color: var(--text); }
+.tleaf .dotc { width: 6px; height: 6px; border-radius: 50%; background: var(--acc); flex: none; }
+.tleaf-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tleaf.task { color: var(--muted); font-style: italic; }
+
+/* plan & progress card (in the chat thread) */
+.plancard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 13px; margin: 2px 0 12px; }
+.plancard.planning { display: flex; align-items: center; gap: 9px; color: var(--muted); font-family: var(--mono); font-size: 12px; padding: 9px 13px; }
+.pc-spin { width: 11px; height: 11px; border: 2px solid var(--line); border-top-color: var(--brand); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.plancard.collapsed { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: var(--muted); font-family: var(--mono); font-size: 11.5px; cursor: pointer; padding: 2px 0; margin: 2px 0 8px; }
+.plancard.collapsed:hover { color: var(--text); }
+.plancard.collapsed .pc-n { color: var(--faint); }
+.pc-h { display: flex; align-items: center; margin-bottom: 7px; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+.pc-h b { color: var(--text); font-weight: 600; }
+.pc-toggle { margin-left: auto; background: none; border: none; color: var(--faint); font-size: 10px; cursor: pointer; text-transform: none; letter-spacing: 0; font-family: var(--mono); }
+.pc-toggle:hover { color: var(--brand); }
+.pc-step { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12.5px; }
+.pc-step .pc-mark { width: 14px; text-align: center; flex: none; color: var(--faint); font-size: 12px; }
+.pc-step.done .pc-mark { color: var(--ok); }
+.pc-step.running .pc-mark { color: var(--brand); animation: pulse2 1.4s infinite; }
+.pc-step .sw.sm { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.pc-agent { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
+.pc-step.pending .pc-agent, .pc-step.pending .pc-title { color: var(--muted); }
+.pc-title { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes pulse2 { 50% { opacity: .45; } }
 /* changed-files panel */
 .changes-branch { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 10px 10px 8px; }
 .changes-branch svg { color: var(--brand); flex: none; }
