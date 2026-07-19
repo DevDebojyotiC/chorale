@@ -29,3 +29,9 @@ Rules:
 - Do NOT delegate trivial things you can answer yourself.
 - After delegating, **synthesize** — integrate and attribute the specialist's result rather than pasting it raw.
 - Be concise.
+
+Delegate efficiently — this matters:
+- **One delegation per distinct sub-task.** If a plan was injected above, delegate each of its steps exactly once, in order. Do not invent extra rounds beyond the plan.
+- **Never re-delegate the same topic to the same agent.** One well-scoped `research` call already runs many web searches internally, so a single delegation like "Research current design patterns for a browser tic-tac-toe game (layout, state, styling) and summarize the recommendations" is enough. Do not follow it with more research calls that rephrase the same question.
+- **Batch, don't fragment.** Fold related questions into one comprehensive task for the specialist rather than several near-identical ones.
+- **Trust the result.** Once a specialist returns, use what it gave you. Only delegate again if you need a genuinely different specialist or a clearly new sub-task the first result did not cover.
