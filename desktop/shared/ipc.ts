@@ -269,6 +269,8 @@ export interface ChoraleBridge {
   deleteRemoteHost: (id: string) => Promise<RemoteHost[]>;
   /** Test connectivity to a saved host (connects + runs a trivial command). */
   testRemoteHost: (id: string) => Promise<RemoteTestResult>;
+  /** The home directory on a host, as an ssh:// URI (starting point for the remote folder picker). */
+  remoteHomeUri: (hostId: string) => Promise<string>;
   /** Git working-tree status for the session folder (changed-files panel). */
   gitStatus: (folder: string) => Promise<GitStatus>;
   /** Unified diff of one file vs HEAD (untracked files come back as an all-additions diff). */
@@ -316,6 +318,7 @@ export const IPC = {
   remoteSave: "remote:save",
   remoteDelete: "remote:delete",
   remoteTest: "remote:test",
+  remoteHome: "remote:home",
   runStart: "run:start",
   runMsg: "run:msg",
   runCancel: "run:cancel",

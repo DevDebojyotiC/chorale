@@ -5,6 +5,7 @@ import { Message, CopyBtn } from "../components/Message";
 import { Explorer, FilePreviewModal } from "../components/Explorer";
 import { Changes, DiffModal } from "../components/Changes";
 import { fuzzyScore } from "../components/CommandPalette";
+import { RemoteFolderPicker } from "../components/RemoteFolderPicker";
 
 function PaperclipIcon() {
   return (
@@ -46,6 +47,8 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   const [editingTitle, setEditingTitle] = useState(false);
   const [folder, setFolder] = useState<string | null>(null);
   const [showFiles, setShowFiles] = useState(false);
+  const [folderMenu, setFolderMenu] = useState(false);
+  const [remotePicker, setRemotePicker] = useState(false);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [railTab, setRailTab] = useState<"activity" | "changes">("activity");
   const [diffPath, setDiffPath] = useState<string | null>(null);
@@ -117,6 +120,13 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   async function attachFiles() {
     const paths = await chorale.pickFiles();
     for (const p of paths) addAttachment(p);
+  }
+
+  function pickRemoteFolder(uri: string) {
+    setRemotePicker(false);
+    setFolder(uri);
+    setShowFiles(true);
+    if (sessionId) void chorale.setSessionFolder(sessionId, uri);
   }
 
   // Resume a past session picked in the Sessions view: load its turns, id, and project folder.
@@ -292,6 +302,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
       {explorerOpen && folder && <Explorer folder={folder} onOpen={setPreviewPath} active={previewPath} />}
       {previewPath && <FilePreviewModal path={previewPath} onClose={() => setPreviewPath(null)} />}
       {diffPath && folder && <DiffModal folder={folder} path={diffPath} onClose={() => setDiffPath(null)} />}
+      {remotePicker && <RemoteFolderPicker onPick={pickRemoteFolder} onClose={() => setRemotePicker(false)} />}
       <div className="thread">
         <div className="thread-inner">
           <div className="agentbar">
@@ -337,24 +348,54 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
                 files
               </button>
             )}
-            <button className="folderchip" onClick={chooseFolder} title={folder ?? "Choose a project folder — the agent works (and is sandboxed) there"}>
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-              </svg>
-              {folder ? folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() : "workspace"}
-              {folder && (
-                <span
-                  className="clearfolder"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    clearFolder();
-                  }}
-                  title="Use the default workspace"
-                >
-                  ✕
-                </span>
+            <div className="folderwrap">
+              <button className="folderchip" onClick={() => setFolderMenu((v) => !v)} title={folder ?? "Choose where the agent works — local or remote"}>
+                {folder && folder.startsWith("ssh://") ? (
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="12" rx="2" />
+                    <path d="M8 20h8M12 16v4" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+                  </svg>
+                )}
+                {folder ? folder.replace(/\/+$/, "").split(/[\\/]/).pop() || "workspace" : "workspace"}
+                {folder && (
+                  <span
+                    className="clearfolder"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearFolder();
+                    }}
+                    title="Use the default workspace"
+                  >
+                    ✕
+                  </span>
+                )}
+                <span className="chipcaret">▾</span>
+              </button>
+              {folderMenu && (
+                <div className="foldermenu">
+                  <button
+                    onClick={() => {
+                      setFolderMenu(false);
+                      void chooseFolder();
+                    }}
+                  >
+                    Local folder…
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFolderMenu(false);
+                      setRemotePicker(true);
+                    }}
+                  >
+                    Remote host…
+                  </button>
+                </div>
               )}
-            </button>
+            </div>
             <select className="modesel" value={mode} onChange={(e) => setMode(e.target.value as PermissionMode)} title="What the agent may do this turn">
               <option value="read-only">read-only</option>
               <option value="auto-edit">auto-edit</option>

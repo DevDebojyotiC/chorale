@@ -140,6 +140,28 @@ export const mockBridge: ChoraleBridge = {
         { name: "bookmarks.ts", type: "file" },
       ],
     };
+    // Remote (ssh://) preview tree — a couple of directory levels.
+    if (path.startsWith("ssh://")) {
+      const rtree: Record<string, { name: string; type: "file" | "dir" }[]> = {
+        "/home/deploy": [
+          { name: "srv", type: "dir" },
+          { name: "logs", type: "dir" },
+          { name: ".bashrc", type: "file" },
+        ],
+        "/home/deploy/srv": [
+          { name: "app", type: "dir" },
+          { name: "deploy.sh", type: "file" },
+        ],
+        "/home/deploy/srv/app": [
+          { name: "index.js", type: "file" },
+          { name: "package.json", type: "file" },
+        ],
+      };
+      const slash = path.slice("ssh://".length).indexOf("/");
+      const hostId = path.slice("ssh://".length, slash < 0 ? undefined : "ssh://".length + slash);
+      const p = (slash < 0 ? "/" : path.slice("ssh://".length + slash)).replace(/\/+$/, "") || "/";
+      return Promise.resolve((rtree[p] ?? []).map((e) => ({ name: e.name, path: `ssh://${hostId}${p === "/" ? "" : p}/${e.name}`, type: e.type })));
+    }
     const norm = path.replace(/[\\/]+$/, "");
     return Promise.resolve((tree[norm] ?? []).map((e) => ({ name: e.name, path: `${norm}/${e.name}`, type: e.type })));
   },
@@ -163,6 +185,7 @@ export const mockBridge: ChoraleBridge = {
     return Promise.resolve([...MOCK_HOSTS]);
   },
   testRemoteHost: () => Promise.resolve({ ok: true, detail: "Linux prod-box 6.1.0 x86_64", ms: 214 }),
+  remoteHomeUri: (hostId) => Promise.resolve(`ssh://${hostId}/home/deploy`),
   gitStatus: () =>
     Promise.resolve({
       repo: true,

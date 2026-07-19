@@ -270,7 +270,8 @@ function registerIpc(): void {
     return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]!;
   });
 
-  ipcMain.handle(IPC.fsReadDir, (_e, dir: string): DirEntry[] => {
+  ipcMain.handle(IPC.fsReadDir, (_e, dir: string): DirEntry[] | Promise<DirEntry[]> => {
+    if (remote.isRemote(dir)) return remote.remoteReadDir(dir);
     try {
       return readdirSync(dir, { withFileTypes: true })
         .map((e) => ({ name: e.name, path: join(dir, e.name), type: (e.isDirectory() ? "dir" : "file") as "file" | "dir" }))
@@ -280,7 +281,8 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle(IPC.fsReadFile, (_e, path: string): FilePreview => {
+  ipcMain.handle(IPC.fsReadFile, (_e, path: string): FilePreview | Promise<FilePreview> => {
+    if (remote.isRemote(path)) return remote.remoteReadFile(path);
     const IMG: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".bmp": "image/bmp" };
     try {
       const st = statSync(path);
@@ -295,7 +297,8 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle(IPC.fsListFiles, (_e, folder: string): FileRef[] => {
+  ipcMain.handle(IPC.fsListFiles, (_e, folder: string): FileRef[] | Promise<FileRef[]> => {
+    if (remote.isRemote(folder)) return remote.remoteListFiles(folder);
     try {
       return existsSync(folder) ? walkFiles(folder) : [];
     } catch {
@@ -316,8 +319,10 @@ function registerIpc(): void {
     if (!h) return { ok: false, detail: "Host not found.", ms: 0 };
     return remote.testHost(h);
   });
+  ipcMain.handle(IPC.remoteHome, async (_e, hostId: string): Promise<string> => remote.remoteUri(hostId, await remote.remoteHome(hostId)));
 
-  ipcMain.handle(IPC.gitStatus, (_e, folder: string): GitStatus => {
+  ipcMain.handle(IPC.gitStatus, (_e, folder: string): GitStatus | Promise<GitStatus> => {
+    if (remote.isRemote(folder)) return remote.remoteGitStatus(folder);
     try {
       const top = git(folder, ["rev-parse", "--show-toplevel"]).trim();
       let branch: string | null = null;
@@ -333,7 +338,8 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle(IPC.gitDiff, (_e, folder: string, file: string): string => {
+  ipcMain.handle(IPC.gitDiff, (_e, folder: string, file: string): string | Promise<string> => {
+    if (remote.isRemote(folder)) return remote.remoteGitDiff(folder, file);
     try {
       const top = git(folder, ["rev-parse", "--show-toplevel"]).trim();
       const rel = relative(top, file).split("\\").join("/");

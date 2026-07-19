@@ -28,6 +28,7 @@ const bridge: ChoraleBridge = {
   saveRemoteHost: (input) => ipcRenderer.invoke(IPC.remoteSave, input),
   deleteRemoteHost: (id) => ipcRenderer.invoke(IPC.remoteDelete, id),
   testRemoteHost: (id) => ipcRenderer.invoke(IPC.remoteTest, id),
+  remoteHomeUri: (hostId) => ipcRenderer.invoke(IPC.remoteHome, hostId),
   newSession: (agent, folder) => ipcRenderer.invoke(IPC.sessionNew, agent, folder ?? null),
   setSessionFolder: (id, folder) => ipcRenderer.invoke(IPC.sessionSetFolder, id, folder),
   setSessionTitle: (id, title) => ipcRenderer.invoke(IPC.sessionSetTitle, id, title),
