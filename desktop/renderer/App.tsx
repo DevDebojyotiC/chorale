@@ -29,7 +29,7 @@ function Icon({ children }: { children: ReactNode }) {
 export function App() {
   const [screen, setScreen] = useState<Screen>("chat");
   const [theme, setTheme] = useState<"dark" | "light" | null>(null);
-  const [resume, setResume] = useState<{ id: string; folder: string | null } | null>(null); // session to open in Chat
+  const [resume, setResume] = useState<{ id: string; folder: string | null; title: string | null } | null>(null); // session to open in Chat
   const [workspace, setWorkspace] = useState("workspace");
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -139,7 +139,7 @@ export function App() {
         {screen === "sessions" && (
           <Sessions
             onOpen={(s) => {
-              setResume({ id: s.id, folder: s.folder });
+              setResume({ id: s.id, folder: s.folder, title: s.title });
               setScreen("chat");
             }}
           />

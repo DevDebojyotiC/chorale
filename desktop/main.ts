@@ -364,6 +364,14 @@ function registerIpc(): void {
     }
   });
 
+  ipcMain.handle(IPC.sessionSetTitle, (_e, id: string, title: string | null): void => {
+    try {
+      if (store && !id.startsWith("mem_")) store.setTitle(id, title && title.trim() ? title.trim() : null);
+    } catch {
+      /* persistence unavailable */
+    }
+  });
+
   ipcMain.handle(IPC.sessionList, (): SessionInfo[] => {
     if (!store) return [];
     return store.listSessions(50).map((s) => ({ id: s.id, agent: s.agent, title: s.title, updatedAt: s.updated_at, folder: s.folder }));

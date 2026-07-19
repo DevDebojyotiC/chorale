@@ -17,10 +17,18 @@ function ago(iso: string): string {
 
 export function Sessions({ onOpen }: { onOpen: (session: SessionInfo) => void }) {
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
 
   useEffect(() => {
     chorale.listSessions().then(setSessions);
   }, []);
+
+  function rename(id: string, next: string) {
+    const t = next.trim() || null;
+    setEditing(null);
+    setSessions((list) => list?.map((s) => (s.id === id ? { ...s, title: t } : s)) ?? list);
+    void chorale.setSessionTitle(id, t);
+  }
 
   if (!sessions) return <div className="loading">loading sessions…</div>;
 
@@ -33,11 +41,43 @@ export function Sessions({ onOpen }: { onOpen: (session: SessionInfo) => void })
       <div className="grid" style={{ gridTemplateColumns: "1fr", maxWidth: 720 }}>
         {sessions.length === 0 && <div className="body user mono">No saved sessions yet — start chatting and they'll appear here.</div>}
         {sessions.map((s) => (
-          <button key={s.id} className="card sessioncard" style={{ ["--acc" as string]: agentColor(s.agent), textAlign: "left", cursor: "pointer" }} onClick={() => onOpen(s)}>
+          <div key={s.id} className="card sessioncard" style={{ ["--acc" as string]: agentColor(s.agent) }} onClick={() => editing !== s.id && onOpen(s)} role="button" tabIndex={0}>
             <div className="ch">
               <span className="sw" />
-              <b>{s.title || "untitled conversation"}</b>
+              {editing === s.id ? (
+                <input
+                  className="titleedit grow"
+                  autoFocus
+                  defaultValue={s.title ?? ""}
+                  placeholder="Name this session…"
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={(e) => rename(s.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      rename(s.id, (e.target as HTMLInputElement).value);
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      setEditing(null);
+                    }
+                  }}
+                />
+              ) : (
+                <b>{s.title || "untitled conversation"}</b>
+              )}
               <span className="tier">{s.agent}</span>
+              <button
+                className="renamebtn"
+                title="Rename"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditing(s.id);
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+              </button>
             </div>
             <div className="kv">
               <span className="k">updated</span>
@@ -48,7 +88,7 @@ export function Sessions({ onOpen }: { onOpen: (session: SessionInfo) => void })
                 </span>
               )}
             </div>
-          </button>
+          </div>
         ))}
       </div>
     </div>

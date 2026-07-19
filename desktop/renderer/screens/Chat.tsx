@@ -31,7 +31,7 @@ interface Ev {
   text: string;
 }
 
-export function Chat({ resume, onResumed }: { resume?: { id: string; folder: string | null } | null; onResumed?: () => void }) {
+export function Chat({ resume, onResumed }: { resume?: { id: string; folder: string | null; title: string | null } | null; onResumed?: () => void }) {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [agent, setAgent] = useState("orchestrator");
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -42,6 +42,8 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<PermissionMode>("auto-edit");
   const [sessionId, setSessionId] = useState("");
+  const [title, setTitle] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
   const [folder, setFolder] = useState<string | null>(null);
   const [showFiles, setShowFiles] = useState(false);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
@@ -69,7 +71,15 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
     setStreaming("");
     setUsage(null);
     setAttachments([]);
+    setTitle(null);
     chorale.newSession(agent, folder).then(setSessionId); // keep the same project folder
+  }
+
+  function renameSession(next: string) {
+    const t = next.trim() || null;
+    setTitle(t);
+    setEditingTitle(false);
+    if (sessionId) void chorale.setSessionTitle(sessionId, t);
   }
 
   async function chooseFolder() {
@@ -116,6 +126,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
       setTurns(prior.map((t) => ({ role: t.role, text: t.content, agent: t.role === "assistant" ? agent : undefined })));
       setSessionId(resume.id);
       setFolder(resume.folder);
+      setTitle(resume.title);
       setStreaming("");
       setEvents([]);
       setUsage(null);
@@ -159,6 +170,12 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
 
   async function submitText(text: string, base: Turn[], attach: Attachment[] = []) {
     if ((!text && attach.length === 0) || busy) return;
+    // Auto-title a fresh, untitled session from its first prompt.
+    if (base.length === 0 && !title && text) {
+      const auto = text.replace(/\s+/g, " ").trim().slice(0, 48);
+      setTitle(auto);
+      if (sessionId) void chorale.setSessionTitle(sessionId, auto);
+    }
     setTurns([...base, { role: "user", text, attachments: attach.length ? attach.map((a) => a.name) : undefined }]);
     setBusy(true);
     setStreaming("");
@@ -278,6 +295,32 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
       <div className="thread">
         <div className="thread-inner">
           <div className="agentbar">
+            {editingTitle ? (
+              <input
+                className="titleedit"
+                autoFocus
+                defaultValue={title ?? ""}
+                placeholder="Name this session…"
+                onBlur={(e) => renameSession(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    renameSession((e.target as HTMLInputElement).value);
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    setEditingTitle(false);
+                  }
+                }}
+              />
+            ) : (
+              <button className="titlechip" onClick={() => setEditingTitle(true)} title="Rename this session">
+                <span className={"titletext" + (title ? "" : " muted")}>{title ?? "untitled session"}</span>
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+              </button>
+            )}
+            <div className="agentbar-sep" />
             {agents.map((a) => (
               <button key={a.name} className="apill" data-on={a.name === agent ? "1" : "0"} style={{ ["--acc" as string]: agentColor(a.name) }} onClick={() => setAgent(a.name)} title={a.description}>
                 <span className="sw" style={{ background: agentColor(a.name) }} />

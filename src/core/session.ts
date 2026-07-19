@@ -119,8 +119,8 @@ export class SessionStore {
     this.db.prepare(`UPDATE sessions SET folder = ? WHERE id = ?`).run(folder, id);
   }
 
-  /** Rename a session (used by the UI). */
-  setTitle(id: string, title: string): void {
+  /** Rename a session, or clear its title with null (used by the UI). */
+  setTitle(id: string, title: string | null): void {
     this.db.prepare(`UPDATE sessions SET title = ? WHERE id = ?`).run(title, id);
   }
 

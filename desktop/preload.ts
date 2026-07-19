@@ -26,6 +26,7 @@ const bridge: ChoraleBridge = {
   gitDiff: (folder, file) => ipcRenderer.invoke(IPC.gitDiff, folder, file),
   newSession: (agent, folder) => ipcRenderer.invoke(IPC.sessionNew, agent, folder ?? null),
   setSessionFolder: (id, folder) => ipcRenderer.invoke(IPC.sessionSetFolder, id, folder),
+  setSessionTitle: (id, title) => ipcRenderer.invoke(IPC.sessionSetTitle, id, title),
   listSessions: () => ipcRenderer.invoke(IPC.sessionList),
   loadSession: (id) => ipcRenderer.invoke(IPC.sessionLoad, id),
   run: (req, handlers: RunHandlers) => {

@@ -169,6 +169,7 @@ export const mockBridge: ChoraleBridge = {
   },
   newSession: () => Promise.resolve(`mem_mock_${sessionSeq++}`),
   setSessionFolder: () => Promise.resolve(),
+  setSessionTitle: () => Promise.resolve(),
   listSessions: () => Promise.resolve(SESSIONS),
   loadSession: (id): Promise<ChatTurn[]> =>
     Promise.resolve([

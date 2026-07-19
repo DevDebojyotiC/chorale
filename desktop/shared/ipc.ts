@@ -240,6 +240,8 @@ export interface ChoraleBridge {
   newSession: (agent: string, folder?: string | null) => Promise<string>;
   /** Set (or clear) a session's project folder. */
   setSessionFolder: (id: string, folder: string | null) => Promise<void>;
+  /** Rename a session (or clear its title with null). */
+  setSessionTitle: (id: string, title: string | null) => Promise<void>;
   listSessions: () => Promise<SessionInfo[]>;
   loadSession: (id: string) => Promise<ChatTurn[]>;
   /** Start a streaming turn; returns a cancel function. */
@@ -263,6 +265,7 @@ export const IPC = {
   sessionList: "session:list",
   sessionLoad: "session:load",
   sessionSetFolder: "session:set-folder",
+  sessionSetTitle: "session:set-title",
   pickFolder: "dialog:pick-folder",
   fsReadDir: "fs:read-dir",
   fsReadFile: "fs:read-file",
