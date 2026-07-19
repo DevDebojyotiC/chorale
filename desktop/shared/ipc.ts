@@ -121,6 +121,12 @@ export interface DirEntry {
   type: "file" | "dir";
 }
 
+/** A file reference for @-mentions — absolute path + repo-relative display path. */
+export interface FileRef {
+  path: string;
+  rel: string;
+}
+
 /** A previewed file's content + how to display it. */
 export interface FilePreview {
   path: string;
@@ -222,6 +228,10 @@ export interface ChoraleBridge {
   readDir: (path: string) => Promise<DirEntry[]>;
   /** Read a file for preview (text, image data URL, or a binary/too-big marker). */
   readFile: (path: string) => Promise<FilePreview>;
+  /** Flat, recursive list of files under a folder (for @-mentions); skips .git/node_modules/build dirs. */
+  listFiles: (folder: string) => Promise<FileRef[]>;
+  /** Open a native multi-file picker; returns the chosen absolute paths (empty if cancelled). */
+  pickFiles: () => Promise<string[]>;
   /** Git working-tree status for the session folder (changed-files panel). */
   gitStatus: (folder: string) => Promise<GitStatus>;
   /** Unified diff of one file vs HEAD (untracked files come back as an all-additions diff). */
@@ -256,6 +266,8 @@ export const IPC = {
   pickFolder: "dialog:pick-folder",
   fsReadDir: "fs:read-dir",
   fsReadFile: "fs:read-file",
+  fsListFiles: "fs:list-files",
+  pickFiles: "dialog:pick-files",
   gitStatus: "git:status",
   gitDiff: "git:diff",
   runStart: "run:start",

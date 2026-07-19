@@ -27,7 +27,7 @@ import { estimateCost } from "../src/core/costs.js";
 import { getPlaybook } from "../src/core/playbook.js";
 import { checkProviders } from "../src/core/doctor.js";
 import type { ChoraleConfig } from "../src/core/config.js";
-import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview, type GitStatus, type GitChange } from "./shared/ipc.js";
+import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview, type GitStatus, type GitChange, type FileRef } from "./shared/ipc.js";
 
 setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows the activity rail
 
@@ -172,6 +172,35 @@ function safeAgentSummary(file: string): AgentSummary | null {
 }
 const roster = (): AgentSummary[] => agentFiles().map(safeAgentSummary).filter((a): a is AgentSummary => a !== null);
 
+/** Dirs never worth walking for @-mentions (noise + huge). */
+const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", ".next", "coverage", ".turbo", ".cache", "out", "release", "target", ".venv", "__pycache__"]);
+
+/** Flat, recursive list of files under `root` (relative paths), capped so huge trees stay responsive. */
+function walkFiles(root: string, cap = 4000): FileRef[] {
+  const out: FileRef[] = [];
+  const stack: string[] = [root];
+  while (stack.length && out.length < cap) {
+    const dir = stack.pop()!;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      if (out.length >= cap) break;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (!SKIP_DIRS.has(e.name) && !e.name.startsWith(".")) stack.push(full);
+      } else if (e.isFile()) {
+        out.push({ path: full, rel: relative(root, full).split("\\").join("/") });
+      }
+    }
+  }
+  out.sort((a, b) => a.rel.localeCompare(b.rel));
+  return out;
+}
+
 /** Run git in `cwd` and return stdout (throws if git is missing or the command fails). */
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 24 * 1024 * 1024, windowsHide: true });
@@ -262,6 +291,19 @@ function registerIpc(): void {
     } catch (e) {
       return { path, kind: "error", content: e instanceof Error ? e.message : String(e) };
     }
+  });
+
+  ipcMain.handle(IPC.fsListFiles, (_e, folder: string): FileRef[] => {
+    try {
+      return existsSync(folder) ? walkFiles(folder) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC.pickFiles, async (): Promise<string[]> => {
+    const res = await dialog.showOpenDialog({ properties: ["openFile", "multiSelections"], title: "Attach files to this message" });
+    return res.canceled ? [] : res.filePaths;
   });
 
   ipcMain.handle(IPC.gitStatus, (_e, folder: string): GitStatus => {

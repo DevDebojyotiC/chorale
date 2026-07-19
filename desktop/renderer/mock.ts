@@ -138,6 +138,11 @@ export const mockBridge: ChoraleBridge = {
     const norm = path.replace(/[\\/]+$/, "");
     return Promise.resolve((tree[norm] ?? []).map((e) => ({ name: e.name, path: `${norm}/${e.name}`, type: e.type })));
   },
+  listFiles: () =>
+    Promise.resolve(
+      ["src/server.ts", "src/utils.ts", "src/api/auth.ts", "src/api/bookmarks.ts", "src/db/schema.sql", "public/index.html", "package.json", "README.md", "tsconfig.json", ".env"].map((rel) => ({ rel, path: `D:/projects/demo-app/${rel}` })),
+    ),
+  pickFiles: () => Promise.resolve(["D:/projects/demo-app/README.md"]),
   gitStatus: () =>
     Promise.resolve({
       repo: true,
