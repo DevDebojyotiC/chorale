@@ -154,6 +154,35 @@ export interface GitStatus {
   changes: GitChange[];
 }
 
+/** A saved SSH host profile (no secrets — auth is via the OpenSSH agent or a key file on disk). */
+export interface RemoteHost {
+  id: string;
+  label: string;
+  host: string;
+  port: number;
+  username: string;
+  auth: "agent" | "key";
+  privateKeyPath: string | null;
+}
+
+/** What the UI submits to create/update a host (id omitted = create). */
+export interface RemoteHostInput {
+  id?: string;
+  label: string;
+  host: string;
+  port: number;
+  username: string;
+  auth: "agent" | "key";
+  privateKeyPath?: string;
+}
+
+/** Result of a connectivity test. */
+export interface RemoteTestResult {
+  ok: boolean;
+  detail: string;
+  ms: number;
+}
+
 /** App/workspace info for the title bar and status. */
 export interface AppInfo {
   workspace: string;
@@ -232,6 +261,14 @@ export interface ChoraleBridge {
   listFiles: (folder: string) => Promise<FileRef[]>;
   /** Open a native multi-file picker; returns the chosen absolute paths (empty if cancelled). */
   pickFiles: () => Promise<string[]>;
+  /** Saved SSH host profiles (no secrets). */
+  remoteHosts: () => Promise<RemoteHost[]>;
+  /** Create or update a host; returns the refreshed list. */
+  saveRemoteHost: (input: RemoteHostInput) => Promise<RemoteHost[]>;
+  /** Delete a host by id; returns the refreshed list. */
+  deleteRemoteHost: (id: string) => Promise<RemoteHost[]>;
+  /** Test connectivity to a saved host (connects + runs a trivial command). */
+  testRemoteHost: (id: string) => Promise<RemoteTestResult>;
   /** Git working-tree status for the session folder (changed-files panel). */
   gitStatus: (folder: string) => Promise<GitStatus>;
   /** Unified diff of one file vs HEAD (untracked files come back as an all-additions diff). */
@@ -275,6 +312,10 @@ export const IPC = {
   pickFiles: "dialog:pick-files",
   gitStatus: "git:status",
   gitDiff: "git:diff",
+  remoteList: "remote:list",
+  remoteSave: "remote:save",
+  remoteDelete: "remote:delete",
+  remoteTest: "remote:test",
   runStart: "run:start",
   runMsg: "run:msg",
   runCancel: "run:cancel",

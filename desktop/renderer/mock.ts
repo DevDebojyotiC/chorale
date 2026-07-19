@@ -1,4 +1,9 @@
-import type { ChoraleBridge, AgentSummary, ConfigSummary, SessionInfo, ChatTurn, RunHandlers, RunInput } from "../shared/ipc";
+import type { ChoraleBridge, AgentSummary, ConfigSummary, SessionInfo, ChatTurn, RunHandlers, RunInput, RemoteHost } from "../shared/ipc";
+
+const MOCK_HOSTS: RemoteHost[] = [
+  { id: "h1", label: "prod-box", host: "203.0.113.10", port: 22, username: "deploy", auth: "key", privateKeyPath: "~/.ssh/id_ed25519" },
+  { id: "h2", label: "staging", host: "staging.internal", port: 22, username: "app", auth: "agent", privateKeyPath: null },
+];
 
 /**
  * A stand-in for window.chorale used ONLY when the renderer runs in a plain browser (Vite preview),
@@ -143,6 +148,21 @@ export const mockBridge: ChoraleBridge = {
       ["src/server.ts", "src/utils.ts", "src/api/auth.ts", "src/api/bookmarks.ts", "src/db/schema.sql", "public/index.html", "package.json", "README.md", "tsconfig.json", ".env"].map((rel) => ({ rel, path: `D:/projects/demo-app/${rel}` })),
     ),
   pickFiles: () => Promise.resolve(["D:/projects/demo-app/README.md"]),
+  remoteHosts: () => Promise.resolve(MOCK_HOSTS),
+  saveRemoteHost: (input) => {
+    const id = input.id ?? `h${MOCK_HOSTS.length + 1}`;
+    const host = { id, label: input.label || input.host, host: input.host, port: input.port || 22, username: input.username, auth: input.auth, privateKeyPath: input.auth === "key" ? input.privateKeyPath ?? null : null };
+    const idx = MOCK_HOSTS.findIndex((h) => h.id === id);
+    if (idx >= 0) MOCK_HOSTS[idx] = host;
+    else MOCK_HOSTS.push(host);
+    return Promise.resolve([...MOCK_HOSTS]);
+  },
+  deleteRemoteHost: (id) => {
+    const idx = MOCK_HOSTS.findIndex((h) => h.id === id);
+    if (idx >= 0) MOCK_HOSTS.splice(idx, 1);
+    return Promise.resolve([...MOCK_HOSTS]);
+  },
+  testRemoteHost: () => Promise.resolve({ ok: true, detail: "Linux prod-box 6.1.0 x86_64", ms: 214 }),
   gitStatus: () =>
     Promise.resolve({
       repo: true,

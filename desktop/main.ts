@@ -27,7 +27,8 @@ import { estimateCost } from "../src/core/costs.js";
 import { getPlaybook } from "../src/core/playbook.js";
 import { checkProviders } from "../src/core/doctor.js";
 import type { ChoraleConfig } from "../src/core/config.js";
-import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview, type GitStatus, type GitChange, type FileRef } from "./shared/ipc.js";
+import * as remote from "./remote.js";
+import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview, type GitStatus, type GitChange, type FileRef, type RemoteHost, type RemoteHostInput, type RemoteTestResult } from "./shared/ipc.js";
 
 setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows the activity rail
 
@@ -83,6 +84,7 @@ function reloadConfig(): void {
 
 function initCore(): void {
   reloadConfig();
+  remote.initRemote(workspaceDir);
   try {
     const s = new SessionStore();
     s.listSessions(1); // force the better-sqlite3 native addon to load NOW; a lazy ABI mismatch throws here
@@ -306,6 +308,15 @@ function registerIpc(): void {
     return res.canceled ? [] : res.filePaths;
   });
 
+  ipcMain.handle(IPC.remoteList, (): RemoteHost[] => remote.loadHosts());
+  ipcMain.handle(IPC.remoteSave, (_e, input: RemoteHostInput): RemoteHost[] => remote.saveHost(input));
+  ipcMain.handle(IPC.remoteDelete, (_e, id: string): RemoteHost[] => remote.deleteHost(id));
+  ipcMain.handle(IPC.remoteTest, async (_e, id: string): Promise<RemoteTestResult> => {
+    const h = remote.loadHosts().find((x) => x.id === id);
+    if (!h) return { ok: false, detail: "Host not found.", ms: 0 };
+    return remote.testHost(h);
+  });
+
   ipcMain.handle(IPC.gitStatus, (_e, folder: string): GitStatus => {
     try {
       const top = git(folder, ["rev-parse", "--show-toplevel"]).trim();
@@ -505,3 +516,5 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+app.on("before-quit", () => remote.closeAllRemotes());

@@ -27,3 +27,6 @@ experiments/
 
 # electron-builder output
 release/
+
+# desktop remote host profiles (may contain host/user/key paths)
+remote-hosts.json
