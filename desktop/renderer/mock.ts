@@ -138,6 +138,24 @@ export const mockBridge: ChoraleBridge = {
     const norm = path.replace(/[\\/]+$/, "");
     return Promise.resolve((tree[norm] ?? []).map((e) => ({ name: e.name, path: `${norm}/${e.name}`, type: e.type })));
   },
+  gitStatus: () =>
+    Promise.resolve({
+      repo: true,
+      branch: "phase-5",
+      changes: [
+        { path: "D:/projects/demo-app/src/server.ts", file: "src/server.ts", status: "modified" as const, staged: false },
+        { path: "D:/projects/demo-app/src/api/auth.ts", file: "src/api/auth.ts", status: "modified" as const, staged: true },
+        { path: "D:/projects/demo-app/src/api/bookmarks.ts", file: "src/api/bookmarks.ts", status: "added" as const, staged: false },
+        { path: "D:/projects/demo-app/README.md", file: "README.md", status: "untracked" as const, staged: false },
+        { path: "D:/projects/demo-app/old.txt", file: "old.txt", status: "deleted" as const, staged: false },
+      ],
+    }),
+  gitDiff: (_folder, file) => {
+    if (file.endsWith("server.ts"))
+      return Promise.resolve(`diff --git a/src/server.ts b/src/server.ts\nindex 1a2b3c4..5d6e7f8 100644\n--- a/src/server.ts\n+++ b/src/server.ts\n@@ -1,6 +1,8 @@\n import express from "express";\n+import { authRouter } from "./api/auth";\n \n const app = express();\n app.use(express.json());\n+app.use("/api/auth", authRouter);\n-app.listen(3000);\n+app.listen(process.env.PORT ?? 3000);\n`);
+    if (file.endsWith("README.md")) return Promise.resolve(`--- /dev/null\n+++ b/README.md\n@@ -0,0 +1,2 @@\n+# demo-app\n+A small express service.\n`);
+    return Promise.resolve(`diff --git a/${file} b/${file}\n@@ -1 +1 @@\n-old\n+new\n`);
+  },
   readFile: (path) => {
     if (path.endsWith("server.ts"))
       return Promise.resolve({ path, kind: "text" as const, content: `import express from "express";\nimport { authRouter } from "./api/auth";\n\nconst app = express();\napp.use(express.json());\napp.use("/api/auth", authRouter);\napp.listen(process.env.PORT ?? 3000);\n` });

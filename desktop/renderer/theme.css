@@ -125,6 +125,12 @@ main { grid-area: main; overflow: hidden; min-width: 0; }
 
 .rail { border-left: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
 .rail h3 { margin: 0; padding: 14px 16px 12px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .7px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+.railtabs { display: flex; align-items: center; border-bottom: 1px solid var(--line); padding: 0 8px; }
+.railtab { display: flex; align-items: center; gap: 7px; padding: 13px 10px 11px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .7px; text-transform: uppercase; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+.railtab:hover { color: var(--text); }
+.railtab[data-on="1"] { color: var(--text); border-bottom-color: var(--brand); }
+.railrefresh { margin-left: auto; color: var(--faint); background: none; border: none; cursor: pointer; padding: 4px; display: grid; place-items: center; }
+.railrefresh:hover { color: var(--brand); }
 .live { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
 .live.on { background: var(--ok); animation: pulse 2s infinite; }
 @keyframes pulse { 70% { box-shadow: 0 0 0 6px transparent; } 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--ok) 60%, transparent); } }
@@ -138,6 +144,26 @@ main { grid-area: main; overflow: hidden; min-width: 0; }
 .ev .txt { font-size: 12px; padding-top: 1px; min-width: 0; }
 .ev .txt .h { color: var(--text); word-break: break-word; }
 .ev .txt .tag { font-family: var(--mono); font-size: 9.5px; letter-spacing: .4px; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; margin-left: 6px; color: var(--acc); background: color-mix(in oklab, var(--acc) 14%, transparent); }
+/* changed-files panel */
+.changes-branch { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 10px 10px 8px; }
+.changes-branch svg { color: var(--brand); flex: none; }
+.changes-count { margin-left: auto; font-size: 10px; color: var(--faint); background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; }
+.changelist { display: flex; flex-direction: column; }
+.changerow { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 6px 8px; border: none; background: none; border-radius: var(--r-sm); cursor: pointer; }
+.changerow:hover { background: var(--surface-2); }
+.cbadge { flex: none; width: 17px; height: 17px; display: grid; place-items: center; font-family: var(--mono); font-size: 10px; font-weight: 700; border: 1px solid; border-radius: 4px; background: color-mix(in oklab, currentColor 10%, transparent); }
+.cfile { font-family: var(--mono); font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.cstaged { color: var(--ok); font-size: 8px; flex: none; }
+
+/* diff view */
+.diff { font-family: var(--mono); font-size: 12px; line-height: 1.55; margin: 10px 0 0; overflow-x: auto; white-space: pre; }
+.diff .dl { padding: 0 10px; }
+.diff .add { background: color-mix(in oklab, var(--ok) 14%, transparent); color: color-mix(in oklab, var(--ok) 60%, var(--text)); }
+.diff .del { background: color-mix(in oklab, var(--crit) 14%, transparent); color: color-mix(in oklab, var(--crit) 60%, var(--text)); }
+.diff .hunk { color: var(--a-planner); background: color-mix(in oklab, var(--a-planner) 10%, transparent); }
+.diff .meta { color: var(--faint); }
+.diff .ctx { color: var(--muted); }
+
 .railfoot { border-top: 1px solid var(--line); padding: 11px 16px; display: flex; gap: 16px; }
 .stat .k { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--faint); }
 .stat .v { font-family: var(--mono); font-size: 14px; color: var(--text); font-variant-numeric: tabular-nums; }

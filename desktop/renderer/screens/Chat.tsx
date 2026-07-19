@@ -3,6 +3,7 @@ import type { AgentSummary, PermissionMode } from "../../shared/ipc";
 import { chorale, agentColor, eventStyle } from "../bridge";
 import { Message, CopyBtn } from "../components/Message";
 import { Explorer, FilePreviewModal } from "../components/Explorer";
+import { Changes, DiffModal } from "../components/Changes";
 
 interface Turn {
   role: "user" | "assistant";
@@ -29,6 +30,9 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   const [folder, setFolder] = useState<string | null>(null);
   const [showFiles, setShowFiles] = useState(false);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [railTab, setRailTab] = useState<"activity" | "changes">("activity");
+  const [diffPath, setDiffPath] = useState<string | null>(null);
+  const [changesNonce, setChangesNonce] = useState(0);
   const bottom = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
 
@@ -61,6 +65,8 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
     setFolder(null);
     setShowFiles(false);
     setPreviewPath(null);
+    setDiffPath(null);
+    setRailTab("activity");
     if (sessionId) void chorale.setSessionFolder(sessionId, null);
   }
 
@@ -118,6 +124,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
         setStreaming("");
         setUsage(u ? { in: u.inputTokens, out: u.outputTokens } : null);
         setBusy(false);
+        setChangesNonce((n) => n + 1); // the run may have edited files — refresh the changes panel
       },
       onError: (msg) => {
         cancelRef.current = null;
@@ -144,6 +151,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
     <div className={"chat" + (explorerOpen ? " with-explorer" : "")}>
       {explorerOpen && folder && <Explorer folder={folder} onOpen={setPreviewPath} active={previewPath} />}
       {previewPath && <FilePreviewModal path={previewPath} onClose={() => setPreviewPath(null)} />}
+      {diffPath && folder && <DiffModal folder={folder} path={diffPath} onClose={() => setDiffPath(null)} />}
       <div className="thread">
         <div className="thread-inner">
           <div className="agentbar">
@@ -262,27 +270,45 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
       </div>
 
       <aside className="rail">
-        <h3>
-          <span className={"live" + (busy ? " on" : "")} />
-          live activity
-        </h3>
-        <div className="events">
-          {events.length === 0 && <div className="empty">{busy ? "listening…" : "Activity from the run — tool calls, verify, escalation — appears here."}</div>}
-          {events.map((ev, i) => {
-            const st = eventStyle(ev.type);
-            return (
-              <div className="ev" key={i} style={{ ["--acc" as string]: st.color }}>
-                <span className="ico">
-                  <span className="dotc" />
-                </span>
-                <div className="txt">
-                  <span className="h">{ev.text}</span>
-                  <span className="tag">{st.tag}</span>
-                </div>
-              </div>
-            );
-          })}
+        <div className="railtabs">
+          <button className="railtab" data-on={railTab === "activity" ? "1" : "0"} onClick={() => setRailTab("activity")}>
+            <span className={"live" + (busy ? " on" : "")} />
+            activity
+          </button>
+          {folder && (
+            <button className="railtab" data-on={railTab === "changes" ? "1" : "0"} onClick={() => setRailTab("changes")}>
+              changes
+            </button>
+          )}
+          {railTab === "changes" && folder && (
+            <button className="railrefresh" onClick={() => setChangesNonce((n) => n + 1)} title="Refresh changes">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 11a8 8 0 1 0-.5 3M20 5v6h-6" />
+              </svg>
+            </button>
+          )}
         </div>
+        {railTab === "activity" ? (
+          <div className="events">
+            {events.length === 0 && <div className="empty">{busy ? "listening…" : "Activity from the run — tool calls, verify, escalation — appears here."}</div>}
+            {events.map((ev, i) => {
+              const st = eventStyle(ev.type);
+              return (
+                <div className="ev" key={i} style={{ ["--acc" as string]: st.color }}>
+                  <span className="ico">
+                    <span className="dotc" />
+                  </span>
+                  <div className="txt">
+                    <span className="h">{ev.text}</span>
+                    <span className="tag">{st.tag}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="events">{folder && <Changes folder={folder} nonce={changesNonce} onOpen={setDiffPath} />}</div>
+        )}
         <div className="railfoot">
           <div className="stat">
             <div className="k">tokens</div>

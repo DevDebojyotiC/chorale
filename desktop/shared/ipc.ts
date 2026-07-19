@@ -129,6 +129,25 @@ export interface FilePreview {
   content: string;
 }
 
+/** One changed file in the session folder's git working tree. */
+export interface GitChange {
+  /** Absolute path to the file. */
+  path: string;
+  /** Repo-relative display path. */
+  file: string;
+  status: "modified" | "added" | "deleted" | "renamed" | "untracked" | "conflict";
+  /** Whether the change is staged (in the index). */
+  staged: boolean;
+}
+
+/** The session folder's git working-tree state (for the changed-files panel). */
+export interface GitStatus {
+  /** False when the folder isn't a git repo (or git is unavailable). */
+  repo: boolean;
+  branch: string | null;
+  changes: GitChange[];
+}
+
 /** App/workspace info for the title bar and status. */
 export interface AppInfo {
   workspace: string;
@@ -203,6 +222,10 @@ export interface ChoraleBridge {
   readDir: (path: string) => Promise<DirEntry[]>;
   /** Read a file for preview (text, image data URL, or a binary/too-big marker). */
   readFile: (path: string) => Promise<FilePreview>;
+  /** Git working-tree status for the session folder (changed-files panel). */
+  gitStatus: (folder: string) => Promise<GitStatus>;
+  /** Unified diff of one file vs HEAD (untracked files come back as an all-additions diff). */
+  gitDiff: (folder: string, file: string) => Promise<string>;
   /** Open a new session for `agent` (optionally bound to a project folder); returns its id. */
   newSession: (agent: string, folder?: string | null) => Promise<string>;
   /** Set (or clear) a session's project folder. */
@@ -233,6 +256,8 @@ export const IPC = {
   pickFolder: "dialog:pick-folder",
   fsReadDir: "fs:read-dir",
   fsReadFile: "fs:read-file",
+  gitStatus: "git:status",
+  gitDiff: "git:diff",
   runStart: "run:start",
   runMsg: "run:msg",
   runCancel: "run:cancel",

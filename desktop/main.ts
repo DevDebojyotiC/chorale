@@ -8,8 +8,9 @@
  * + .env resolve.
  */
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
-import { resolve, join } from "node:path";
+import { resolve, join, relative } from "node:path";
 import { readdirSync, existsSync, readFileSync, writeFileSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { config as loadDotenv } from "dotenv";
 import JSON5 from "json5";
 import { firstRunSeed, agentCount } from "./workspace.js";
@@ -26,7 +27,7 @@ import { estimateCost } from "../src/core/costs.js";
 import { getPlaybook } from "../src/core/playbook.js";
 import { checkProviders } from "../src/core/doctor.js";
 import type { ChoraleConfig } from "../src/core/config.js";
-import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview } from "./shared/ipc.js";
+import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview, type GitStatus, type GitChange } from "./shared/ipc.js";
 
 setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows the activity rail
 
@@ -171,6 +172,34 @@ function safeAgentSummary(file: string): AgentSummary | null {
 }
 const roster = (): AgentSummary[] => agentFiles().map(safeAgentSummary).filter((a): a is AgentSummary => a !== null);
 
+/** Run git in `cwd` and return stdout (throws if git is missing or the command fails). */
+function git(cwd: string, args: string[]): string {
+  return execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 24 * 1024 * 1024, windowsHide: true });
+}
+
+/** Parse `git status --porcelain=v1` into typed changes (paths made absolute against the repo root). */
+function parseGitStatus(top: string, porcelain: string): GitChange[] {
+  const out: GitChange[] = [];
+  for (const line of porcelain.split("\n")) {
+    if (line.length < 4) continue;
+    const x = line[0]!;
+    const y = line[1]!;
+    let rel = line.slice(3);
+    if (rel.includes(" -> ")) rel = rel.split(" -> ")[1]!; // rename: keep the new path
+    if (rel.startsWith('"') && rel.endsWith('"')) rel = rel.slice(1, -1); // git quotes odd paths
+    const code = x === "?" ? "?" : x !== " " ? x : y;
+    let status: GitChange["status"];
+    if (x === "?" || y === "?") status = "untracked";
+    else if (x === "U" || y === "U" || (x === "A" && y === "A") || (x === "D" && y === "D")) status = "conflict";
+    else if (code === "A") status = "added";
+    else if (code === "D") status = "deleted";
+    else if (code === "R") status = "renamed";
+    else status = "modified";
+    out.push({ path: join(top, rel), file: rel, status, staged: x !== " " && x !== "?" });
+  }
+  return out;
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.appInfo, (): AppInfo => ({ workspace: workspaceDir, agents: agentCount(workspaceDir), version: app.getVersion(), packaged: app.isPackaged }));
 
@@ -232,6 +261,48 @@ function registerIpc(): void {
       return { path, kind: "text", content: buf.toString("utf8") };
     } catch (e) {
       return { path, kind: "error", content: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle(IPC.gitStatus, (_e, folder: string): GitStatus => {
+    try {
+      const top = git(folder, ["rev-parse", "--show-toplevel"]).trim();
+      let branch: string | null = null;
+      try {
+        branch = git(top, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+      } catch {
+        /* detached HEAD / no commits yet */
+      }
+      const changes = parseGitStatus(top, git(top, ["status", "--porcelain=v1", "-uall"]));
+      return { repo: true, branch, changes };
+    } catch {
+      return { repo: false, branch: null, changes: [] }; // not a repo, or git unavailable
+    }
+  });
+
+  ipcMain.handle(IPC.gitDiff, (_e, folder: string, file: string): string => {
+    try {
+      const top = git(folder, ["rev-parse", "--show-toplevel"]).trim();
+      const rel = relative(top, file).split("\\").join("/");
+      let tracked = true;
+      try {
+        execFileSync("git", ["ls-files", "--error-unmatch", "--", rel], { cwd: top, stdio: "ignore", windowsHide: true });
+      } catch {
+        tracked = false;
+      }
+      if (!tracked) {
+        // Untracked: synthesize an all-additions diff so the panel shows the new file's content.
+        if (!existsSync(file)) return "";
+        const st = statSync(file);
+        if (st.size > 512 * 1024) return `+ (new file — ${(st.size / 1024).toFixed(0)} KB, too large to preview)`;
+        const buf = readFileSync(file);
+        if (buf.subarray(0, 8000).includes(0)) return "+ (new binary file — no preview)";
+        const lines = buf.toString("utf8").replace(/\n$/, "").split("\n");
+        return `--- /dev/null\n+++ b/${rel}\n@@ -0,0 +1,${lines.length} @@\n` + lines.map((l) => "+" + l).join("\n");
+      }
+      return git(top, ["diff", "HEAD", "--", rel]);
+    } catch {
+      return "";
     }
   });
 
