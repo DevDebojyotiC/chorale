@@ -7,7 +7,7 @@ import type { AgentSpec } from "../agents/loader.js";
 import type { ChoraleConfig } from "../core/config.js";
 import type { Registry } from "../core/model-registry.js";
 import type { RunResult, RunEvent } from "../core/runtime.js";
-import type { PermissionMode } from "./permissions.js";
+import type { PermissionMode, ToolBackend } from "./permissions.js";
 import { log } from "../core/log.js";
 
 /** The runtime's runAgent, injected to avoid an import cycle. */
@@ -21,6 +21,8 @@ export type Runner = (opts: {
   permissionMode: PermissionMode;
   delegationPath: string[];
   onEvent?: (e: RunEvent) => void;
+  cwd?: string;
+  backend?: ToolBackend;
 }) => Promise<RunResult>;
 
 export interface DelegateContext {
@@ -36,6 +38,10 @@ export interface DelegateContext {
   onEvent?: (e: RunEvent) => void;
   /** The delegating agent's name (so delegate events attribute to the parent node). */
   parent?: string;
+  /** The session's working directory — specialists MUST write here, not process.cwd(). */
+  cwd?: string;
+  /** The session's remote backend (if any) — specialists run on the same workspace. */
+  backend?: ToolBackend;
 }
 
 /**
@@ -44,7 +50,7 @@ export interface DelegateContext {
  * prevent runaway delegation.
  */
 export function createDelegateTool(ctx: DelegateContext) {
-  const { config, registry, depth, maxDepth, permissionMode, path = [], run, onEvent, parent } = ctx;
+  const { config, registry, depth, maxDepth, permissionMode, path = [], run, onEvent, parent, cwd, backend } = ctx;
   return tool({
     description:
       "Delegate a self-contained sub-task to a specialist agent (e.g. research). The specialist cannot see this conversation, so give it a clear, standalone task. Returns the specialist's result.",
@@ -75,7 +81,7 @@ export function createDelegateTool(ctx: DelegateContext) {
       try {
         // Sub-agents run silent (no onToken) by default; CHORALE_TRACE streams their tokens too. onEvent
         // is always passed so the specialist's activity bubbles up into the same tree (tagged depth+1).
-        const res = await run({ config, registry, agent: spec, prompt: task, depth: depth + 1, stream: process.env.CHORALE_TRACE === "1", permissionMode, delegationPath: [...path, agentName], onEvent });
+        const res = await run({ config, registry, agent: spec, prompt: task, depth: depth + 1, stream: process.env.CHORALE_TRACE === "1", permissionMode, delegationPath: [...path, agentName], onEvent, cwd, backend });
         onEvent?.({ type: "delegate-done", text: `${agentName} finished`, target: agentName, agent: parent, depth });
         return { agent: agentName, model: res.model, result: res.text };
       } catch (e) {

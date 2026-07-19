@@ -37,4 +37,23 @@ describe("Phase 3 guards — delegation", () => {
     const res = await run(t, { agent: "does-not-exist-xyz", task: "x" });
     expect(res.error).toMatch(/unknown agent/i);
   });
+
+  it("propagates the session cwd + backend to the delegated specialist", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let received: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fakeBackend = { exec: async () => ({ stdout: "", stderr: "", code: 0 }) } as any;
+    const t = ctx({
+      cwd: "/session/folder",
+      backend: fakeBackend,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      run: async (o: any) => {
+        received = o;
+        return { model: "mock", text: "ok", usage: undefined } as RunResult;
+      },
+    });
+    await run(t, { agent: "research", task: "find things" });
+    expect(received?.cwd).toBe("/session/folder"); // the specialist writes into the session folder
+    expect(received?.backend).toBe(fakeBackend);
+  });
 });

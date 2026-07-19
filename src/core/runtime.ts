@@ -414,6 +414,8 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       run: runAgent,
       onEvent: opts.onEvent, // bubble the specialist's activity up to the same rail (attributed by depth)
       parent: agent.name,
+      cwd: opts.cwd, // specialists write into the SAME session folder, not process.cwd()
+      backend: opts.backend, // and on the same remote workspace, if any
     });
     const specialists = listAgents(config.agents.dir).filter((a) => a.delegable && a.name !== agent.name);
     if (specialists.length > 0) {
