@@ -1,4 +1,4 @@
-import { resolve, sep, relative } from "node:path";
+import { resolve, sep, relative, posix as posixPath } from "node:path";
 import readline from "node:readline";
 
 /**
@@ -11,10 +11,31 @@ import readline from "node:readline";
  */
 export type PermissionMode = "read-only" | "auto-edit" | "full-auto";
 
+/**
+ * A pluggable filesystem + shell the tools run against. When absent, tools use the local Node fs/shell
+ * (the default — the 370 core tests exercise this path unchanged). When present (e.g. an SSH/SFTP
+ * backend for a remote workspace), the file + shell tools route every operation through it instead.
+ * Paths handed to a backend are backend-absolute (POSIX for a remote host).
+ */
+export interface ToolBackend {
+  exec(command: string, opts: { cwd: string; timeoutMs: number }): Promise<{ stdout: string; stderr: string; code: number }>;
+  readFile(absPath: string): Promise<string>;
+  writeFile(absPath: string, content: string): Promise<void>;
+  mkdirp(absDir: string): Promise<void>;
+  exists(absPath: string): Promise<boolean>;
+  isDirectory(absPath: string): Promise<boolean>;
+  readdir(absDir: string): Promise<{ name: string; isDir: boolean }[]>;
+  rename(fromAbs: string, toAbs: string): Promise<void>;
+}
+
 export interface ToolContext {
   mode: PermissionMode;
   /** Workspace root; all file operations are confined here. */
   cwd: string;
+  /** When set, file/shell tools run against this backend (remote SSH) instead of the local fs. */
+  backend?: ToolBackend;
+  /** True when cwd/paths use POSIX semantics (a remote host); drives resolveInside/rel. */
+  posix?: boolean;
   /** If provided, write/edit tools record the (workspace-relative) files they touch here. */
   touched?: Set<string>;
   /** If provided, edit tools snapshot a file's ORIGINAL content here the first time they change it
@@ -25,20 +46,22 @@ export interface ToolContext {
   reads?: string[];
 }
 
-/** Resolve `p` against the workspace root and refuse if it escapes it. */
-export function resolveInside(cwd: string, p: string): string {
-  const root = resolve(cwd);
-  const target = resolve(root, p);
-  if (target !== root && !target.startsWith(root + sep)) {
+/** Resolve `p` against the workspace root and refuse if it escapes it. Set `posix` for a remote host. */
+export function resolveInside(cwd: string, p: string, posix = false): string {
+  const P = posix ? posixPath : { resolve, sep };
+  const root = P.resolve(cwd);
+  const target = P.resolve(root, p);
+  if (target !== root && !target.startsWith(root + P.sep)) {
     throw new Error(`Path "${p}" escapes the workspace root.`);
   }
   return target;
 }
 
-/** Workspace-relative display path. */
-export function rel(cwd: string, abs: string): string {
-  const r = relative(resolve(cwd), abs);
-  return r === "" ? "." : r.split(sep).join("/");
+/** Workspace-relative display path. Set `posix` for a remote host. */
+export function rel(cwd: string, abs: string, posix = false): string {
+  const P = posix ? posixPath : { resolve, relative, sep };
+  const r = P.relative(P.resolve(cwd), abs);
+  return r === "" ? "." : r.split(P.sep).join("/");
 }
 
 /** Directory segments never traversed by glob/grep. */

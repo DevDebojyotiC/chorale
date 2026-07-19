@@ -457,6 +457,8 @@ function registerIpc(): void {
     try {
       const agent = loadAgent(resolve(config.agents.dir, `${req.agent}.md`));
       persist?.appendMessage(req.sessionId, "user", req.prompt);
+      // Remote workspace: the agent's file/shell tools run over SSH in the remote path; local otherwise.
+      const rw = req.folder ? remote.parseRemote(req.folder) : null;
       const res = await runAgent({
         config,
         registry,
@@ -464,7 +466,8 @@ function registerIpc(): void {
         prompt: req.prompt,
         history: req.history, // prior turns — the agent's memory across the conversation
         permissionMode: req.permissionMode,
-        cwd: req.folder && existsSync(req.folder) ? req.folder : undefined, // agent works in the session's folder
+        cwd: rw ? rw.path : req.folder && existsSync(req.folder) ? req.folder : undefined, // where the agent works
+        backend: rw ? remote.makeToolBackend(rw.host) : undefined, // route tools over SSH when remote
         onToken: (text) => send({ runId: req.runId, kind: "token", text }),
         onEvent: (ev) => send({ runId: req.runId, kind: "event", eventType: ev.type, text: ev.text }),
       });

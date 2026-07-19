@@ -9,6 +9,7 @@ import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { RemoteHost, RemoteHostInput, RemoteTestResult, DirEntry, FilePreview, FileRef, GitStatus, GitChange } from "./shared/ipc.js";
+import type { ToolBackend } from "../src/tools/permissions.js";
 
 let hostsFile = "";
 export function initRemote(workspaceDir: string): void {
@@ -354,6 +355,24 @@ export async function remoteGitDiff(folderUri: string, fileUri: string): Promise
   } catch {
     return "";
   }
+}
+
+/** Adapt an SSH host to the core's ToolBackend so an agent's file + shell tools run on it. */
+export function makeToolBackend(host: RemoteHost): ToolBackend {
+  return {
+    exec: (command, opts) => exec(host, command, opts),
+    readFile: async (p) => (await sftpReadFile(host, p)).toString("utf8"),
+    writeFile: (p, c) => sftpWriteFile(host, p, c),
+    mkdirp: async (d) => {
+      await exec(host, `mkdir -p ${shq(d)}`);
+    },
+    exists: async (p) => (await sftpStat(host, p)) !== null,
+    isDirectory: async (p) => Boolean((await sftpStat(host, p))?.isDir),
+    readdir: (d) => sftpReaddir(host, d),
+    rename: async (f, t) => {
+      await exec(host, `mv ${shq(f)} ${shq(t)}`);
+    },
+  };
 }
 
 /** The home directory on a host (for the remote folder picker's starting point). */

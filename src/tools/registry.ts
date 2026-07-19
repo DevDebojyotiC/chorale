@@ -3,6 +3,7 @@ import { webSearch, webFetch, webResearch } from "./web.js";
 import { createFileTools, READ_ONLY_FILE_TOOLS, WRITE_FILE_TOOLS } from "./fs.js";
 import { createDocumentTools, READ_ONLY_DOC_TOOLS, WRITE_DOC_TOOLS } from "./documents.js";
 import { createShellTools } from "./shell.js";
+import { createRemoteFileTools, createRemoteShellTools } from "./remote-fs.js";
 import type { ToolContext } from "./permissions.js";
 
 /** Static, always-safe tools keyed by the name agents reference in their `tools:` list. */
@@ -21,9 +22,10 @@ const RUNTIME_TOOLS = new Set(["delegate", "skill_view", "gate", "plan"]);
  * omitted in read-only mode (and approval-gated at execution).
  */
 export function buildToolSet(names: string[], ctx: ToolContext): ToolSet {
-  const fileTools = createFileTools(ctx);
+  // A remote workspace routes file + shell tools over the backend (SSH/SFTP); local is unchanged.
+  const fileTools = ctx.backend ? createRemoteFileTools(ctx) : createFileTools(ctx);
   const docTools = createDocumentTools(ctx);
-  const shellTools = createShellTools(ctx);
+  const shellTools = ctx.backend ? createRemoteShellTools(ctx) : createShellTools(ctx);
   const out: ToolSet = {};
 
   for (const name of names) {

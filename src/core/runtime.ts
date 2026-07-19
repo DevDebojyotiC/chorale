@@ -9,7 +9,7 @@ import type { AgentSpec } from "../agents/loader.js";
 import type { ChatMessage } from "./session.js";
 import { listAgents, loadAgent } from "../agents/loader.js";
 import { buildToolSet } from "../tools/registry.js";
-import type { PermissionMode } from "../tools/permissions.js";
+import type { PermissionMode, ToolBackend } from "../tools/permissions.js";
 import { createSkillViewTool } from "../tools/skill.js";
 import { createDelegateTool } from "../tools/delegate.js";
 import { createGateTool } from "../tools/gate-tool.js";
@@ -282,6 +282,10 @@ export interface RunOptions {
   /** Working directory for this run's file/shell tools (defaults to process.cwd()). The desktop app
    *  points this at a session's chosen project folder so the agent operates there and is sandboxed to it. */
   cwd?: string;
+  /** When set, the agent's file/shell tools run against this backend (a remote SSH/SFTP workspace)
+   *  instead of the local fs, and cwd is a POSIX remote path. The local verify/self-heal/smoke/review
+   *  pipeline (which reads the local fs) is skipped for such runs. */
+  backend?: ToolBackend;
 }
 
 /** A structured activity event for a renderer (the TUI subscribes to these). */
@@ -369,6 +373,9 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const mcp = await connectMcpServers(config, agent.mcp);
   const permissionMode: PermissionMode = opts.permissionMode ?? config.permissions.mode;
   const cwd = opts.cwd ?? process.cwd();
+  // A remote (SSH) workspace: tools run over the backend, and the local verify/self-heal/smoke/review
+  // pipeline (which reads the local fs) is skipped — see the guards below.
+  const remoteBackend = opts.backend != null;
   // Files the agent writes this run — fed to the verify-repair loop.
   const touched = new Set<string>();
   // Original content of edited files (for the scribe's meaning-preservation check).
@@ -376,7 +383,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   // Content the agent reads this turn (the "source of truth" for the design-fidelity check).
   const reads: string[] = [];
   const tools: ToolSet = {
-    ...buildToolSet(agent.tools, { mode: permissionMode, cwd, touched, originals, reads }),
+    ...buildToolSet(agent.tools, { mode: permissionMode, cwd, touched, originals, reads, backend: opts.backend, posix: remoteBackend }),
     ...mcp.tools,
   };
   if (agentSkills.length > 0) tools.skill_view = createSkillViewTool(agentSkills);
@@ -446,7 +453,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
 
   // Self-learning: inject the agent's proven lessons (from past repairs) so it
   // avoids known mistakes proactively. Disabled with CHORALE_NO_LEARN=1 (eval).
-  const learn = agent.selfLearn && process.env.CHORALE_NO_LEARN !== "1";
+  const learn = agent.selfLearn && !remoteBackend && process.env.CHORALE_NO_LEARN !== "1";
   let lessonsBlock = "";
   if (learn) {
     try {
@@ -800,7 +807,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   // Self-critique (the reviewer's form of self-healing): after the main turn, feed
   // the draft answer back and ask the model to validate + correct it. The draft is
   // computed silently (suppressOutput) so only the final, corrected answer is shown.
-  const critique = agent.selfCritique && process.env.CHORALE_NO_CRITIQUE !== "1";
+  const critique = agent.selfCritique && !remoteBackend && process.env.CHORALE_NO_CRITIQUE !== "1";
   let suppressOutput = critique;
 
   // Review gate: an auto reviewer gate that fires after this agent's code verifies clean —
@@ -808,6 +815,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   // Only fires if running "reviewer" wouldn't loop back into an agent already in the chain;
   // if it's wanted but loop-guarded, record the unmet need (graceful degradation).
   const wantsReviewGate =
+    !remoteBackend &&
     process.env.CHORALE_NO_REVIEW_GATE !== "1" &&
     (agent.gates ?? []).some((g) => g.agent === "reviewer" && g.mode === "auto" && g.when === "post-verify");
   const reviewDecision = wantsReviewGate ? canRunGate(myGateChain, "reviewer") : { ok: false as const };
@@ -991,7 +999,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
 
       // (1.5) Groundedness check — for doc agents (e.g. scribe). The anti-hallucination
       // pass: verify the paths the written docs reference actually exist; fix invented ones.
-      if (agent.groundCheck && process.env.CHORALE_NO_GROUND !== "1") {
+      if (agent.groundCheck && !remoteBackend && process.env.CHORALE_NO_GROUND !== "1") {
         if (touched.size === 0 && originals.size === 0) break; // a plain answer, nothing written
         const missing = checkGroundedness([...touched], cwd); // invented paths/symbols/scripts — always wrong, loop until fixed
         // Meaning-preservation is intent-sensitive (an intended edit legitimately changes a fact),
@@ -1071,8 +1079,9 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         continue;
       }
 
-      // (2) Verify-repair — only for agents that opt in (e.g. coder).
-      if (!agent.verify) break;
+      // (2) Verify-repair — only for agents that opt in (e.g. coder). Skipped for a remote
+      // workspace: the verify/smoke machinery reads and runs the project on the LOCAL fs.
+      if (!agent.verify || remoteBackend) break;
 
       // No-op turn: writes attempted but nothing landed (empty/invalid args).
       if (sawWriteAttempt && touched.size === 0) {
