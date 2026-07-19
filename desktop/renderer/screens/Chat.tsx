@@ -47,7 +47,6 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   const [editingTitle, setEditingTitle] = useState(false);
   const [folder, setFolder] = useState<string | null>(null);
   const [showFiles, setShowFiles] = useState(false);
-  const [agentMenu, setAgentMenu] = useState(false);
   const [folderMenu, setFolderMenu] = useState(false);
   const [remotePicker, setRemotePicker] = useState(false);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
@@ -228,46 +227,34 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
     setBusy(false);
   }
 
-  // Slash commands — typed in the composer, they act on chat state instead of sending a message.
-  interface SlashCmd {
-    id: string;
-    label: string;
-    hint?: string;
-    run: () => void;
-  }
-  const slashCommands: SlashCmd[] = [
-    { id: "new", label: "/new", hint: "start a new conversation", run: newChat },
-    { id: "folder", label: "/folder", hint: "choose a project folder", run: () => void chooseFolder() },
-    { id: "read-only", label: "/read-only", hint: "mode → read-only", run: () => setMode("read-only") },
-    { id: "auto-edit", label: "/auto-edit", hint: "mode → auto-edit", run: () => setMode("auto-edit") },
-    { id: "full-auto", label: "/full-auto", hint: "mode → full-auto", run: () => setMode("full-auto") },
-    ...(folder
-      ? [
-          { id: "files", label: "/files", hint: "toggle the file explorer", run: () => setShowFiles((v) => !v) },
-          { id: "changes", label: "/changes", hint: "show changed files", run: () => setRailTab("changes") },
-          { id: "clear-folder", label: "/clear-folder", hint: "use the default workspace", run: clearFolder },
-        ]
-      : []),
-    ...agents.map((a) => ({ id: `agent-${a.name}`, label: `/${a.name}`, hint: `switch to the ${a.name} agent`, run: () => setAgent(a.name) })),
-  ];
   interface MenuItem {
     key: string;
     label: string;
     hint?: string;
     run: () => void;
   }
-  const slashOpen = input.startsWith("/");
-  // @-mention: the trailing @word (when not a slash command and a folder is set).
-  const mentionMatch = !slashOpen && folder ? input.match(/(?:^|\s)@([\w./\\-]*)$/) : null;
+  // `/agent` directive — a trailing "/word" (at the start or after a space) opens an agent picker that
+  // INSERTS the specialist's name into your message. The orchestrator reads it and routes there; it does
+  // NOT switch any UI agent (there is none — the orchestrator always leads). `@file` attaches a file.
+  const slashMatch = input.match(/(?:^|\s)\/([a-z-]*)$/i);
+  const mentionMatch = !slashMatch && folder ? input.match(/(?:^|\s)@([\w./\\-]*)$/) : null;
+
+  function applySlash(name: string) {
+    setInput((cur) => cur.replace(/(^|\s)\/[a-z-]*$/i, (_m, lead: string) => `${lead}/${name} `));
+  }
+  function applyMention(f: FileRef) {
+    setInput((cur) => cur.replace(/(^|\s)@[\w./\\-]*$/, (_m, lead: string) => lead)); // drop the @word, keep the leading space
+    addAttachment(f.path, f.rel);
+  }
 
   const menuItems = useMemo<MenuItem[]>(() => {
-    if (slashOpen) {
-      const q = input.slice(1).toLowerCase();
-      return slashCommands
-        .map((c) => ({ c, s: fuzzyScore(c.label.slice(1) + " " + (c.hint ?? ""), q) }))
-        .filter((x): x is { c: SlashCmd; s: number } => x.s !== null)
-        .sort((a, b) => b.s - a.s)
-        .map((x) => ({ key: x.c.id, label: x.c.label, hint: x.c.hint, run: () => runSlash(x.c) }));
+    if (slashMatch) {
+      const q = slashMatch[1]!.toLowerCase();
+      return agents
+        .map((a) => ({ a, s: fuzzyScore(a.name, q) }))
+        .filter((x): x is { a: AgentSummary; s: number } => x.s !== null)
+        .sort((x, y) => y.s - x.s)
+        .map((x) => ({ key: x.a.name, label: "/" + x.a.name, hint: x.a.description.length > 48 ? x.a.description.slice(0, 46) + "…" : x.a.description, run: () => applySlash(x.a.name) }));
     }
     if (mentionMatch) {
       const q = mentionMatch[1]!.toLowerCase();
@@ -285,16 +272,6 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
   const menuOpen = menuItems.length > 0;
   const menuIdx = Math.min(slashSel, menuItems.length - 1);
   useEffect(() => setSlashSel(0), [input]);
-
-  function runSlash(cmd: SlashCmd | undefined) {
-    if (!cmd) return;
-    setInput("");
-    cmd.run();
-  }
-  function applyMention(f: FileRef) {
-    setInput((cur) => cur.replace(/(^|\s)@[\w./\\-]*$/, (_m, lead: string) => lead)); // drop the @word, keep the leading space
-    addAttachment(f.path, f.rel);
-  }
 
   const explorerOpen = showFiles && !!folder;
 
@@ -334,25 +311,6 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
               </button>
             )}
             <div className="spacer" />
-            <div className="leadwrap">
-              <button className="leadchip" onClick={() => setAgentMenu((v) => !v)} title="Lead agent — the orchestrator plans and delegates to specialists automatically. Type /coder, /scribe, … to steer a specific one.">
-                <span className="lead-k">lead</span>
-                <span className="sw" style={{ background: agentColor(agent) }} />
-                <span className="leadname">{agent}</span>
-                <span className="chipcaret">▾</span>
-              </button>
-              {agentMenu && (
-                <div className="foldermenu leadmenu">
-                  {agents.map((a) => (
-                    <button key={a.name} data-on={a.name === agent ? "1" : "0"} onClick={() => { setAgent(a.name); setAgentMenu(false); }} title={a.description}>
-                      <span className="sw" style={{ background: agentColor(a.name) }} />
-                      <span className="lm-name">{a.name}</span>
-                      {a.name === "orchestrator" && <span className="lm-hint">auto-routes</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
             {folder && (
               <button className="filestoggle" data-on={showFiles ? "1" : "0"} onClick={() => setShowFiles((v) => !v)} title={showFiles ? "Hide the file explorer" : "Show the file explorer"}>
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -424,11 +382,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
 
           {turns.length === 0 && !busy && (
             <div className="body user">
-              {agent === "orchestrator" ? (
-                <>Ask anything — the <b>orchestra</b> plans it out and delegates to the right specialists automatically. Want a specific one? Type <b>/</b> for the agent list.</>
-              ) : (
-                <>Talking to the <b>{agent}</b> agent directly. Type <b>/orchestrator</b> to hand back the routing.</>
-              )}
+              Ask anything — the <b>orchestra</b> plans it out and delegates to the right specialists automatically. Want to steer one in particular? Type <b>/coder</b>, <b>/research</b>, … right in your message.
             </div>
           )}
 
@@ -542,18 +496,12 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
                   }
                   if (e.key === "Escape") {
                     e.preventDefault();
-                    if (slashOpen) setInput("");
-                    else setInput((cur) => cur.replace(/(^|\s)@[\w./\\-]*$/, (_m, lead: string) => lead));
+                    setInput((cur) => cur.replace(/(^|\s)[/@][\w./\\-]*$/, (_m, lead: string) => lead)); // drop the trailing /word or @word
                     return;
                   }
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
                     e.preventDefault();
-                    menuItems[menuIdx]?.run();
-                    return;
-                  }
-                  if (e.key === "Tab" && slashOpen) {
-                    e.preventDefault();
-                    setInput(menuItems[menuIdx]!.label + " ");
+                    menuItems[menuIdx]?.run(); // insert the /agent directive or @file
                     return;
                   }
                 }
@@ -562,7 +510,7 @@ export function Chat({ resume, onResumed }: { resume?: { id: string; folder: str
                   submit();
                 }
               }}
-              placeholder={busy ? "the chorale is working…" : `Message ${agent} — Enter to send · / commands · @ files`}
+              placeholder={busy ? "the chorale is working…" : "Ask anything — Enter to send · / to direct an agent · @ files"}
               rows={1}
             />
             {busy ? (
