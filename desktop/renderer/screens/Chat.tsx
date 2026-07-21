@@ -45,7 +45,7 @@ interface Turn {
 }
 type Ev = ActivityEvent;
 
-export function Chat({ resume, onResumed, newChatSignal }: { resume?: { id: string; folder: string | null; title: string | null } | null; onResumed?: () => void; newChatSignal?: number }) {
+export function Chat({ resume, onResumed, newChatSignal, onSessionsChanged }: { resume?: { id: string; folder: string | null; title: string | null } | null; onResumed?: () => void; newChatSignal?: number; onSessionsChanged?: () => void }) {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [agent, setAgent] = useState("orchestrator");
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -116,7 +116,7 @@ export function Chat({ resume, onResumed, newChatSignal }: { resume?: { id: stri
     const t = next.trim() || null;
     setTitle(t);
     setEditingTitle(false);
-    if (sessionId) void chorale.setSessionTitle(sessionId, t);
+    if (sessionId) void chorale.setSessionTitle(sessionId, t).then(() => onSessionsChanged?.());
   }
 
   async function chooseFolder() {
@@ -248,6 +248,7 @@ export function Chat({ resume, onResumed, newChatSignal }: { resume?: { id: stri
         setUsage(u ? { in: u.inputTokens, out: u.outputTokens } : null);
         setBusy(false);
         setChangesNonce((n) => n + 1); // the run may have edited files — refresh the changes panel
+        onSessionsChanged?.(); // the session was touched (title/updated_at) — refresh the nav recents
       },
       onError: (msg) => {
         cancelRef.current = null;

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Chat } from "./screens/Chat";
 import { Agents } from "./screens/Agents";
 import { Settings } from "./screens/Settings";
@@ -9,12 +9,13 @@ import { Doctor } from "./screens/Doctor";
 import { PermissionModal } from "./components/PermissionModal";
 import { CommandPalette, type Command } from "./components/CommandPalette";
 import { Resizer, initPanelWidths } from "./components/Resizer";
-import { IS_MOCK, chorale } from "./bridge";
+import type { SessionInfo } from "../shared/ipc";
+import { IS_MOCK, chorale, agentColor } from "./bridge";
 
 type Screen = "chat" | "agents" | "settings" | "sessions" | "cost" | "playbook" | "doctor";
 
 const NAV: { id: Screen; label: string; key: string; icon: ReactNode }[] = [
-  { id: "chat", label: "Chat", key: "1", icon: <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2Z" /> },
+  { id: "chat", label: "Sessions", key: "1", icon: <><path d="M4 19.5V5a2 2 0 0 1 2-2h11.5" /><path d="M6 17h13v3H6a2 2 0 0 1 0-4Z" /></> },
   { id: "agents", label: "Agents", key: "2", icon: <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M16 6.2a3.2 3.2 0 0 1 0 6M20.5 20a5.5 5.5 0 0 0-4-5.3" /></> },
   { id: "settings", label: "Settings", key: "3", icon: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8M4.6 9a1.6 1.6 0 0 0-.3-1.8M9 4.6A1.6 1.6 0 0 0 10 3.5M14 3.5A1.6 1.6 0 0 0 15 4.6M20.5 10A1.6 1.6 0 0 0 21.5 11M2.5 13A1.6 1.6 0 0 0 3.5 14" /></> },
 ];
@@ -34,6 +35,11 @@ export function App() {
   const [workspace, setWorkspace] = useState("workspace");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newChatNonce, setNewChatNonce] = useState(0); // bump to start a fresh chat from the nav
+  const [recents, setRecents] = useState<SessionInfo[]>([]); // most-recent conversations, shown in the nav
+
+  const refreshRecents = useCallback(() => {
+    chorale.listSessions().then(setRecents).catch(() => setRecents([]));
+  }, []);
   const [navCollapsed, setNavCollapsed] = useState(() => {
     try {
       return localStorage.getItem("nav-collapsed") === "1";
@@ -45,7 +51,8 @@ export function App() {
   useEffect(() => {
     chorale.getAppInfo().then((i) => setWorkspace(i.workspace.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "workspace"));
     initPanelWidths({ "--nav-w": "216px", "--explorer-w": "250px", "--rail-w": "340px" });
-  }, []);
+    refreshRecents();
+  }, [refreshRecents]);
 
   const toggleNav = () => {
     setNavCollapsed((v) => {
@@ -147,26 +154,49 @@ export function App() {
           onClick={() => {
             setScreen("chat");
             setNewChatNonce((n) => n + 1);
+            refreshRecents();
           }}
           title="Start a new conversation"
         >
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          <span>New chat</span>
+          <span>New Chat/Session</span>
         </button>
         {NAV.map((n) => (
-          <button key={n.id} className="navitem" aria-current={screen === n.id} onClick={() => setScreen(n.id)}>
-            <Icon>{n.icon}</Icon>
-            <span>{n.label}</span>
-            <span className="kbd">{n.key}</span>
-          </button>
+          <div key={n.id}>
+            <button className="navitem" aria-current={screen === n.id} onClick={() => setScreen(n.id)}>
+              <Icon>{n.icon}</Icon>
+              <span>{n.label}</span>
+              <span className="kbd">{n.key}</span>
+            </button>
+            {/* The five most recent conversations, inline under Sessions — click to resume. */}
+            {n.id === "chat" && !navCollapsed && (
+              <div className="recents">
+                {recents.length === 0 && <div className="recent-empty">No sessions yet</div>}
+                {recents.slice(0, 5).map((s) => (
+                  <button
+                    key={s.id}
+                    className="recent"
+                    aria-current={screen === "chat" && resume?.id === s.id}
+                    title={`${s.title ?? "untitled"} · ${s.agent}`}
+                    onClick={() => {
+                      setResume({ id: s.id, folder: s.folder, title: s.title });
+                      setScreen("chat");
+                    }}
+                  >
+                    <span className="recent-dot" style={{ background: agentColor(s.agent) }} />
+                    <span className="recent-t">{s.title ?? "untitled"}</span>
+                  </button>
+                ))}
+                <button className="recent more" onClick={() => setScreen("sessions")}>
+                  More…
+                </button>
+              </div>
+            )}
+          </div>
         ))}
         <div className="navlabel">Observe</div>
-        <button className="navitem" aria-current={screen === "sessions"} onClick={() => setScreen("sessions")}>
-          <Icon><><path d="M4 19.5V5a2 2 0 0 1 2-2h11.5" /><path d="M6 17h13v3H6a2 2 0 0 1 0-4Z" /></></Icon>
-          <span>Sessions</span>
-        </button>
         <button className="navitem" aria-current={screen === "cost"} onClick={() => setScreen("cost")}>
           <Icon><><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></></Icon>
           <span>Cost &amp; usage</span>
@@ -183,7 +213,7 @@ export function App() {
       </nav>
 
       <main>
-        {screen === "chat" && <Chat resume={resume} onResumed={() => setResume(null)} newChatSignal={newChatNonce} />}
+        {screen === "chat" && <Chat resume={resume} onResumed={() => setResume(null)} newChatSignal={newChatNonce} onSessionsChanged={refreshRecents} />}
         {screen === "agents" && <Agents />}
         {screen === "settings" && <Settings />}
         {screen === "sessions" && (
@@ -191,6 +221,7 @@ export function App() {
             onOpen={(s) => {
               setResume({ id: s.id, folder: s.folder, title: s.title });
               setScreen("chat");
+              refreshRecents();
             }}
           />
         )}

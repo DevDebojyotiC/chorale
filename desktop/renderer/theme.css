@@ -56,6 +56,17 @@ nav { grid-area: nav; border-right: 1px solid var(--line); padding: 10px 8px; di
 .newchat-nav { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; width: 100%; text-align: left; }
 .newchat-nav svg { flex: none; color: var(--brand); }
 .newchat-nav:hover { border-color: var(--faint); background: var(--surface-2); }
+/* recent sessions, nested under the Sessions nav item */
+.recents { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 10px; padding-left: 10px; border-left: 1px solid var(--line); }
+.recent { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; background: none; border: none; color: var(--muted); font: inherit; font-size: 12px; padding: 5px 8px; border-radius: var(--r-sm); cursor: pointer; }
+.recent:hover { background: var(--surface); color: var(--text); }
+.recent[aria-current="true"] { background: var(--surface); color: var(--text); }
+.recent-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.recent-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent.more { color: var(--faint); font-size: 11.5px; padding-left: 21px; }
+.recent.more:hover { color: var(--brand); background: none; }
+.recent-empty { color: var(--faint); font-size: 11.5px; padding: 5px 8px; font-family: var(--mono); }
+
 /* collapsed nav = icon rail */
 .app.nav-collapsed .navitem { justify-content: center; gap: 0; padding: 9px 0; }
 .app.nav-collapsed .navitem span:not(.kbd), .app.nav-collapsed .navitem .kbd, .app.nav-collapsed .navlabel, .app.nav-collapsed .newchat-nav span { display: none; }
