@@ -38,6 +38,7 @@ const bridge: ChoraleBridge = {
   setSessionTitle: (id, title) => ipcRenderer.invoke(IPC.sessionSetTitle, id, title),
   listSessions: () => ipcRenderer.invoke(IPC.sessionList),
   loadSession: (id) => ipcRenderer.invoke(IPC.sessionLoad, id),
+  deleteSession: (id) => ipcRenderer.invoke(IPC.sessionDelete, id),
   run: (req, handlers: RunHandlers) => {
     const runId = `r${Date.now().toString(36)}_${seq++}`;
     const listener = (_e: unknown, msg: RunMsg): void => {

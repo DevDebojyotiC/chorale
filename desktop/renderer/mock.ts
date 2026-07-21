@@ -259,12 +259,18 @@ export const mockBridge: ChoraleBridge = {
   newSession: () => Promise.resolve(`mem_mock_${sessionSeq++}`),
   setSessionFolder: () => Promise.resolve(),
   setSessionTitle: () => Promise.resolve(),
-  listSessions: () => Promise.resolve(SESSIONS),
+  listSessions: () => Promise.resolve([...SESSIONS]),
   loadSession: (id): Promise<ChatTurn[]> =>
     Promise.resolve([
       { role: "user", content: `(resumed ${id}) Build BookmarkHub — a fullstack app with JWT auth and bookmark CRUD.` },
-      { role: "assistant", content: REPLY },
+      // Saved activity comes back with the turn, so the plan card + tree rebuild on reopen.
+      { role: "assistant", content: REPLY, model: "fireworks:accounts/fireworks/models/gpt-oss-120b", activity: EVENTS },
     ]),
+  deleteSession: (id) => {
+    const i = SESSIONS.findIndex((s) => s.id === id);
+    if (i >= 0) SESSIONS.splice(i, 1);
+    return Promise.resolve();
+  },
   run: (_req: RunInput, handlers: RunHandlers) => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     let cancelled = false;

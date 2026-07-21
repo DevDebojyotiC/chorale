@@ -93,6 +93,9 @@ export interface PermissionReq {
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
+  model?: string | null;
+  /** Saved activity for an assistant turn — rebuilds its plan card + delegation tree on reopen. */
+  activity?: ActivityEvent[];
 }
 
 /** A run request the renderer sends over `run:start`. */
@@ -336,6 +339,8 @@ export interface ChoraleBridge {
   setSessionTitle: (id: string, title: string | null) => Promise<void>;
   listSessions: () => Promise<SessionInfo[]>;
   loadSession: (id: string) => Promise<ChatTurn[]>;
+  /** Delete a session and everything it owns (messages, usage). */
+  deleteSession: (id: string) => Promise<void>;
   /** Start a streaming turn; returns a cancel function. */
   run: (req: RunInput, handlers: RunHandlers) => () => void;
   /** Recolor the native window-controls overlay to match the current theme (no-op off Electron). */
@@ -362,6 +367,7 @@ export const IPC = {
   sessionNew: "session:new",
   sessionList: "session:list",
   sessionLoad: "session:load",
+  sessionDelete: "session:delete",
   sessionSetFolder: "session:set-folder",
   sessionSetTitle: "session:set-title",
   pickFolder: "dialog:pick-folder",

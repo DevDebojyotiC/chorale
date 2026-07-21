@@ -24,8 +24,28 @@ describe("Phase 1 — session store (persist/resume)", () => {
     store.appendMessage(id, "assistant", "A JavaScript runtime.", "hf:qwen");
     const msgs = store.getMessages(id);
     expect(msgs).toHaveLength(2);
-    expect(msgs[0]).toEqual({ role: "user", content: "What is Node.js?" });
-    expect(msgs[1]?.role).toBe("assistant");
+    expect(msgs[0]).toMatchObject({ role: "user", content: "What is Node.js?" });
+    expect(msgs[0]?.activity).toBeNull(); // a user turn records no activity
+    expect(msgs[1]).toMatchObject({ role: "assistant", model: "hf:qwen" });
+  });
+
+  it("round-trips an assistant turn's activity JSON (so a reopened session rebuilds it)", () => {
+    const id = store.createSession("orchestrator");
+    const activity = JSON.stringify([{ type: "delegate", text: "find trends", target: "research", depth: 0 }]);
+    store.appendMessage(id, "user", "build it");
+    store.appendMessage(id, "assistant", "done", "fireworks:gpt-oss-120b", activity);
+    const msgs = store.getMessages(id);
+    expect(msgs[1]?.activity).toBe(activity);
+    expect(JSON.parse(msgs[1]!.activity!)[0].target).toBe("research");
+  });
+
+  it("deleteSession removes the session and its messages", () => {
+    const id = store.createSession("coder");
+    store.appendMessage(id, "user", "hello");
+    expect(store.deleteSession(id)).toBe(true);
+    expect(store.getMessages(id)).toHaveLength(0);
+    expect(store.listSessions(50).some((s) => s.id === id)).toBe(false);
+    expect(store.deleteSession(id)).toBe(false); // already gone
   });
 
   it("records and aggregates token usage per model", () => {

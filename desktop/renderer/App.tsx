@@ -15,7 +15,7 @@ import { IS_MOCK, chorale, agentColor } from "./bridge";
 type Screen = "chat" | "agents" | "settings" | "sessions" | "cost" | "playbook" | "doctor";
 
 const NAV: { id: Screen; label: string; key: string; icon: ReactNode }[] = [
-  { id: "chat", label: "Sessions", key: "1", icon: <><path d="M4 19.5V5a2 2 0 0 1 2-2h11.5" /><path d="M6 17h13v3H6a2 2 0 0 1 0-4Z" /></> },
+  { id: "chat", label: "Sessions", key: "1", icon: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /><path d="M7 8.5h10M7 12h6" /></> },
   { id: "agents", label: "Agents", key: "2", icon: <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M16 6.2a3.2 3.2 0 0 1 0 6M20.5 20a5.5 5.5 0 0 0-4-5.3" /></> },
   { id: "settings", label: "Settings", key: "3", icon: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8M4.6 9a1.6 1.6 0 0 0-.3-1.8M9 4.6A1.6 1.6 0 0 0 10 3.5M14 3.5A1.6 1.6 0 0 0 15 4.6M20.5 10A1.6 1.6 0 0 0 21.5 11M2.5 13A1.6 1.6 0 0 0 3.5 14" /></> },
 ];
@@ -223,6 +223,7 @@ export function App() {
               setScreen("chat");
               refreshRecents();
             }}
+            onChanged={refreshRecents}
           />
         )}
         {screen === "cost" && <CostUsage />}

@@ -6,6 +6,9 @@ import { randomBytes } from "node:crypto";
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  model?: string | null;
+  /** JSON-encoded RunEvent[] for an assistant turn — lets a reopened session rebuild its activity. */
+  activity?: string | null;
 }
 
 export interface SessionRow {
@@ -80,9 +83,14 @@ export class SessionStore {
       );
       CREATE INDEX IF NOT EXISTS idx_usage_session ON usage(session_id);
     `);
-    // Migrate DBs created before the `folder` column existed (no-op if already present).
+    // Migrate DBs created before these columns existed (each a no-op if already present).
     try {
       this.db.exec(`ALTER TABLE sessions ADD COLUMN folder TEXT`);
+    } catch {
+      /* column already exists */
+    }
+    try {
+      this.db.exec(`ALTER TABLE messages ADD COLUMN activity TEXT`);
     } catch {
       /* column already exists */
     }
@@ -147,15 +155,19 @@ export class SessionStore {
 
   getMessages(sessionId: string): ChatMessage[] {
     return this.db
-      .prepare(`SELECT role, content FROM messages WHERE session_id = ? ORDER BY id ASC`)
+      .prepare(`SELECT role, content, model, activity FROM messages WHERE session_id = ? ORDER BY id ASC`)
       .all(sessionId) as ChatMessage[];
   }
 
-  appendMessage(sessionId: string, role: ChatMessage["role"], content: string, model?: string): void {
+  /**
+   * `activity` is the run's structured event stream (JSON) for an assistant turn, so reopening a
+   * session can rebuild its plan card and delegation tree instead of showing an empty rail.
+   */
+  appendMessage(sessionId: string, role: ChatMessage["role"], content: string, model?: string, activity?: string): void {
     const now = nowIso();
     this.db
-      .prepare(`INSERT INTO messages (session_id, role, content, model, created_at) VALUES (?, ?, ?, ?, ?)`)
-      .run(sessionId, role, content, model ?? null, now);
+      .prepare(`INSERT INTO messages (session_id, role, content, model, created_at, activity) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(sessionId, role, content, model ?? null, now, activity ?? null);
     // Touch the session, and set a title from the first user message if unset.
     this.db.prepare(`UPDATE sessions SET updated_at = ? WHERE id = ?`).run(now, sessionId);
     if (role === "user") {

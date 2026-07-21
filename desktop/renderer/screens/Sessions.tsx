@@ -15,9 +15,10 @@ function ago(iso: string): string {
   return `${Math.round(h / 24)}d ago`;
 }
 
-export function Sessions({ onOpen }: { onOpen: (session: SessionInfo) => void }) {
+export function Sessions({ onOpen, onChanged }: { onOpen: (session: SessionInfo) => void; onChanged?: () => void }) {
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null); // row armed for delete
 
   useEffect(() => {
     chorale.listSessions().then(setSessions);
@@ -28,6 +29,18 @@ export function Sessions({ onOpen }: { onOpen: (session: SessionInfo) => void })
     setEditing(null);
     setSessions((list) => list?.map((s) => (s.id === id ? { ...s, title: t } : s)) ?? list);
     void chorale.setSessionTitle(id, t);
+    onChanged?.();
+  }
+
+  /** Two-step delete: the first click arms the row, the second confirms. */
+  function remove(id: string) {
+    if (confirming !== id) {
+      setConfirming(id);
+      return;
+    }
+    setConfirming(null);
+    setSessions((list) => list?.filter((s) => s.id !== id) ?? list);
+    void chorale.deleteSession(id).then(() => onChanged?.());
   }
 
   if (!sessions) return <div className="loading">loading sessions…</div>;
@@ -66,6 +79,22 @@ export function Sessions({ onOpen }: { onOpen: (session: SessionInfo) => void })
                 <b>{s.title || "untitled conversation"}</b>
               )}
               <span className="tier">{s.agent}</span>
+              <button
+                className={"renamebtn danger" + (confirming === s.id ? " armed" : "")}
+                title={confirming === s.id ? "Click again to delete permanently" : "Delete session"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  remove(s.id);
+                }}
+              >
+                {confirming === s.id ? (
+                  <span className="confirmtxt">delete?</span>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                  </svg>
+                )}
+              </button>
               <button
                 className="renamebtn"
                 title="Rename"

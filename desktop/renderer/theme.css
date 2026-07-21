@@ -92,6 +92,9 @@ main { grid-area: main; overflow: hidden; min-width: 0; }
 .renamebtn { background: none; border: none; color: var(--faint); cursor: pointer; padding: 3px; display: grid; place-items: center; opacity: 0; }
 .sessioncard:hover .renamebtn { opacity: 1; }
 .renamebtn:hover { color: var(--brand); }
+.renamebtn.danger:hover { color: var(--crit); }
+.renamebtn.armed { opacity: 1; color: var(--crit); }
+.renamebtn .confirmtxt { font-family: var(--mono); font-size: 10px; letter-spacing: .3px; }
 
 /* remote hosts */
 .remotecard .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }

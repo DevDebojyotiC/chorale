@@ -31,7 +31,7 @@ import { getPlaybook } from "../src/core/playbook.js";
 import { checkProviders } from "../src/core/doctor.js";
 import type { ChoraleConfig } from "../src/core/config.js";
 import * as remote from "./remote.js";
-import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview, type GitStatus, type GitChange, type FileRef, type ProviderModels, type RemoteHost, type RemoteHostInput, type RemoteTestResult } from "./shared/ipc.js";
+import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview, type GitStatus, type GitChange, type FileRef, type ProviderModels, type ActivityEvent, type RemoteHost, type RemoteHostInput, type RemoteTestResult } from "./shared/ipc.js";
 
 setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows the activity rail
 
@@ -444,7 +444,25 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.sessionLoad, (_e, id: string): ChatTurn[] => {
     if (!store) return [];
-    return store.getMessages(id).map((m) => ({ role: m.role, content: m.content }));
+    return store.getMessages(id).map((m) => {
+      let activity: ActivityEvent[] | undefined;
+      if (m.activity) {
+        try {
+          activity = JSON.parse(m.activity) as ActivityEvent[];
+        } catch {
+          /* corrupt/legacy row — just omit the activity */
+        }
+      }
+      return { role: m.role, content: m.content, model: m.model ?? null, activity };
+    });
+  });
+
+  ipcMain.handle(IPC.sessionDelete, (_e, id: string): void => {
+    try {
+      if (store && !id.startsWith("mem_")) store.deleteSession(id);
+    } catch {
+      /* persistence unavailable */
+    }
   });
 
   ipcMain.handle(IPC.observeUsage, (): UsageSummary => {
@@ -507,6 +525,7 @@ function registerIpc(): void {
       persist?.appendMessage(req.sessionId, "user", req.prompt);
       // Remote workspace: the agent's file/shell tools run over SSH in the remote path; local otherwise.
       const rw = req.folder ? remote.parseRemote(req.folder) : null;
+      const activityLog: ActivityEvent[] = [];
       const res = await runAgent({
         config,
         registry,
@@ -517,11 +536,15 @@ function registerIpc(): void {
         cwd: rw ? rw.path : req.folder && existsSync(req.folder) ? req.folder : undefined, // where the agent works
         backend: rw ? remote.makeToolBackend(rw.host) : undefined, // route tools over SSH when remote
         onToken: (text) => send({ runId: req.runId, kind: "token", text }),
-        onEvent: (ev) => send({ runId: req.runId, kind: "event", event: { type: ev.type, text: ev.text, agent: ev.agent, depth: ev.depth, target: ev.target, steps: ev.steps } }),
+        onEvent: (ev) => {
+          const e: ActivityEvent = { type: ev.type, text: ev.text, agent: ev.agent, depth: ev.depth, target: ev.target, steps: ev.steps };
+          activityLog.push(e); // saved with the assistant turn so a reopened session can rebuild it
+          send({ runId: req.runId, kind: "event", event: e });
+        },
       });
       const usage = res.usage ? { inputTokens: res.usage.inputTokens ?? 0, outputTokens: res.usage.outputTokens ?? 0 } : null;
       if (persist) {
-        persist.appendMessage(req.sessionId, "assistant", res.text, res.model);
+        persist.appendMessage(req.sessionId, "assistant", res.text, res.model, activityLog.length ? JSON.stringify(activityLog) : undefined);
         if (usage) persist.recordUsage(req.sessionId, res.model, usage.inputTokens, usage.outputTokens);
       }
       send({ runId: req.runId, kind: "done", model: res.model, text: res.text, usage });

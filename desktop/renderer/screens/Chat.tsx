@@ -167,12 +167,21 @@ export function Chat({ resume, onResumed, newChatSignal, onSessionsChanged }: { 
   useEffect(() => {
     if (!resume) return;
     chorale.loadSession(resume.id).then((prior) => {
-      setTurns(prior.map((t) => ({ role: t.role, text: t.content, agent: t.role === "assistant" ? agent : undefined })));
+      setTurns(
+        prior.map((t) => ({
+          role: t.role,
+          text: t.content,
+          agent: t.role === "assistant" ? agent : undefined,
+          model: t.model ?? undefined,
+          activity: t.activity, // rebuilds that turn's collapsed plan card
+        })),
+      );
       setSessionId(resume.id);
       setFolder(resume.folder);
       setTitle(resume.title);
       setStreaming("");
-      setEvents([]);
+      // Rehydrate the rail from the most recent turn that recorded activity.
+      setEvents([...prior].reverse().find((t) => t.activity?.length)?.activity ?? []);
       setUsage(null);
       setAttachments([]);
       onResumed?.();
