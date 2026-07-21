@@ -4,6 +4,7 @@ import { readFileSync, existsSync, readdirSync, statSync, writeFileSync } from "
 import { resolve, isAbsolute } from "node:path";
 import type { ChoraleConfig } from "./config.js";
 import type { Registry, ModelRef } from "./model-registry.js";
+import { providerUnusable } from "./model-registry.js";
 import { resolveModelPlan } from "./model-policy.js";
 import type { AgentSpec } from "../agents/loader.js";
 import type { ChatMessage } from "./session.js";
@@ -873,6 +874,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       // True once we've streamed any output — then we must NOT retry (would double-print).
       let emittedAny = false;
       try {
+        // Fail fast on an unconfigured provider so the user sees "no API key set for X"
+        // instead of a bare 401 buried in the SDK's error.
+        const unusable = providerUnusable(config, ref);
+        if (unusable) throw new Error(unusable);
         const model = registry.languageModel(ref as ModelRef);
         // Capture stream errors ourselves; the SDK's default onError logs a full
         // stack trace to the console, which we don't want when we can fall back.
@@ -960,7 +965,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
         log.info(`\n[chorale] model "${ref}" failed: ${msg}\n`);
         if (ref !== chain[chain.length - 1]) {
           log.info(`[chorale] falling back to next model…\n`);
-          emit({ type: "fallback", text: `${ref} failed — falling back` });
+          emit({ type: "fallback", text: `${ref} failed: ${msg.replace(/\s+/g, " ").slice(0, 120)} — falling back` });
         }
         break; // give up on this model, advance to the next in the chain
       }

@@ -67,6 +67,24 @@ export function buildRegistry(config: ChoraleConfig) {
 
 export type Registry = ReturnType<typeof buildRegistry>;
 
+/**
+ * Why the provider behind `ref` can't be used, or null if it looks usable. Checked BEFORE the request
+ * so an unconfigured key fails with an actionable message instead of a bare 401 from the SDK — the
+ * common first-run state of a packaged app, whose seeded .env ships with empty placeholders.
+ */
+export function providerUnusable(config: ChoraleConfig, ref: string): string | null {
+  const name = ref.split(":")[0] ?? "";
+  const p = config.providers[name];
+  // Not in config: could be a custom/injected registry — let the registry decide, don't pre-empt it.
+  if (!p) return null;
+  // Local runtimes (Ollama/LM Studio/vLLM) need no key.
+  if (/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(p.baseUrl ?? "")) return null;
+  if (!p.apiKey || !p.apiKey.trim()) {
+    return `no API key set for provider "${name}" — add it in Config (it's written to the workspace .env), then retry`;
+  }
+  return null;
+}
+
 /** Resolve the `${base}` sentinel to the configured base model. */
 export function resolveRef(ref: string, config: ChoraleConfig): string {
   return ref === "${base}" ? config.base.model : ref;

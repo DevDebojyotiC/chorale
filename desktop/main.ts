@@ -20,7 +20,7 @@ import { buildRegistry, type Registry } from "../src/core/model-registry.js";
 import { loadAgent } from "../src/agents/loader.js";
 import { resolveModelPlan } from "../src/core/model-policy.js";
 import { runAgent } from "../src/core/runtime.js";
-import { setLogLevel } from "../src/core/log.js";
+import { setLogLevel, setLogFile } from "../src/core/log.js";
 import { setApprover } from "../src/tools/permissions.js";
 import { SessionStore } from "../src/core/session.js";
 import { estimateCost } from "../src/core/costs.js";
@@ -83,6 +83,9 @@ function reloadConfig(): void {
 }
 
 function initCore(): void {
+  // A packaged app has no terminal, so route diagnostics to a file — otherwise a failure like
+  // "no API key set" is invisible and the user only sees the models falling back.
+  setLogFile(join(workspaceDir, "data", "logs", "desktop.log"));
   reloadConfig();
   remote.initRemote(workspaceDir);
   try {
