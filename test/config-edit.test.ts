@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import JSON5 from "json5";
-import { applyBaseChain, applyDefault } from "../src/core/config-edit";
+import { applyBaseChain, applyDefault, applyScalar } from "../src/core/config-edit";
 
 // A realistic, heavily-commented config: the whole point is that these survive an edit.
 const CONFIG = `{
@@ -95,6 +95,18 @@ describe("config-edit — targeted edits that preserve comments", () => {
   it("applyDefault inserts a key that isn't present yet", () => {
     const out = applyDefault(CONFIG, "maxOutputTokens", 4096);
     expect(out).toMatch(/maxOutputTokens:\s*4096,/);
+  });
+
+  it("applyScalar writes a string into another block (permissions.mode)", () => {
+    const withPerms = CONFIG.replace("  defaults: {", '  permissions: {\n    mode: "auto-edit", // default approval tier\n  },\n\n  defaults: {');
+    const out = applyScalar(withPerms, "permissions", "mode", "full-auto");
+    expect(out).toMatch(/mode:\s*"full-auto",/);
+    expect(out).toContain("// default approval tier"); // comment survives
+    expect(out).toMatch(/maxSteps:\s*8,/); // defaults block untouched
+  });
+
+  it("applyScalar throws for a block that isn't there", () => {
+    expect(() => applyScalar(CONFIG, "permissions", "mode", "full-auto")).toThrow(/permissions/);
   });
 
   // The strongest guard: edit the REAL shipped config and make sure it still parses.

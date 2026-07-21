@@ -4,7 +4,7 @@ import { chorale } from "../bridge";
 
 const BLANK: RemoteHostInput = { label: "", host: "", port: 22, username: "", auth: "agent", privateKeyPath: "" };
 
-export function Remote() {
+export function Remote({ embedded = false }: { embedded?: boolean } = {}) {
   const [hosts, setHosts] = useState<RemoteHost[] | null>(null);
   const [form, setForm] = useState<RemoteHostInput | null>(null);
   const [tests, setTests] = useState<Record<string, RemoteTestResult | "testing">>({});
@@ -33,13 +33,19 @@ export function Remote() {
   if (!hosts) return <div className="loading">loading hosts…</div>;
 
   return (
-    <div className="pad">
-      <div className="pagehead">
-        <h1>Remote hosts</h1>
-        <p>
-          SSH connections a session can run on. A session folder can point at a remote path (<span className="mono">ssh://host/path</span>), and the explorer, diffs, and the agent's tools all work there. Secrets are never stored: auth is your OpenSSH agent or a private-key file on disk.
+    <div className={embedded ? "" : "pad"}>
+      {embedded ? (
+        <p className="setnote">
+          A session folder can point at a remote path (<span className="mono">ssh://host/path</span>), and the explorer, diffs, and the agent&apos;s tools all work there. Secrets are never stored: auth is your OpenSSH agent or a private-key file on disk.
         </p>
-      </div>
+      ) : (
+        <div className="pagehead">
+          <h1>Remote hosts</h1>
+          <p>
+            SSH connections a session can run on. A session folder can point at a remote path (<span className="mono">ssh://host/path</span>), and the explorer, diffs, and the agent&apos;s tools all work there. Secrets are never stored: auth is your OpenSSH agent or a private-key file on disk.
+          </p>
+        </div>
+      )}
 
       <div className="grid" style={{ gridTemplateColumns: "1fr", maxWidth: 720 }}>
         {hosts.length === 0 && !form && <div className="body user mono">No hosts yet. Add one to connect a session to a remote machine.</div>}

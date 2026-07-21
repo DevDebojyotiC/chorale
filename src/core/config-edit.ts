@@ -96,10 +96,10 @@ export function setBaseChain(configPath: string, chain: string[]): void {
   writeFileSync(configPath, applyBaseChain(readFileSync(configPath, "utf8"), chain), "utf8");
 }
 
-/** Set one scalar under `defaults: { … }` (numbers/booleans/strings), preserving comments. */
-export function applyDefault(text: string, key: string, value: number | boolean | string): string {
-  const blk = blockBody(text, "defaults");
-  if (!blk) throw new Error("Could not find a `defaults: { … }` block in the config.");
+/** Set one scalar inside a top-level `block: { … }` (numbers/booleans/strings), preserving comments. */
+export function applyScalar(text: string, block: string, key: string, value: number | boolean | string): string {
+  const blk = blockBody(text, block);
+  if (!blk) throw new Error(`Could not find a \`${block}: { … }\` block in the config.`);
   let body = text.slice(blk.start, blk.end);
   const ind = indentOf(body);
   const line = `${key}: ${typeof value === "string" ? JSON.stringify(value) : String(value)},`;
@@ -108,6 +108,13 @@ export function applyDefault(text: string, key: string, value: number | boolean 
   return text.slice(0, blk.start) + body + text.slice(blk.end);
 }
 
+/** Convenience for the `defaults` block. */
+export const applyDefault = (text: string, key: string, value: number | boolean | string): string => applyScalar(text, "defaults", key, value);
+
+export function setConfigScalar(configPath: string, block: string, key: string, value: number | boolean | string): void {
+  writeFileSync(configPath, applyScalar(readFileSync(configPath, "utf8"), block, key, value), "utf8");
+}
+
 export function setDefault(configPath: string, key: string, value: number | boolean | string): void {
-  writeFileSync(configPath, applyDefault(readFileSync(configPath, "utf8"), key, value), "utf8");
+  setConfigScalar(configPath, "defaults", key, value);
 }

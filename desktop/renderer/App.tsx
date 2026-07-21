@@ -6,13 +6,12 @@ import { Sessions } from "./screens/Sessions";
 import { CostUsage } from "./screens/CostUsage";
 import { Playbook } from "./screens/Playbook";
 import { Doctor } from "./screens/Doctor";
-import { Remote } from "./screens/Remote";
 import { PermissionModal } from "./components/PermissionModal";
 import { CommandPalette, type Command } from "./components/CommandPalette";
 import { Resizer, initPanelWidths } from "./components/Resizer";
 import { IS_MOCK, chorale } from "./bridge";
 
-type Screen = "chat" | "agents" | "settings" | "sessions" | "cost" | "playbook" | "doctor" | "remote";
+type Screen = "chat" | "agents" | "settings" | "sessions" | "cost" | "playbook" | "doctor";
 
 const NAV: { id: Screen; label: string; key: string; icon: ReactNode }[] = [
   { id: "chat", label: "Chat", key: "1", icon: <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2Z" /> },
@@ -99,7 +98,6 @@ export function App() {
     { id: "go-cost", group: "Go to", label: "Cost & usage", run: () => setScreen("cost") },
     { id: "go-playbook", group: "Go to", label: "Playbook", run: () => setScreen("playbook") },
     { id: "go-doctor", group: "Go to", label: "Doctor", run: () => setScreen("doctor") },
-    { id: "go-remote", group: "Go to", label: "Remote hosts", run: () => setScreen("remote") },
     { id: "toggle-theme", group: "View", label: "Toggle light / dark theme", run: toggleTheme },
   ];
 
@@ -181,10 +179,6 @@ export function App() {
           <Icon><><path d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Z" /><path d="M12 8v4l3 2" /></></Icon>
           <span>Doctor</span>
         </button>
-        <button className="navitem" aria-current={screen === "remote"} onClick={() => setScreen("remote")}>
-          <Icon><><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></></Icon>
-          <span>Remote hosts</span>
-        </button>
         {!navCollapsed && <Resizer cssVar="--nav-w" min={176} max={340} dir={1} className="nav-resizer" />}
       </nav>
 
@@ -203,7 +197,6 @@ export function App() {
         {screen === "cost" && <CostUsage />}
         {screen === "playbook" && <Playbook />}
         {screen === "doctor" && <Doctor />}
-        {screen === "remote" && <Remote />}
       </main>
       <PermissionModal />
       {paletteOpen && <CommandPalette commands={paletteCommands} onClose={() => setPaletteOpen(false)} />}

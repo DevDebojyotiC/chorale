@@ -7,7 +7,7 @@
  * loads them (including the native better-sqlite3). Launch with cwd = project root so config/ + agents/
  * + .env resolve.
  */
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import { resolve, join, relative } from "node:path";
 import { readdirSync, existsSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -18,7 +18,8 @@ import { envVarOf, upsertEnvVar, readEnvVar, maskKey } from "./settings.js";
 import { loadConfig } from "../src/core/config.js";
 import { buildRegistry, type Registry } from "../src/core/model-registry.js";
 import { listProviderModels } from "../src/core/model-catalog.js";
-import { setBaseChain } from "../src/core/config-edit.js";
+import { findBrowser } from "../src/core/headless.js";
+import { setBaseChain, setConfigScalar } from "../src/core/config-edit.js";
 import { loadAgent } from "../src/agents/loader.js";
 import { resolveModelPlan } from "../src/core/model-policy.js";
 import { runAgent } from "../src/core/runtime.js";
@@ -134,13 +135,32 @@ function buildConfigSummary(): ConfigSummary {
     return { agent: s.name, model: s.model, fallbacks: s.fallbacks };
   });
   const d = config.defaults;
+  // Non-provider integration keys, surfaced (masked) in Settings → Tools.
+  const envVars = ["TAVILY_API_KEY", "CHORALE_CHROME"].map((name) => {
+    const raw = readEnvVar(envText, name) || process.env[name] || "";
+    return { name, masked: name === "CHORALE_CHROME" ? raw : maskKey(raw), set: Boolean(raw.trim()) };
+  });
   return {
     providers,
     routing,
-    defaults: { maxOutputTokens: d.maxOutputTokens, requestTimeoutMs: d.requestTimeoutMs, maxRetries: d.maxRetries, maxSteps: d.maxSteps, permissions: config.permissions.mode },
+    defaults: {
+      maxSteps: d.maxSteps,
+      maxDelegationDepth: d.maxDelegationDepth,
+      maxVerifyRounds: d.maxVerifyRounds,
+      requestTimeoutMs: d.requestTimeoutMs,
+      maxRetries: d.maxRetries,
+      maxOutputTokens: d.maxOutputTokens,
+    },
     agentsDir: config.agents.dir,
     activeProfile: config.activeProfile ?? null,
     chain: [config.base.model, ...(config.base.fallbacks ?? [])],
+    permissionMode: config.permissions.mode,
+    workspace: workspaceDir,
+    version: app.getVersion(),
+    envVars,
+    mcpServers: Object.keys(config.mcp?.servers ?? {}),
+    skillDirs: config.skills?.dirs ?? [],
+    headlessBrowser: findBrowser(),
   };
 }
 
@@ -275,6 +295,16 @@ function registerIpc(): void {
     const p = config.providers[provider];
     if (!p) return { provider, models: [], source: "catalog", error: `Unknown provider "${provider}".` };
     return listProviderModels(provider, p);
+  });
+
+  ipcMain.handle(IPC.configSetValue, (_e, block: string, key: string, value: number | string | boolean): ConfigSummary => {
+    setConfigScalar(configPath(), block, key, value); // comment-preserving
+    reloadConfig();
+    return buildConfigSummary();
+  });
+
+  ipcMain.handle(IPC.openPath, async (_e, path: string): Promise<void> => {
+    await shell.openPath(path);
   });
 
   ipcMain.handle(IPC.modelChainSet, (_e, chain: string[]): ConfigSummary => {

@@ -42,14 +42,34 @@ export interface RouteRow {
   fallbacks: string[];
 }
 
+/** A non-provider environment variable surfaced in Settings → Tools (value never sent raw). */
+export interface EnvVarSummary {
+  name: string;
+  masked: string;
+  set: boolean;
+}
+
 export interface ConfigSummary {
   providers: ProviderSummary[];
   routing: RouteRow[];
-  defaults: Record<string, string | number>;
+  /** Numeric runtime limits from `defaults` (editable in Settings → Behavior). */
+  defaults: Record<string, number>;
   agentsDir: string;
   activeProfile: string | null;
   /** The default model chain every agent inherits: [primary, ...fallbacks] (base.model + base.fallbacks). */
   chain: string[];
+  /** Default approval tier (`permissions.mode`). */
+  permissionMode: PermissionMode;
+  /** Absolute workspace root (config/.env/agents/data live here). */
+  workspace: string;
+  version: string;
+  /** Non-provider integration keys (Tavily search, headless browser override). */
+  envVars: EnvVarSummary[];
+  /** Configured MCP server names. */
+  mcpServers: string[];
+  skillDirs: string[];
+  /** Path to the detected Chromium-based browser, or null (headless render/verify unavailable). */
+  headlessBrowser: string | null;
 }
 
 /** Models a provider can serve, asked live where possible (see `source`). */
@@ -276,6 +296,10 @@ export interface ChoraleBridge {
   listModels: (provider: string) => Promise<ProviderModels>;
   /** Set the default model chain (primary + fallbacks); rewrites the config preserving comments. */
   setModelChain: (chain: string[]) => Promise<ConfigSummary>;
+  /** Set one scalar in a config block, e.g. ("defaults","maxSteps",12) or ("permissions","mode","full-auto"). */
+  setConfigValue: (block: string, key: string, value: number | string | boolean) => Promise<ConfigSummary>;
+  /** Open a folder in the OS file manager (workspace, logs, agents dir). */
+  openPath: (path: string) => Promise<void>;
   getUsage: () => Promise<UsageSummary>;
   getPlaybook: () => Promise<PlaybookItem[]>;
   /** On-demand provider reachability check (makes network calls). */
@@ -330,6 +354,8 @@ export const IPC = {
   settingsSetKey: "settings:set-key",
   modelsList: "models:list",
   modelChainSet: "models:set-chain",
+  configSetValue: "config:set-value",
+  openPath: "shell:open-path",
   observeUsage: "observe:usage",
   observePlaybook: "observe:playbook",
   observeDoctor: "observe:doctor",

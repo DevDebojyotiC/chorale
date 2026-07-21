@@ -429,6 +429,28 @@ table.usage tfoot td:first-child { color: var(--muted); text-transform: uppercas
 .chainhint { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
 .chainactions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 
+/* generic settings rows (behavior / tools / workspace) */
+.setrow { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.setrow:last-child { border-bottom: none; }
+.setrow.wrap { align-items: flex-start; }
+.setrow-l { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.setrow-k { font-size: 13px; color: var(--text); }
+.setrow-help { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.setrow-env { font-size: 10.5px; color: var(--faint); }
+.setrow-val { font-size: 12px; color: var(--muted); max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setrow-val .warnish, .setrow .warnish { color: var(--warn); }
+.setnum { width: 118px; font-family: var(--mono); font-size: 12.5px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 6px 9px; outline: none; }
+.setnum:focus { border-color: var(--brand); }
+
+/* permission tier picker */
+.modelist { display: flex; flex-direction: column; gap: 8px; }
+.modeopt { text-align: left; display: flex; flex-direction: column; gap: 3px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); cursor: pointer; }
+.modeopt:hover { border-color: var(--faint); }
+.modeopt[data-on="1"] { border-color: var(--brand); background: color-mix(in oklab, var(--brand) 10%, var(--surface)); }
+.modeopt-h { font-size: 13px; color: var(--text); font-weight: 600; }
+.modeopt[data-on="1"] .modeopt-h { color: var(--brand); }
+.modeopt-b { font-size: 11.5px; color: var(--muted); }
+
 /* modal / permission dialog */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(3, 6, 10, .55); display: grid; place-items: center; z-index: 100; padding: 20px; }
 .cmdk { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px 8px; cursor: pointer; -webkit-app-region: no-drag; }

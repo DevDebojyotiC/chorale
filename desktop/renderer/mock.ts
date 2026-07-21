@@ -33,9 +33,19 @@ const CONFIG: ConfigSummary = {
     { name: "hf", api: "openai-compatible", baseUrl: "https://router.huggingface.co/v1", hasKey: false, envVar: "HF_TOKEN", keyMasked: "" },
   ],
   routing: AGENTS.map((a) => ({ agent: a.name, model: a.model, fallbacks: a.fallbacks })),
-  defaults: { maxOutputTokens: 8192, requestTimeoutMs: 180000, maxRetries: 2, maxSteps: 8, permissions: "auto-edit" },
-  agentsDir: "swarm/agents",
+  defaults: { maxSteps: 8, maxDelegationDepth: 2, maxVerifyRounds: 5, requestTimeoutMs: 180000, maxRetries: 2, maxOutputTokens: 8192 },
+  agentsDir: "D:/projects/agents/swarm/agents",
   activeProfile: null,
+  permissionMode: "auto-edit",
+  workspace: "C:/Users/you/AppData/Roaming/Chorale/workspace",
+  version: "0.2.1",
+  envVars: [
+    { name: "TAVILY_API_KEY", masked: "tvly…9f2", set: true },
+    { name: "CHORALE_CHROME", masked: "", set: false },
+  ],
+  mcpServers: ["filesystem", "github"],
+  skillDirs: ["skills", ".claude/skills"],
+  headlessBrowser: "C:/Program Files/Google/Chrome/Application/chrome.exe",
   chain: ["fireworks:accounts/fireworks/models/gpt-oss-120b", "puter:z-ai/glm-4.6", "zai:glm-4.5-flash"],
 };
 
@@ -148,6 +158,12 @@ export const mockBridge: ChoraleBridge = {
     CONFIG.chain = [...chain];
     return Promise.resolve({ ...CONFIG });
   },
+  setConfigValue: (block, key, value) => {
+    if (block === "defaults") CONFIG.defaults = { ...CONFIG.defaults, [key]: Number(value) };
+    if (block === "permissions" && key === "mode") CONFIG.permissionMode = value as ConfigSummary["permissionMode"];
+    return Promise.resolve({ ...CONFIG });
+  },
+  openPath: (p) => { console.log("[mock] openPath", p); return Promise.resolve(); },
   pickFolder: () => Promise.resolve("D:/projects/demo-app"),
   readDir: (path) => {
     const tree: Record<string, { name: string; type: "file" | "dir" }[]> = {
