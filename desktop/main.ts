@@ -17,6 +17,8 @@ import { firstRunSeed, agentCount } from "./workspace.js";
 import { envVarOf, upsertEnvVar, readEnvVar, maskKey } from "./settings.js";
 import { loadConfig } from "../src/core/config.js";
 import { buildRegistry, type Registry } from "../src/core/model-registry.js";
+import { listProviderModels } from "../src/core/model-catalog.js";
+import { setBaseChain } from "../src/core/config-edit.js";
 import { loadAgent } from "../src/agents/loader.js";
 import { resolveModelPlan } from "../src/core/model-policy.js";
 import { runAgent } from "../src/core/runtime.js";
@@ -28,7 +30,7 @@ import { getPlaybook } from "../src/core/playbook.js";
 import { checkProviders } from "../src/core/doctor.js";
 import type { ChoraleConfig } from "../src/core/config.js";
 import * as remote from "./remote.js";
-import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview, type GitStatus, type GitChange, type FileRef, type RemoteHost, type RemoteHostInput, type RemoteTestResult } from "./shared/ipc.js";
+import { IPC, type AgentSummary, type ConfigSummary, type RunRequest, type RunMsg, type SessionInfo, type ChatTurn, type AppInfo, type AgentSaveResult, type UsageSummary, type PlaybookItem, type ProviderHealthItem, type DirEntry, type FilePreview, type GitStatus, type GitChange, type FileRef, type ProviderModels, type RemoteHost, type RemoteHostInput, type RemoteTestResult } from "./shared/ipc.js";
 
 setLogLevel("warn"); // pipeline diagnostics go to the terminal; the UI shows the activity rail
 
@@ -138,6 +140,7 @@ function buildConfigSummary(): ConfigSummary {
     defaults: { maxOutputTokens: d.maxOutputTokens, requestTimeoutMs: d.requestTimeoutMs, maxRetries: d.maxRetries, maxSteps: d.maxSteps, permissions: config.permissions.mode },
     agentsDir: config.agents.dir,
     activeProfile: config.activeProfile ?? null,
+    chain: [config.base.model, ...(config.base.fallbacks ?? [])],
   };
 }
 
@@ -265,6 +268,18 @@ function registerIpc(): void {
     if (v) process.env[envVar] = v;
     else delete process.env[envVar];
     reloadConfig(); // re-expand ${envVar} with the new value so hasKey/registry reflect it immediately
+    return buildConfigSummary();
+  });
+
+  ipcMain.handle(IPC.modelsList, async (_e, provider: string): Promise<ProviderModels> => {
+    const p = config.providers[provider];
+    if (!p) return { provider, models: [], source: "catalog", error: `Unknown provider "${provider}".` };
+    return listProviderModels(provider, p);
+  });
+
+  ipcMain.handle(IPC.modelChainSet, (_e, chain: string[]): ConfigSummary => {
+    setBaseChain(configPath(), chain); // comment-preserving targeted edit
+    reloadConfig(); // pick up the new chain immediately
     return buildConfigSummary();
   });
 

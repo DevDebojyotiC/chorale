@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Chat } from "./screens/Chat";
 import { Agents } from "./screens/Agents";
-import { Config } from "./screens/Config";
+import { Settings } from "./screens/Settings";
 import { Sessions } from "./screens/Sessions";
 import { CostUsage } from "./screens/CostUsage";
 import { Playbook } from "./screens/Playbook";
@@ -12,12 +12,12 @@ import { CommandPalette, type Command } from "./components/CommandPalette";
 import { Resizer, initPanelWidths } from "./components/Resizer";
 import { IS_MOCK, chorale } from "./bridge";
 
-type Screen = "chat" | "agents" | "config" | "sessions" | "cost" | "playbook" | "doctor" | "remote";
+type Screen = "chat" | "agents" | "settings" | "sessions" | "cost" | "playbook" | "doctor" | "remote";
 
 const NAV: { id: Screen; label: string; key: string; icon: ReactNode }[] = [
   { id: "chat", label: "Chat", key: "1", icon: <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2Z" /> },
   { id: "agents", label: "Agents", key: "2", icon: <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M16 6.2a3.2 3.2 0 0 1 0 6M20.5 20a5.5 5.5 0 0 0-4-5.3" /></> },
-  { id: "config", label: "Config", key: "3", icon: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8M4.6 9a1.6 1.6 0 0 0-.3-1.8M9 4.6A1.6 1.6 0 0 0 10 3.5M14 3.5A1.6 1.6 0 0 0 15 4.6M20.5 10A1.6 1.6 0 0 0 21.5 11M2.5 13A1.6 1.6 0 0 0 3.5 14" /></> },
+  { id: "settings", label: "Settings", key: "3", icon: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8M4.6 9a1.6 1.6 0 0 0-.3-1.8M9 4.6A1.6 1.6 0 0 0 10 3.5M14 3.5A1.6 1.6 0 0 0 15 4.6M20.5 10A1.6 1.6 0 0 0 21.5 11M2.5 13A1.6 1.6 0 0 0 3.5 14" /></> },
 ];
 
 function Icon({ children }: { children: ReactNode }) {
@@ -82,7 +82,7 @@ export function App() {
       if (e.target instanceof HTMLElement && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT")) return;
       if (e.key === "1") setScreen("chat");
       if (e.key === "2") setScreen("agents");
-      if (e.key === "3") setScreen("config");
+      if (e.key === "3") setScreen("settings");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -191,7 +191,7 @@ export function App() {
       <main>
         {screen === "chat" && <Chat resume={resume} onResumed={() => setResume(null)} newChatSignal={newChatNonce} />}
         {screen === "agents" && <Agents />}
-        {screen === "config" && <Config />}
+        {screen === "settings" && <Settings />}
         {screen === "sessions" && (
           <Sessions
             onOpen={(s) => {

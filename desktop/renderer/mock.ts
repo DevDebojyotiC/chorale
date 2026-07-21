@@ -36,6 +36,17 @@ const CONFIG: ConfigSummary = {
   defaults: { maxOutputTokens: 8192, requestTimeoutMs: 180000, maxRetries: 2, maxSteps: 8, permissions: "auto-edit" },
   agentsDir: "swarm/agents",
   activeProfile: null,
+  chain: ["fireworks:accounts/fireworks/models/gpt-oss-120b", "puter:z-ai/glm-4.6", "zai:glm-4.5-flash"],
+};
+
+/** Per-provider model lists for the Settings → Models dropdowns in preview. */
+const MOCK_MODELS: Record<string, string[]> = {
+  fireworks: ["accounts/fireworks/models/gpt-oss-120b", "accounts/fireworks/models/gpt-oss-20b", "accounts/fireworks/models/kimi-k2p6"],
+  zai: ["glm-4.5-flash", "glm-4.6", "glm-4.7-flash", "glm-5.1"],
+  puter: ["z-ai/glm-4.5-flash", "z-ai/glm-4.6"],
+  ollama: ["qwen2.5-coder:3b", "phi4-mini", "qwen3:4b"],
+  anthropic: ["claude-haiku-4-5-20251001", "claude-opus-4-8", "claude-sonnet-5"],
+  hf: ["Qwen/Qwen2.5-7B-Instruct", "google/gemma-4-31B-it"],
 };
 
 const SESSIONS: SessionInfo[] = [
@@ -123,11 +134,20 @@ export const mockBridge: ChoraleBridge = {
       { name: "ollama", api: "openai-compatible", ok: false, detail: "ECONNREFUSED (not running)", ms: 12 },
     ]),
   getConfig: () => Promise.resolve(CONFIG),
-  setKey: (envVar, value) =>
-    Promise.resolve({
-      ...CONFIG,
-      providers: CONFIG.providers.map((p) => (p.envVar === envVar ? { ...p, hasKey: !!value.trim(), keyMasked: value.trim() ? value.slice(0, 3) + "…" + value.slice(-3) : "" } : p)),
-    }),
+  // Stateful in preview so Settings behaves like the real thing (key set → provider becomes usable).
+  // Returns a FRESH object each time, like the real buildConfigSummary() — same-reference state
+  // would make React skip the re-render and the UI would look broken.
+  setKey: (envVar, value) => {
+    CONFIG.providers = CONFIG.providers.map((p) =>
+      p.envVar === envVar ? { ...p, hasKey: !!value.trim(), keyMasked: value.trim() ? value.slice(0, 3) + "…" + value.slice(-3) : "" } : p,
+    );
+    return Promise.resolve({ ...CONFIG });
+  },
+  listModels: (provider) => Promise.resolve({ provider, models: MOCK_MODELS[provider] ?? [], source: "live" as const }),
+  setModelChain: (chain) => {
+    CONFIG.chain = [...chain];
+    return Promise.resolve({ ...CONFIG });
+  },
   pickFolder: () => Promise.resolve("D:/projects/demo-app"),
   readDir: (path) => {
     const tree: Record<string, { name: string; type: "file" | "dir" }[]> = {

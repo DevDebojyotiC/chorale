@@ -48,6 +48,16 @@ export interface ConfigSummary {
   defaults: Record<string, string | number>;
   agentsDir: string;
   activeProfile: string | null;
+  /** The default model chain every agent inherits: [primary, ...fallbacks] (base.model + base.fallbacks). */
+  chain: string[];
+}
+
+/** Models a provider can serve, asked live where possible (see `source`). */
+export interface ProviderModels {
+  provider: string;
+  models: string[];
+  source: "live" | "catalog";
+  error?: string;
 }
 
 /** Approval tier the run operates under (mirrors the core's PermissionMode). */
@@ -262,6 +272,10 @@ export interface ChoraleBridge {
   /** Open a new session for `agent`; returns its id (a volatile id if persistence is unavailable). */
   /** Write a provider key to the workspace .env and hot-reload; returns the refreshed config. */
   setKey: (envVar: string, value: string) => Promise<ConfigSummary>;
+  /** Models a provider can serve — asked live with its configured key, else a curated fallback. */
+  listModels: (provider: string) => Promise<ProviderModels>;
+  /** Set the default model chain (primary + fallbacks); rewrites the config preserving comments. */
+  setModelChain: (chain: string[]) => Promise<ConfigSummary>;
   getUsage: () => Promise<UsageSummary>;
   getPlaybook: () => Promise<PlaybookItem[]>;
   /** On-demand provider reachability check (makes network calls). */
@@ -314,6 +328,8 @@ export const IPC = {
   agentSave: "agents:save",
   configGet: "config:get",
   settingsSetKey: "settings:set-key",
+  modelsList: "models:list",
+  modelChainSet: "models:set-chain",
   observeUsage: "observe:usage",
   observePlaybook: "observe:playbook",
   observeDoctor: "observe:doctor",
